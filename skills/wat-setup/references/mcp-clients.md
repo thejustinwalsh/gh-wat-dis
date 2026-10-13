@@ -41,17 +41,19 @@ gh-wat-dis writes through `gh`, so **read-only is a good default** for the MCP s
 
 ## Config files
 
-| Client | File | Key |
-|---|---|---|
-| Claude Code | `.mcp.json` in the project, or `claude mcp add-json github '<json>' --scope user` | `mcpServers`, with `headersHelper` |
-| Codex CLI | `~/.codex/config.toml` | `[mcp_servers.github]` |
-| Cursor | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` |
-| Gemini CLI | `~/.gemini/settings.json` or `.gemini/settings.json` | `mcpServers`, with `httpUrl` |
-| OpenCode | `~/.config/opencode/opencode.json` or `opencode.json` | `mcp`, with `"type": "remote"` and `"oauth": false` |
-| VS Code, Copilot Chat | `.vscode/mcp.json` | `servers` |
-| Copilot CLI | its MCP config | `mcpServers`, with `"type": "http"` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers`, with `serverUrl`. No environment expansion: the user edits the token in by hand. |
-| Claude Desktop | `claude_desktop_config.json` | `mcpServers`. Local Docker only. |
+Install the server at user level. The skills are installed for the user and work in every repository, so the server should too, and a user-level entry needs no approval in each project. Use the project file only when a team wants the server pinned in one repository.
+
+| Client | User level (default) | Project level | Key |
+|---|---|---|---|
+| Claude Code | `claude mcp add-json github --scope user '<json>'` (writes `~/.claude.json`) | `.mcp.json`. Each person approves the server once. | `mcpServers`, with `headersHelper` |
+| Codex CLI | `~/.codex/config.toml` | `.codex/config.toml` in a trusted project | `[mcp_servers.github]` |
+| Cursor | `~/.cursor/mcp.json` | `.cursor/mcp.json` | `mcpServers` |
+| Gemini CLI | `~/.gemini/settings.json` | `.gemini/settings.json` | `mcpServers`, with `httpUrl` |
+| OpenCode | `~/.config/opencode/opencode.json` | `opencode.json` | `mcp`, with `"type": "remote"` and `"oauth": false` |
+| VS Code, Copilot Chat | User configuration ("MCP: Open User Configuration") | `.vscode/mcp.json` | `servers` |
+| Copilot CLI | Its user MCP config | — | `mcpServers`, with `"type": "http"` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | — | `mcpServers`, with `serverUrl`. No environment expansion: the user edits the token in by hand. |
+| Claude Desktop | `claude_desktop_config.json` | — | `mcpServers`. Local Docker only. |
 
 ## One-click install links
 
@@ -71,7 +73,7 @@ A link never carries a token. The config in it names an environment variable.
 1. Merge into the file. Keep every other server and setting.
 2. Never write the token value into a config file. Use the headers helper, or name an environment variable.
 3. If a `github` entry exists, show it and ask before you change it.
-4. Project-scope files (`.mcp.json`, `.cursor/mcp.json`) are shared with the team. Ask before you add one to a repository.
+4. Default to the user-level config. Project files (`.mcp.json`, `.cursor/mcp.json`) are shared with the team and make each person approve a server: add one only when the user asks for it.
 5. After the change, the user restarts the harness. Check with `get_me`.
 
 ## Problems
