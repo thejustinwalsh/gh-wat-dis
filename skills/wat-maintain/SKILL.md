@@ -19,7 +19,7 @@ Run the checks the user asks for. Default: all. Thresholds come from `.agents/gh
 | Stale issues | Open, no update in 60 days | `gh issue list --search "updated:<DATE sort:updated-asc" --json number,title,updatedAt,labels,milestone` |
 | Stale PRs | Open, no update in 14 days | `gh pr list --search "updated:<DATE" --json number,title,updatedAt,isDraft,reviewDecision,author` |
 | Awaiting author | The last comment is a question from a maintainer, with no reply in 14 days | `gh issue list --search "updated:<DATE comments:>0"`, then read the last comment |
-| Missing fields | Open issues with no type (issue type, or type label on a user repository), more than one type label, or no surface label | `gh issue list --search "no:label"`, and `--json number,title,labels` checked against `labels.surfaces` |
+| Missing fields | Open issues with no type, more than one type label, or no surface label | `npx gh-wat-dis issues` → rows where `missing` is not empty |
 | Stalled or blocked milestone | The current milestone with no issue closed in 7 days, or with an issue blocked from outside | `npx gh-wat-dis milestone` → `status` |
 | Finished milestone left open | Every issue closed | `npx gh-wat-dis milestone "<title>"` → `status: done` |
 | Orphan PRs | Open PR that closes no issue | `gh pr list --json number,title,closingIssuesReferences` |

@@ -61,6 +61,10 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 
 **By issue type**
 
+Pick the type by what is wrong: **Bug** when the system does something other than what it should. **Feature** when it cannot do something yet. **Task** for everything else, including missing or wrong documentation, cleanup, releases and checks.
+
+"Usually omit" means: leave the section out unless it holds a fact the reader needs. When the facts are the whole case, keep it.
+
 | Type | The opening states | Must have | Usually omit |
 |---|---|---|---|
 | Bug | The wrong behaviour, where it shows, expected vs actual | `Evidence` with expected vs actual and a reproduction; `System` names the failing element | `Change` until the cause is known |
@@ -117,6 +121,7 @@ Closes #<n>
 Refs #<m>
 ```
 
+- Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
 - Before / after images go in a 2-column table.
 - Link lines go last, after the agent block, one issue per line.
   - `Closes #n`: the issue closes when the PR merges. Use it only for an issue this PR finishes.
@@ -125,6 +130,10 @@ Refs #<m>
 - Never put `close`, `fix` or `resolve` in front of an issue number anywhere else in the body or in a commit message. GitHub ignores the words around the keyword: "does not fix #12" closes #12.
 - `Follow-ups` lists issues that already exist. File them first. Omit the section when there are none.
 - A PR that changes no element, relationship or contract (typo, dependency bump, formatting) keeps only: the opening, `Verify`, link lines.
+
+## Link lines
+
+In an issue as in a pull request, `Refs #n` lines go last, after the Agent context block, one for each line. Do not put them inside `Evidence`. Between two issues, prefer a real relation: a parent, or blocked by.
 
 ## Milestone
 

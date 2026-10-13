@@ -53,7 +53,7 @@ Always write the body to a file and pass `--body-file`. Never pass a body inline
 | Labels | `list_label` (needs the `labels` toolset) |
 | Projects | `projects_list`, `projects_get` (needs the `projects` toolset) |
 
-Rules from the server's own instructions: call `search_issues` before you create an issue; call `list_issue_types` before you set a type; pass `fields` projections on list calls to keep output small.
+The server's own instructions say to call `search_issues` before you create an issue. `npx gh-wat-dis related` does that job here, with better signals: use it instead. Call `list_issue_types` before you set a type in an organization repository, and pass `fields` projections on list calls to keep output small.
 
 No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`, `gh search issues`, each with `--json`.
 
@@ -74,8 +74,9 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Overview plus one spec per changed group | `npx gh-wat-dis graph split change.json --out-dir views` |
 | Render a diagram, fitted to GitHub's width | `npx gh-wat-dis diagram change.json -o change.svg` |
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
+| Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
-| Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --md` |
+| Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --kind issue --md` |
 | Status numbers for a milestone: counts, in review, blocked, done-when | `npx gh-wat-dis milestone ["<title>"]` |
 | An issue's parent, sub-issues, blocked by, blocking | `npx gh-wat-dis relations <n>` |
 | Labels the config wants, compared with GitHub | `npx gh-wat-dis labels --text` |

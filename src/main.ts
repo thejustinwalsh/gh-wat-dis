@@ -14,6 +14,7 @@ const COMMANDS: Record<string, Loader> = {
   links: async () => (await import('./gh/cli.ts')).links,
   labels: async () => (await import('./gh/cli.ts')).labels,
   milestone: async () => (await import('./gh/cli.ts')).milestone,
+  issues: async () => (await import('./gh/cli.ts')).issues,
   relations: async () => (await import('./gh/cli.ts')).relations,
   relate: async () => (await import('./gh/cli.ts')).relateCmd,
   impact: async () => (await import('./impact/cli.ts')).impact,
@@ -48,6 +49,7 @@ Collect facts (JSON out)
   reach <path|path#symbol|symbol>...          who depends on a file or symbol, no diff needed
   owners <path>...                            CODEOWNERS for paths
   elements                                    architecture elements and the files they map
+  issues [--queue]                            open issues with type, surfaces, milestone and what is missing
   related (--issue <n> | --title "<t>")       issues and PRs that share signals with a draft
   links (--pr <n> | --body-file <f>)          what a PR closes on merge, what it only mentions
   relations <issue>                           parent, sub-issues, blocked by, blocking

@@ -5,13 +5,15 @@ import type { Config } from '../cli/config.ts';
 import { CONFIG_REL, UsageError, parseArgs, readInput, readJson, repoRoot, run } from '../cli/util.ts';
 import { planLabels } from './labels.ts';
 import type { LiveLabel } from './labels.ts';
+import { issueRows } from './issues.ts';
+import type { RawListIssue } from './issues.ts';
 import { byVersion, milestoneStatus } from './milestone.ts';
 import type { RawIssue } from './milestone.ts';
 import { readRelations, relate } from './relations.ts';
 import type { Api } from './relations.ts';
 import { analyzeLinks } from './links.ts';
 import type { Closure, Commit, Mention, Ref } from './links.ts';
-import { findRelated, toMarkdown } from './related.ts';
+import { POINTS_KEY, findRelated, toMarkdown } from './related.ts';
 import type { Row } from './related.ts';
 
 const exec = promisify(execFile);
@@ -33,14 +35,14 @@ interface SearchItem {
   html_url: string; updated_at: string; labels: { name: string }[]; milestone: { title: string } | null; pull_request?: unknown;
 }
 
-const RELATED_USAGE = 'Usage: npx gh-wat-dis related (--issue <n> | --title "<text>" [--body-file <file>]) [--paths a,b] [--state all|open|closed] [--limit 10] [--md]';
+const RELATED_USAGE = 'Usage: npx gh-wat-dis related (--issue <n> | --title "<text>" [--body-file <file>]) [--paths a,b] [--kind all|issue|pr] [--state all|open|closed] [--limit 10] [--md]';
 
 export async function related(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['md', 'json', 'help'], strings: ['issue', 'title', 'body-file', 'paths', 'limit', 'state'],
+    booleans: ['md', 'json', 'help'], strings: ['issue', 'title', 'body-file', 'paths', 'limit', 'state', 'kind'],
     aliases: { '-i': '--issue', '-t': '--title', '-b': '--body-file', '-n': '--limit', '-h': '--help' },
   });
-  if (args.help) { console.log(RELATED_USAGE); return 0; }
+  if (args.help) { console.log(`${RELATED_USAGE}\n\nPrints JSON, or a table with --md. ${POINTS_KEY}`); return 0; }
   let title = args.title;
   let body = args['body-file'] ? readInput(args['body-file']) : '';
   let self: number | undefined;
@@ -54,7 +56,9 @@ export async function related(argv: string[]): Promise<number> {
 
   const { repo } = repoInfo();
   const state = args.state ?? 'all';
-  const stateQ = state === 'all' ? '' : ` is:${state}`;
+  const kind = args.kind ?? 'all';
+  if (!['all', 'issue', 'pr'].includes(kind)) throw new UsageError('--kind must be all, issue or pr');
+  const stateQ = (state === 'all' ? '' : ` is:${state}`) + (kind === 'all' ? '' : ` is:${kind}`);
   const search = async (query: string): Promise<Row[]> => {
     const res = await gh<{ items: SearchItem[] }>(['api', '-X', 'GET', 'search/issues', '-f', `q=${query} repo:${repo}${stateQ}`, '-f', 'per_page=15']);
     return res.items.map((i) => ({
@@ -267,5 +271,22 @@ export async function milestone(argv: string[]): Promise<number> {
     now: new Date(), stalledAfterDays: args['stalled-after'] ? Number(args['stalled-after']) : undefined,
   });
   console.log(JSON.stringify(out, null, 2));
+  return 0;
+}
+
+const ISSUES_USAGE = `Usage: npx gh-wat-dis issues [--queue] [--milestone <title>|none] [--limit 100]
+Prints the open issues as JSON with the fields triage sets: type, surfaces, agents, milestone, tracking,
+and "missing" (what is not set). --queue keeps only the issues that need triage: something is missing,
+or the issue has no milestone. Pull requests are left out.`;
+
+export async function issues(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['queue', 'help'], strings: ['milestone', 'limit'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(ISSUES_USAGE); return 0; }
+  const { repo } = repoInfo();
+  const raw = await api<RawListIssue[]>([`repos/${repo}/issues?state=open&per_page=100`, '--paginate']);
+  let rows = issueRows(loadConfig(), raw);
+  if (args.milestone) rows = rows.filter((r) => (args.milestone === 'none' ? r.milestone === null : r.milestone === args.milestone));
+  if (args.queue) rows = rows.filter((r) => r.missing.length || (r.milestone === null && !r.tracking));
+  console.log(JSON.stringify(rows.slice(0, Number(args.limit ?? 100)), null, 2));
   return 0;
 }
