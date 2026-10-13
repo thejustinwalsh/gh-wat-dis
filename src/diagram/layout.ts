@@ -472,7 +472,8 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
     // A flow reads from its first step: when a reply closes a loop, the later step is the one drawn backwards.
-    ...(spec.type === 'dynamic' ? { 'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER' } : {}),
+    // ELK's model-order cycle breaking throws on a graph with groups, so a flow with groups keeps the default.
+    ...(spec.type === 'dynamic' && !spec.elements.some((e) => e.parent !== undefined) ? { 'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER' } : {}),
     ...(opts.wrap ? { 'elk.aspectRatio': String(opts.wrap), 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.layered.wrapping.additionalEdgeSpacing': '14' } : {}),
   };
   const boxes = new Map<string, NodeBox>();

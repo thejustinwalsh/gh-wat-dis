@@ -7,8 +7,15 @@ import type { Layout, LayoutOptions } from './layout.ts';
 /** GitHub draws an issue or PR body about 860px wide. A wider image is scaled down and its text shrinks. */
 export const MAX_WIDTH = 860;
 const CHROME_W = 48;
+/** Title, scope line and a one-row key, for a caller that does not pass the real frame. */
+const CHROME_H = 176;
 
-export interface FitOptions extends LayoutOptions { labels?: LabelMode; maxWidth?: number }
+export interface FitOptions extends LayoutOptions {
+  labels?: LabelMode;
+  maxWidth?: number;
+  /** The size of the whole image for a layout: title, scope line and key included. The renderer passes it. */
+  frame?: (l: Layout) => { width: number; height: number };
+}
 
 /**
  * What each way of making a drawing smaller costs, in pixels of height it must save to be chosen.
@@ -34,7 +41,7 @@ const WIDE_COST = 5;
 /** A few pixels over shrink the text by a hair. Past that, a layout that fits is worth this much more. */
 const WIDE_SLACK = 20;
 const WIDE_AT_ALL = 80;
-/** Past this height a drawing does not fit a screen, and gets a warning. */
+/** Past this height the image does not fit a screen, and gets a warning. It is the height of the whole image. */
 export const TALL = 900;
 const WRAPS = [undefined, 2, 1.2] as const;
 
@@ -46,7 +53,7 @@ export interface Candidate extends Metrics {
   wrapped: boolean;
   /** Groups of a code diagram named above each card, not drawn as bands. */
   flat: boolean;
-  /** Size of the drawing without the title and the key. `width` includes the side margins. */
+  /** Size of the whole image, title and key included: the numbers the size line prints. The score is worked out from the drawing alone. */
   width: number;
   height: number;
   /** Relationships this layout fails to draw as the spec states them. A layout with any is never kept while another has none. */
@@ -98,6 +105,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   let compactAnyway = false;
   const rows = spec.relationships.some((r) => r.fromSymbol !== undefined || r.toSymbol !== undefined);
   const tried: { layout: Layout; c: Candidate }[] = [];
+  let failure: unknown;
   for (const numbered of numberings) {
     for (const direction of directions) {
       for (const detail of details) {
@@ -108,7 +116,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
             // When a line runs through the name of a group, the same layout is tried again with the group widened to clear it.
             for (const clearTitles of [false, true]) {
               let l: Layout;
-              try { l = await layout(spec, { detail, direction, numbered, wrap, flat, clearTitles }); } catch { break; }
+              try { l = await layout(spec, { detail, direction, numbered, wrap, flat, clearTitles }); } catch (err) { failure ??= err; break; }
               // A wrap that cut nothing, or an option that changed nothing, repeats a layout already tried.
               if ((wrap && !l.wrapped) || flat !== l.flat) break;
               if (detail === 'auto' && l.compact) compactAnyway = true;
@@ -121,8 +129,9 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
               const over = Math.max(0, width - maxWidth);
               const score = Math.round(height + over * WIDE_COST + (over > WIDE_SLACK ? WIDE_AT_ALL : 0) + lineCost(m) + shortcuts);
               // Two option sets that give one drawing are one candidate.
-              const twin = tried.some((o) => o.c.width === width && o.c.height === height && o.c.direction === direction && o.layout.numbered === numbered && o.c.length === m.length && o.c.compact === l.compact && o.c.flat === l.flat);
-              if (!twin) tried.push({ layout: l, c: { direction, labels: numbered ? 'numbered' : 'text', compact: l.compact, wrapped: l.wrapped, flat: l.flat, width, height, broken: l.broken, score, chosen: false, ...m } });
+              const twin = tried.some((o) => o.layout.width === l.width && o.layout.height === l.height && o.c.direction === direction && o.layout.numbered === numbered && o.c.length === m.length && o.c.compact === l.compact && o.c.flat === l.flat);
+              const whole = opts.frame?.(l) ?? { width, height: height + CHROME_H };
+              if (!twin) tried.push({ layout: l, c: { direction, labels: numbered ? 'numbered' : 'text', compact: l.compact, wrapped: l.wrapped, flat: l.flat, width: Math.ceil(whole.width), height: Math.ceil(whole.height), broken: l.broken, score, chosen: false, ...m } });
               if (m.titles === 0 || flat) break;
             }
           }
@@ -133,7 +142,8 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   // A layout that drops a line or leaves one hanging is wrong, however small it is. It is kept only when every layout is.
   const whole = tried.some((t) => t.c.broken === 0);
   const best = tried.filter((t) => !whole || t.c.broken === 0).reduce<(typeof tried)[number] | undefined>((a, b) => (!a || b.c.score < a.c.score ? b : a), undefined);
-  if (!best) throw new Error('could not lay out the diagram');
+  // When no layout could be made, the reason is the layout engine's own error, not a guess.
+  if (!best) throw new Error(`could not lay out the diagram: ${failure instanceof Error ? failure.message : String(failure ?? 'no layout was tried')}`);
   best.c.chosen = true;
 
   const c = best.c;
@@ -154,7 +164,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   const name = new Map(spec.elements.map((e) => [e.id, e.name]));
   const warnings = faults(c, (id) => name.get(id) ?? id);
   if (c.broken > 0) warnings.unshift(`${c.broken} of the ${spec.relationships.length} relationships could not be drawn from end to end in any layout`);
-  if (c.height > TALL) warnings.unshift(`the drawing is ${c.height}px tall, so a reader scrolls to follow a line`);
+  if (c.height > TALL) warnings.unshift(`the image is ${c.height}px tall, so a reader scrolls to follow a line`);
   if (c.width > maxWidth) warnings.unshift(`${c.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink`);
   return { layout: best.layout, report: { why, warnings, candidates: tried.map((t) => t.c) } };
 }

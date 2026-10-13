@@ -1,0 +1,34 @@
+{
+ "title": "m1-one-group-2",
+ "type": "dynamic",
+ "scope": "S",
+ "elements": [
+  {
+   "id": "g1",
+   "type": "boundary",
+   "name": "Shop"
+  },
+  {
+   "id": "a",
+   "type": "container",
+   "name": "A",
+   "technology": "Rust",
+   "parent": "g1"
+  },
+  {
+   "id": "b",
+   "type": "container",
+   "name": "B",
+   "technology": "Rust"
+  }
+ ],
+ "relationships": [
+  {
+   "from": "a",
+   "to": "b",
+   "label": "Sends item 1 to",
+   "technology": "HTTPS",
+   "order": 1
+  }
+ ]
+}

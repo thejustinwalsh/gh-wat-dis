@@ -4,7 +4,7 @@ import {
   BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, GROUP_PAD_X,
   LANE_NAME_PX, PIPE_RX, groupLabelWidth,
 } from './layout.ts';
-import type { EdgePath, NodeBox, Pt, Rect } from './layout.ts';
+import type { EdgePath, Layout, NodeBox, Pt, Rect } from './layout.ts';
 import { escapeXml, fit, monoWidth, textWidth, wrap } from './measure.ts';
 import { FONT, MONO, applyTheme } from './theme.ts';
 import { judge } from './fit.ts';
@@ -227,7 +227,9 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
     items.push({ w: 26, label: 'External', draw: (x, y) => shape('system', x, y, 26, 16, 'sh f-external', true) });
   }
   if (boxes.some((b) => b.group && !b.light)) {
-    items.push({ w: 26, label: 'Boundary', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
+    // A container or a system that holds other elements is a group, and not every group is a boundary.
+    const plain = boxes.every((b) => !b.group || b.light || b.el.type === 'boundary' || b.el.type === 'node');
+    items.push({ w: 26, label: plain ? 'Boundary' : 'Group', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
   if (boxes.some((b) => b.light)) {
     items.push({ w: 26, label: 'Part of the system', draw: (x, y) => `<rect class="lane" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
@@ -287,8 +289,8 @@ export async function renderSvg(spec: DiagramSpec, opts: RenderOptions = {}): Pr
   return (await render(spec, opts)).svg;
 }
 
-export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promise<Rendered> {
-  const { layout: g, report } = await judge(spec, opts);
+/** The title, the scope line and the key round a layout: where each goes, and the size of the whole image. */
+function frame(spec: DiagramSpec, g: Layout): { width: number; height: number; subtitle: string; titleLines: string[]; subLines: string[]; subTop: number; ox: number; oy: number; keyTop: number; key: string } {
   const kind = spec.type[0]!.toUpperCase() + spec.type.slice(1);
   const subtitle = `${kind} diagram${spec.scope ? ` for ${spec.scope}` : ''}`;
   // A long title or scope line wraps, so it never makes the image wider than the page.
@@ -298,6 +300,21 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
   const width = Math.ceil(Math.max(g.width, headWidth, MIN_WIDTH) + 2 * MARGIN);
   const subTop = (titleLines.length - 1) * 24, extra = subTop + (subLines.length - 1) * 17;
   const ox = Math.round((width - g.width) / 2), oy = HEADER + 22 + extra;
+  const keyTop = oy + g.height + 26;
+  let x = MARGIN, y = keyTop + 30, key = '';
+  for (const item of keyItems(spec, g.nodes, g.edges, g.numbered)) {
+    const w = item.w + 7 + textWidth(item.label, 11.5) + 20;
+    if (x > MARGIN && x + w - 20 > width - MARGIN) { x = MARGIN; y += 26; }
+    key += item.draw(x, y) + `<text class="kt" x="${n(x + item.w + 7)}" y="${n(y + 12)}">${escapeXml(item.label)}</text>`;
+    x += w;
+  }
+  return { width, height: Math.ceil(y + 16 + MARGIN - 4), subtitle, titleLines, subLines, subTop, ox, oy, keyTop, key };
+}
+
+export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promise<Rendered> {
+  // The judge sizes each layout as the whole image, so its numbers are the ones a reader sees.
+  const { layout: g, report } = await judge(spec, { ...opts, frame: (l) => frame(spec, l) });
+  const { width, height, subtitle, titleLines, subLines, subTop, ox, oy, keyTop, key } = frame(spec, g);
 
   const groups = g.nodes.filter((b) => b.group).sort((a, b) => a.depth - b.depth);
   const body = [
@@ -307,16 +324,6 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
     ...g.nodes.filter((b) => !b.group).map(drawLeaf),
     ...g.edges.map(drawLabel),
   ].join('');
-
-  const keyTop = oy + g.height + 26;
-  let x = MARGIN, y = keyTop + 30, key = '';
-  for (const item of keyItems(spec, g.nodes, g.edges, g.numbered)) {
-    const w = item.w + 7 + textWidth(item.label, 11.5) + 20;
-    if (x > MARGIN && x + w - 20 > width - MARGIN) { x = MARGIN; y += 26; }
-    key += item.draw(x, y) + `<text class="kt" x="${n(x + item.w + 7)}" y="${n(y + 12)}">${escapeXml(item.label)}</text>`;
-    x += w;
-  }
-  const height = Math.ceil(y + 16 + MARGIN - 4);
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
     + `<title id="dg-title">${escapeXml(`${spec.title}: ${subtitle}`)}</title>`

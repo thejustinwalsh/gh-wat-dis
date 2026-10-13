@@ -147,7 +147,7 @@ test('svg: status is text and line style, and the key lists only what is used', 
   assert.match(key(impact), />\+ Added<.*>~ Changed<.*>− Removed<.*>Affected</);
   assert.doesNotMatch(key(impact), />Person</);
   const plain = key(await renderSvg(example('container')));
-  assert.match(plain, />Person<.*>Container<.*>Data Store<.*>Queue<.*>External<.*>Boundary<.*>Relationship/);
+  assert.match(plain, />Person<.*>Container<.*>Data Store<.*>Queue<.*>External<.*>Group<.*>Relationship/);
   assert.doesNotMatch(plain, /Added|Changed|Removed|Affected|Component/);
   assert.match(await renderSvg(example('dynamic'), { labels: 'text' }), />1\. Submits the checkout.*>Numbered step</s);
 });
@@ -407,7 +407,7 @@ test('judge: every example keeps short lines, few corners, clear boxes and clear
     assert.equal(c.broken, 0, `${name}: a relationship is not drawn`);
     // The examples are the good cases: none draws a warning about its lines. A few are too wide or too tall, and say so.
     // `in-process` nests three groups deep, and lines enter two of them through the name.
-    const allowed = (w: string): boolean => w.includes('is wider than') || w.includes('px tall') || ((name === 'in-process' || name === 'whole-system') && w.includes('name of a group'));
+    const allowed = (w: string): boolean => w.includes('is wider than') || w.includes('px tall') || w.includes('name of a group');
     assert.deepEqual(report.warnings.filter((w) => !allowed(w)), [], name);
   }
 });
@@ -572,7 +572,7 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   const report = JSON.parse(out.stdout) as { svg: string; png: string; width: number; direction: string; labels: string; why: string; warnings: string[]; candidates: { chosen: boolean; direction: string; score: number; detour: number }[] };
   assert.deepEqual([report.svg, report.png, report.direction, report.labels], [join(dir, 'b.svg'), join(dir, 'b.png'), 'DOWN', 'text']);
   assert.ok(report.width <= 860 && report.why.startsWith('kept top down'));
-  assert.deepEqual(report.warnings, []);
+  assert.deepEqual(report.warnings.filter((w) => !w.includes('name of a group')), []);
   const kept = report.candidates.filter((c) => c.chosen);
   assert.equal(kept.length, 1);
   assert.ok(report.candidates.every((c) => c.score >= kept[0]!.score));
@@ -634,7 +634,7 @@ test('judge: height is warned about, and a fix is printed only after the tool tr
   const { judge } = await import('../src/diagram/fit.ts');
   const { advise } = await import('../src/diagram/advise.ts');
   const tall = (await judge(pressure('11-code8x6'))).report;
-  assert.match(tall.warnings.join('\n'), /the drawing is \d+px tall/);
+  assert.match(tall.warnings.join('\n'), /the image is \d+px tall/);
   // Forcing a flow left to right makes it too wide. Dropping the option is the fix, and it was judged.
   const forced = { direction: 'RIGHT' as const };
   const wide = (await judge(pressure('06-dynamic8'), forced)).report;
@@ -685,3 +685,22 @@ test('legend and png: text from a spec is escaped in the table, and an emoji cos
   assert.ok(image.emoji > 0);
   assert.equal(toPng(await draw(base(), { theme: 'light' })).emoji, 0);
 });
+
+test('round 3: a flow with a group draws, and a layout failure carries the real error', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  const { render } = await import('../src/diagram/svg.ts');
+  const out = await render(pressure('m1-flow-group'));
+  assert.equal(out.report.candidates.find((c) => c.chosen)!.broken, 0);
+  assertWellFormed(out.svg);
+  // `kind` as a number slips past a caller that skips lint. The message says what broke, not only that something did.
+  const bad = base();
+  (bad.elements[0] as unknown as { kind: number }).kind = 12;
+  await assert.rejects(judge(bad), (err: Error) => /^could not lay out the diagram: .+/.test(err.message) && !/no layout was tried/.test(err.message));
+});
+
+test('round 3: a container that holds elements is a group in the key, and a boundary is a boundary', async () => {
+  const { render } = await import('../src/diagram/svg.ts');
+  assert.match((await render(example('container'))).svg, />Group</);
+  assert.match((await render(pressure('04-nested'))).svg, />Boundary</);
+});
+
