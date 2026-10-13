@@ -8,9 +8,15 @@ gh-wat-dis is MIT licensed. See `LICENSE`.
 [aaddrick/attention-control](https://github.com/aaddrick/attention-control)
 (MIT, Copyright (c) 2026 aaddrick; portions Copyright (c) 2026 Ayoub Ghriss,
 derived from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)).
-Its language layer builds on L1nefeed's `asd-ste100` gist. gh-wat-dis paraphrases
-these rules for GitHub issues, pull requests and milestones. It copies no
-text from them and none of those authors endorse gh-wat-dis.
+Its language layer builds on L1nefeed's `asd-ste100` gist.
+
+The sections "Specific beats general", "Patterns to cut" and the word lists
+adapt ideas from [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop)
+(MIT, Copyright (c) 2026 Peter Yang).
+
+gh-wat-dis paraphrases these rules for GitHub issues, pull requests and
+milestones. It copies no text from them and none of those authors endorse
+gh-wat-dis.
 
 ## Architecture notation
 

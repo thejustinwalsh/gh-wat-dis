@@ -2,7 +2,7 @@
 
 ![A confused tabby cat stares at a laptop full of code. Caption: GH WAT DIS? I CAN HAS CONTEXT?](docs/lolcat.jpg)
 
-Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on in two minutes: the problem and the solution first, the system design next, the long data for agents folded away at the end.
+gh-wat-dis is a set of skills for the coding agent that writes your GitHub issues, pull requests and milestones. Each issue opens with the problem and the solution, shows what changes in the system, and keeps the long data for agents in a collapsed block at the end, so an engineer can read it in two minutes and know what to do.
 
 It ships as one npm package: nine skills, plus small tools the skills call through `npx`. A project installs nothing.
 
@@ -12,7 +12,7 @@ Say this to your coding agent:
 
 > Run `npx gh-wat-dis install`, then tell me how to use it.
 
-That is the whole thing.
+The agent installs the skills, runs the checks and explains what it set up.
 
 ## If you are the coding agent reading this
 
@@ -101,9 +101,9 @@ npx gh-wat-dis impact \
 
 Facts carry a label that names their source: `exact` (read from git or a file), `resolved` (an AST parse resolved it), `measured` (a count over history or the graph), `heuristic` (inferred from a path or name). The tools report. They do not score or give verdicts.
 
-## What this is not
+## Scope
 
-It is not a code review tool, and it does not set your team's engineering practice. Coding style, test policy and branch rules come from your repository. gh-wat-dis decides how the work is communicated.
+gh-wat-dis reports what a change does and leaves the verdict to the reviewer. Coding style, test policy and branch rules come from your repository. gh-wat-dis decides how to communicate the work.
 
 ## When something is wrong
 
@@ -129,6 +129,6 @@ npx gh-wat-dis uninstall
 
 ## Credits
 
-The writing style adapts [attention-control](https://github.com/aaddrick/attention-control). Diagrams follow the [C4 model](https://c4model.com) and are laid out by [elkjs](https://github.com/kieler/elkjs). Code facts come from [ast-grep](https://ast-grep.github.io). See `NOTICE.md`.
+The writing style adapts [attention-control](https://github.com/aaddrick/attention-control) and [no-ai-slop](https://github.com/petergyang/no-ai-slop). Diagrams follow the [C4 model](https://c4model.com) and are laid out by [elkjs](https://github.com/kieler/elkjs). Code facts come from [ast-grep](https://ast-grep.github.io). See `NOTICE.md`.
 
 MIT licensed.

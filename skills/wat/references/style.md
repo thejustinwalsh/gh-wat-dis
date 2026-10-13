@@ -2,7 +2,7 @@
 
 The reader is an engineer with ten open tabs and two minutes. These rules have two layers. **Shape** sets what you say and in what order. **Language** sets how each sentence reads.
 
-Adapted from [attention-control](https://github.com/aaddrick/attention-control) (MIT). See `NOTICE.md` in the package.
+Adapted from [attention-control](https://github.com/aaddrick/attention-control) and [no-ai-slop](https://github.com/petergyang/no-ai-slop) (both MIT). See `NOTICE.md` in the package.
 
 ## Scope
 
@@ -78,11 +78,49 @@ Every number below is a default for ordinary cases. Break it when the content ne
 | Rule vs fact | The fact. If a rule fights a correct answer, break the rule. |
 | Style vs repo config | The repo config. |
 
+## Specific beats general
+
+A sentence that could sit unchanged in another project's issue says nothing about this one.
+
+- **Portability test.** Read each sentence and ask whether it would still be true of any other repository. If yes, cut it or replace it with a fact about this change: a name, a number, a date, a mechanism, a consequence.
+- **Protect the specific fact.** Do not smooth a detail into general importance. "This improves reliability" hides what "retries stop charging the card twice" tells.
+- **Show, then stop.** Let the fact carry the weight. Do not add a line that tells the reader the point is important, subtle, surprising or key. If the fact does not show it, the line will not either.
+- **Verbs do the work.** "Decided", not "made a decision". "Can", not "has the ability to". Prefer "is" and "has" to a verb that only sounds strong: "the queue holds failed charges", not "the queue serves as a hub for failed charges".
+- **People and programs act. Abstractions do not.** "The worker retries the charge", not "the retry logic emerged".
+- **Name the source or cut the claim.** "Studies show", "it is widely agreed" and "many users report" are not evidence. Link the report, give the count, or move it to `Unknowns`.
+
+## Patterns to cut
+
+These are the habits that make text read as machine-written. Each one spends the reader's attention and tells them nothing.
+
+| Pattern | Looks like | Write |
+|---|---|---|
+| Contrast setup | "This is not a refactor. It is a redesign." "It is not only X but Y." | State Y: "This redesigns the retry path." |
+| Negative list | "Not a cache. Not a queue. A ledger." | "It is a ledger." |
+| Throat-clearing | "Here is the thing", "Let me be clear", "To be honest" | The point |
+| Lone-expert setup | "What most people miss", "The part nobody mentions" | The claim, with its evidence |
+| Colon reveal | "The detail that makes it work: a second worker." | "A second worker makes it work." Keep colons for lists, labels and quotes. |
+| Trailing "-ing" analysis | "…adds an index, highlighting our focus on speed" | The effect: "…adds an index, so the list loads in 200 ms." |
+| Importance puffery | "marks a pivotal step", "plays a vital role", "is a testament to" | The fact. The reader judges its weight. |
+| Commentary on the text | "The key point is", "As you can see", "This distinction matters", "In other words" | Delete it. If the point is unclear, add the missing fact. |
+| Synonym rotation | "the worker… the service… the job" for one thing | One name, repeated |
+| Stacked fragments | "It works. Every time. No exceptions." | One complete sentence |
+| Question-and-answer | "The result? A 40% drop." "What if retries were free?" | "Retries dropped 40%." |
+| Mic-drop ending | A last line that turns the point into a slogan or a metaphor | Delete it. End on the last concrete fact or the next action. |
+| Recap ending | "In conclusion", "Overall", a closing paragraph that restates the body | Delete it |
+| Uniform rhythm | Every sentence the same length, every paragraph the same shape | Let the content set the shape |
+| Decoration | Emoji in headings, bold scattered in sentences, a heading over two sentences, bullets where two sentences would read better | Plain prose |
+| Dash as a habit | Em dashes joining clauses | A comma, a period or parentheses. None in short text. |
+
 ## Words to delete
 
-Preamble and filler: "This PR", "This issue", "I've gone ahead and", "As discussed", "In order to", "It should be noted", "Please note", "basically", "simply", "just", "obviously", "of course".
+Preamble and filler: "This PR", "This issue", "I've gone ahead and", "As discussed", "In order to", "It should be noted", "It is worth noting", "Please note", "When it comes to", "At its core", "In terms of", "With regard to", "Going forward", "At the end of the day", "The reality is".
+
+Empty adverbs: "basically", "simply", "just", "obviously", "of course", "actually", "truly", "literally", "honestly", "fundamentally", "importantly", "crucially", "inherently". Keep one only when it carries a real contrast or a real doubt.
+
 Empty hedges: "might potentially", "should hopefully", "seems to maybe".
-Inflated verbs: "leverage", "utilize", "facilitate", "streamline", "robust", "seamless".
+
+Inflated words: "leverage", "utilize", "facilitate", "streamline", "empower", "harness", "elevate", "foster", "delve", "supercharge", "robust", "seamless", "cutting-edge", "transformative", "meticulous", "intricate", "multifaceted", "paramount", "game changer", "paradigm shift".
 
 ## Check before you post
 
@@ -91,7 +129,8 @@ Inflated verbs: "leverage", "utilize", "facilitate", "streamline", "robust", "se
 3. Does every claim about the code trace to a fact you measured or read?
 4. Does one word mean one thing through the whole body?
 5. Could a new team member act on it without asking you a question?
-6. Run `npx gh-wat-dis lint` as a backstop. It catches broken rendering and gross shape errors, not weak writing.
+6. Does any sentence pass the portability test, or match a row in "Patterns to cut"? Fix it.
+7. Run `npx gh-wat-dis lint` as a backstop. It catches broken rendering and gross shape errors, not weak writing.
 
 | Not this | This |
 |---|---|
@@ -99,3 +138,5 @@ Inflated verbs: "leverage", "utilize", "facilitate", "streamline", "robust", "se
 | There may be some performance implications. | Unknown: p95 latency of `GET /orders` under the new join. Check: `k6 run perf/orders.js`. |
 | Various files were updated to support the change. | 14 files in `packages/web` import `formatPrice`. All 14 change. |
 | We should probably consider adding an index. | Add an index on `orders(customer_id, created_at)`. |
+| This is not just a bug fix. It is a rethink of how retries work, underscoring our commitment to reliability. | The worker keys each charge on `event.id`, so a retry cannot charge the card twice. |
+| The result? Checkout that works. Every time. | Checkout returned 0 duplicate charges in 10,000 replayed webhooks. |

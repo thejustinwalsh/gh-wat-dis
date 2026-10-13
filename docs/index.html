@@ -3,23 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gh-wat-dis: issues an engineer can act on in two minutes</title>
+<title>gh-wat-dis: read an issue in two minutes and know what to do</title>
 <meta name="description" content="Agent skills that write GitHub issues, pull requests and milestones. The problem and the solution come first, the change to the system comes next, and each claim about the code comes from a tool.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="gh-wat-dis">
-<meta property="og:description" content="Read it in two minutes. Know what to do. Agent skills for GitHub issues, pull requests and milestones.">
+<meta property="og:description" content="Skills for the coding agent that writes your GitHub issues, pull requests and milestones. Read an issue in two minutes and know what to do.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tjw.dev/gh-wat-dis/">
 <meta property="og:image" content="https://tjw.dev/gh-wat-dis/og.jpg">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
-<meta property="og:image:alt" content="gh-wat-dis: read it in two minutes, know what to do. A tabby cat squints at a screen and asks for context.">
+<meta property="og:image:alt" content="gh-wat-dis: read an issue in two minutes and know what to do. A tabby cat squints at a screen and asks for context.">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:site_name" content="gh-wat-dis">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="gh-wat-dis">
-<meta name="twitter:description" content="Read it in two minutes. Know what to do. Agent skills for GitHub issues, pull requests and milestones.">
-<meta name="twitter:image:alt" content="gh-wat-dis: read it in two minutes, know what to do. A tabby cat squints at a screen and asks for context.">
+<meta name="twitter:description" content="Skills for the coding agent that writes your GitHub issues, pull requests and milestones. Read an issue in two minutes and know what to do.">
+<meta name="twitter:image:alt" content="gh-wat-dis: read an issue in two minutes and know what to do. A tabby cat squints at a screen and asks for context.">
 <meta name="twitter:image" content="https://tjw.dev/gh-wat-dis/og.jpg">
 <link rel="canonical" href="https://tjw.dev/gh-wat-dis/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -70,6 +70,7 @@ img { display: block; max-width: 100%; height: auto; }
 h1, h2, h3 { color: var(--strong); font-weight: 600; margin: 0; text-wrap: balance; }
 h2 { font-size: clamp(34px, 4.4vw, 56px); line-height: 1.04; letter-spacing: -0.03em; }
 .lead { font-size: clamp(18px, 1.6vw, 20px); line-height: 1.55; margin: 0; max-width: 880px; }
+.lead code { font: 500 0.9em var(--mono); color: var(--fn); }
 section { padding: clamp(64px, 8vw, 104px) 0; }
 
 header.top { border-bottom: 1px solid var(--line); }
@@ -81,7 +82,7 @@ header.top .wrap { display: flex; align-items: center; justify-content: space-be
 nav { display: flex; gap: clamp(18px, 2.4vw, 32px); font: 400 14px/1 var(--mono); }
 
 .hero { background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.5px); background-size: 24px 24px; padding-top: clamp(56px, 7vw, 96px); padding-bottom: clamp(48px, 5vw, 72px); }
-.hero h1 { font-size: clamp(44px, 6.4vw, 84px); line-height: 1.02; letter-spacing: -0.045em; margin-top: 28px; text-wrap: initial; }
+.hero h1 { font-size: clamp(38px, 5.4vw, 76px); line-height: 1.02; letter-spacing: -0.045em; margin-top: 28px; text-wrap: initial; }
 .hero h1 span { display: block; color: var(--faint); }
 .hero .lead { font-size: clamp(19px, 1.9vw, 24px); line-height: 1.5; max-width: 820px; margin-top: 28px; color: var(--strong); }
 .install { max-width: 820px; margin-top: 44px; }
@@ -198,15 +199,15 @@ footer span { color: var(--muted); }
 <section class="hero">
   <div class="wrap">
     <p class="eyebrow">Agent skills for GitHub issues, pull requests and milestones</p>
-    <h1>Read it in two minutes. <span>Know what to do.</span></h1>
-    <p class="lead">Your agent writes the issue. gh-wat-dis gives it a fixed shape. The problem and the solution come first. The change to the system comes next. Each claim about the code comes from a tool.</p>
+    <h1>Read an issue in two minutes <span>and know what to do.</span></h1>
+    <p class="lead">gh-wat-dis is a set of skills for the coding agent that writes your issues and pull requests. Each one opens with the problem and the solution, then shows what changes in the system, and takes its claims about the code from tools that read the repository.</p>
     <div class="install">
       <p class="eyebrow" id="say">Say this to your coding agent</p>
       <div class="prompt">
         <code id="prompt">Run <b>npx gh-wat-dis install</b>, then tell me how to use it.</code>
         <button class="copy" type="button" data-copy="Run `npx gh-wat-dis install`, then tell me how to use it." aria-describedby="say">Copy</button>
       </div>
-      <p class="note">That is the whole install. A project adds nothing to its dependencies.</p>
+      <p class="note">The agent runs every tool through npx, so your project gains no dependency.</p>
     </div>
   </div>
 </section>
@@ -258,8 +259,8 @@ footer span { color: var(--muted); }
 <section aria-labelledby="tools">
   <div class="wrap">
     <p class="eyebrow">The tools</p>
-    <h2 id="tools" style="margin:16px 0;max-width:880px">Small tools that pipe. No guessing about the code.</h2>
-    <p class="lead">Each tool does one thing and prints JSON. The agent chains them, shapes the result, and writes only what a tool reported. TypeScript, JavaScript and Rust get symbol-level analysis.</p>
+    <h2 id="tools" style="margin:16px 0;max-width:880px">Tools the agent runs before it makes a claim about the code.</h2>
+    <p class="lead">Each tool does one thing and prints JSON, so the agent can chain them and write only what a tool reported. For TypeScript, JavaScript and Rust, <code>impact</code> names the changed functions and the files that import them.</p>
     <div class="pipe">
       <div class="step"><b>impact</b><p>Collects what a change touches and who depends on it.</p><i>→ facts.json</i></div>
       <div class="step"><b>graph from-facts</b><p>Turns the facts into a diagram spec.</p><i>→ spec.json</i></div>
@@ -281,7 +282,7 @@ footer span { color: var(--muted); }
 <section class="gallery-band" aria-labelledby="diagrams">
   <div class="wrap">
     <p class="eyebrow">The diagrams</p>
-    <h2 id="diagrams" style="margin:16px 0;max-width:880px">System design in every issue, sized for GitHub.</h2>
+    <h2 id="diagrams" style="margin:16px 0;max-width:880px">A system diagram in the issue, drawn to fit GitHub’s 860-pixel column.</h2>
     <p class="lead">A JSON spec goes in and an SVG comes out. A diagram can show services, or the inside of one browser tab: threads, workers, WASM modules and the protocols between them. Each status has its own border and badge, so colour is never the only signal.</p>
     <div class="gallery">
       <figure><img src="assets/dynamic.svg" width="776" height="540" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps run left to right and wrap to fit. A table under the image holds the words.</figcaption></figure>
@@ -319,8 +320,8 @@ footer span { color: var(--muted); }
       <p>One install puts the skills where each harness looks. A config file in the repository tells every agent whether to use them.</p>
     </div>
     <div>
-      <p class="eyebrow">What it is not</p>
-      <h2>Not a code reviewer. No scores, no verdicts.</h2>
+      <p class="eyebrow">Scope</p>
+      <h2>It reports what a change does and leaves the verdict to the reviewer.</h2>
       <p>Your repository sets the coding style, the test policy and the branch rules. gh-wat-dis decides how to communicate the work.</p>
     </div>
   </div>
