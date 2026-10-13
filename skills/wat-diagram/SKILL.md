@@ -56,7 +56,7 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ![Checkout: payment retries move to a worker](./<name>.svg)
    ```
    Write the path relative to the body file. Put the diagram right after the opening and the alert.
-9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. Check the posted body: the image link must start with `https://`.
+9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. The swap needs the body and the flag to name the file the same way: run `gh` from the folder that holds the body file, and pass `--attach ./<name>.svg` exactly as the body writes it. Check the posted body: the image link must start with `https://`. If the local path is still there and the image sits at the end of the body, `gh` appended it: put the uploaded URL in place of the local path, remove the appended line, and update the body with `gh issue edit` or `gh pr edit --body-file`.
 
 ## Spec
 
