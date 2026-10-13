@@ -5,6 +5,8 @@ import type { ElementMap } from './elements.ts';
 import { buildElements } from './elements.ts';
 import { diffEntries, history, readBlobs, resolveRange, tryGit, webUrl } from './git.ts';
 import type { DiffEntry } from './git.ts';
+import { complexityFacts } from './complexity.ts';
+import type { Side } from './complexity.ts';
 import { buildGraph, reverseReach } from './graph.ts';
 import { diffManifest, isManifest } from './manifests.ts';
 import type { Graph, InEdge } from './model.ts';
@@ -14,7 +16,7 @@ import { diffSymbols } from './symbols.ts';
 import { commitTree, repoTop, workingTree } from './tree.ts';
 import type { Tree } from './tree.ts';
 import type {
-  AnalyzeOptions, CoChangeFact, ContractFact, DependencyFact, DirectDependent, EdgeFact, ElementFact, Facts, FileFact, FileKind,
+  AnalyzeOptions, ComplexityFact, CoChangeFact, ContractFact, DependencyFact, DirectDependent, EdgeFact, ElementFact, Facts, FileFact, FileKind,
   OwnerFact, Provenance, SymbolDependent, SymbolFact, TransitiveRollup,
 } from './types.ts';
 
@@ -294,10 +296,27 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   if (!co) caveats.push('no CODEOWNERS file; owners are empty');
   if (entries.some((e) => e.binary)) caveats.push('binary files have no line counts');
 
+  let complexity: ComplexityFact[] = [];
+  let measured = false;
+  if (opts.cccc) {
+    const sides: Side[] = files.filter((f) => f.kind === 'source' && f.language && !f.binary).map((f) => {
+      const e = changed.get(f.path)!;
+      const head = e.status === 'deleted' ? undefined : tree.read(f.path);
+      const base = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
+      return { path: f.path, basePath: basePath(e), ...(base !== undefined ? { base } : {}), ...(head !== undefined ? { head } : {}) };
+    });
+    try { complexity = complexityFacts(opts.cccc, sides); measured = true; } catch (e) {
+      graph.unavailable.push({ tool: 'cccc', reason: e instanceof Error ? e.message : String(e) });
+    }
+  } else if (opts.cccc === null) {
+    graph.unavailable.push({ tool: 'cccc', reason: 'not installed. Run: npx gh-wat-dis doctor --tools install' });
+  }
+  const sum = (pick: (f: ComplexityFact) => number): number => complexity.reduce((n, f) => n + pick(f), 0);
+
   const byKind: Partial<Record<FileKind, number>> = {};
   for (const f of files) byKind[f.kind] = (byKind[f.kind] ?? 0) + 1;
   const ran = ['git', ...(graph.nodes.size ? ['ast-grep'] : []), ...(co ? ['codeowners'] : []),
-    ...(graph.packages.length || dependencies.length ? ['manifest'] : []), ...(els.mapping === 'config' ? ['config'] : [])];
+    ...(graph.packages.length || dependencies.length ? ['manifest'] : []), ...(els.mapping === 'config' ? ['config'] : []), ...(measured ? ['cccc'] : [])];
 
   const repository = webUrl(await tryGit(root, ['remote', 'get-url', 'origin']));
   return {
@@ -315,6 +334,13 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
       elementsChanged: elements.filter((e) => e.filesChanged > 0).length,
       directDependents: directList.length,
       exportedSignatureChanges: symbols.filter((s) => s.exported && s.signatureChanged).length,
+      ...(measured ? { complexity: {
+        functions: complexity.length,
+        cognitiveBefore: sum((f) => f.before?.cognitive ?? 0),
+        cognitiveAfter: sum((f) => f.after?.cognitive ?? 0),
+        largestRise: Math.max(0, ...complexity.map((f) => (f.after?.cognitive ?? 0) - (f.before?.cognitive ?? 0))),
+        highestAfter: Math.max(0, ...complexity.map((f) => f.after?.cognitive ?? 0)),
+      } } : {}),
     },
     files,
     symbols,
@@ -325,6 +351,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     tests: { changed: files.filter((f) => f.kind === 'test').map((f) => f.path), importingChanged: directList.filter((d) => d.isTest).map((d) => d.file) },
     coChange: hist.pairs,
     dependencies,
+    complexity,
     owners: [...owners.values()].sort((a, b) => b.files.length - a.files.length || a.owner.localeCompare(b.owner)),
     caveats,
   };

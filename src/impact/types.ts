@@ -1,7 +1,7 @@
 import type { ElementType, Provenance } from '../spec.ts';
 
 export type { Provenance };
-export type FactSource = 'git' | 'ast-grep' | 'codeowners' | 'manifest' | 'config';
+export type FactSource = 'git' | 'ast-grep' | 'codeowners' | 'manifest' | 'config' | 'cccc';
 export type FileKind =
   | 'source' | 'test' | 'config' | 'ci' | 'docs' | 'migration' | 'schema' | 'manifest' | 'lockfile' | 'generated' | 'other';
 export type Language = 'typescript' | 'javascript' | 'rust';
@@ -27,6 +27,26 @@ export interface FactsSummary {
   elementsChanged: number;
   directDependents: number;
   exportedSignatureChanges: number;
+  /** Present when cccc ran. Sums cover the functions in `complexity[]`, not the whole files. */
+  complexity?: { functions: number; cognitiveBefore: number; cognitiveAfter: number; largestRise: number; highestAfter: number };
+}
+
+/** Cognitive (SonarSource) and cyclomatic (McCabe) complexity of one function. */
+export interface Score { cognitive: number; cyclomatic: number }
+
+/** A function whose complexity the change moved, or one it added or removed. Callbacks count toward the named function around them. */
+export interface ComplexityFact {
+  file: string;
+  /** `outer > inner` for a named function inside another. `<top level>` for callbacks outside every named function. */
+  name: string;
+  kind: string;
+  /** First line on head, or on base for a removed function. */
+  line: number;
+  change: SymbolChangeKind;
+  before?: Score;
+  after?: Score;
+  provenance: 'measured';
+  source: 'cccc';
 }
 
 export interface FileFact {
@@ -142,6 +162,8 @@ export interface Facts {
   tests: { changed: string[]; importingChanged: string[] };
   coChange: CoChangeFact[];
   dependencies: DependencyFact[];
+  /** Empty when cccc did not run: see `tiers`. Largest change in cognitive complexity first. */
+  complexity: ComplexityFact[];
   owners: OwnerFact[];
   caveats: string[];
 }
@@ -153,6 +175,8 @@ export interface AnalyzeOptions {
   workingTree?: boolean;
   depth?: number;
   now?: Date;
+  /** Path of the cccc binary. `null`: looked for and not found, which the facts then say. Omitted: complexity is not measured. */
+  cccc?: string | null;
 }
 
 export interface MarkdownOptions { maxItems?: number; heading?: string | false; /** Link file paths to the repository. Default true. */ links?: boolean }
