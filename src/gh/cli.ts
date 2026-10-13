@@ -5,6 +5,8 @@ import type { Config } from '../cli/config.ts';
 import { CONFIG_REL, UsageError, parseArgs, readInput, readJson, repoRoot, run } from '../cli/util.ts';
 import { planLabels } from './labels.ts';
 import type { LiveLabel } from './labels.ts';
+import { byVersion, milestoneStatus } from './milestone.ts';
+import type { RawIssue } from './milestone.ts';
 import { readRelations, relate } from './relations.ts';
 import type { Api } from './relations.ts';
 import { analyzeLinks } from './links.ts';
@@ -235,4 +237,35 @@ export async function relateCmd(argv: string[]): Promise<number> {
   });
   for (const r of results) console.log(`${r.ok ? 'ok    ' : 'FAIL  '} ${r.action}${r.detail ? `  (${r.detail})` : ''}`);
   return results.every((r) => r.ok) ? 0 : 1;
+}
+
+const MILESTONE_USAGE = `Usage: npx gh-wat-dis milestone [<title>] [--stalled-after 7]
+Prints the numbers for a status report as JSON: issue counts (pull requests and the tracking issue are not counted),
+what is in review, what is blocked and by what, the done-when conditions, and a status: done, blocked, stalled or moving.
+With no title it reports the current milestone: the lowest open version. Milestones have no due dates.`;
+
+export async function milestone(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['help'], strings: ['stalled-after'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(MILESTONE_USAGE); return 0; }
+  const { repo } = repoInfo();
+  type M = { title: string; number: number; state: string; description: string | null };
+  const all = await api<M[]>([`repos/${repo}/milestones?state=all&per_page=100`]);
+  const openTitles = all.filter((m) => m.state === 'open').map((m) => m.title);
+  const want = args._[0] ?? [...openTitles].sort(byVersion)[0];
+  const found = all.find((m) => m.title === want);
+  if (!found) throw new UsageError(want ? `no milestone "${want}". Milestones: ${all.map((m) => m.title).join(', ') || 'none'}` : 'this repository has no open milestone');
+  const items = await api<RawIssue[]>([`repos/${repo}/issues?milestone=${found.number}&state=all&per_page=100`, '--paginate']);
+  const openIssues = items.filter((i) => !i.pull_request && i.state === 'open');
+  const blockedBy = new Map<number, { number: number; title: string; state: string }[]>();
+  await Promise.all(openIssues.map(async (i) => {
+    try { blockedBy.set(i.number, await api([`repos/${repo}/issues/${i.number}/dependencies/blocked_by`])); } catch { blockedBy.set(i.number, []); }
+  }));
+  const prs = await gh<{ number: number; closingIssuesReferences: { number: number }[] }[]>(['pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,closingIssuesReferences']);
+  const out = milestoneStatus({
+    milestone: found, openMilestones: openTitles, items, blockedBy,
+    openPrs: prs.map((p) => ({ number: p.number, closes: p.closingIssuesReferences.map((r) => r.number) })),
+    now: new Date(), stalledAfterDays: args['stalled-after'] ? Number(args['stalled-after']) : undefined,
+  });
+  console.log(JSON.stringify(out, null, 2));
+  return 0;
 }

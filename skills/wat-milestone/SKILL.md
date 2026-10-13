@@ -1,6 +1,6 @@
 ---
 name: wat-milestone
-description: Create, plan, track and close GitHub milestones. Writes a short milestone description plus a tracking issue with a system diagram, reports progress and risk from live issue data, and proposes scope cuts. Use when the user asks to create or plan a milestone or release, asks "where are we on <milestone>", wants a status update or burndown, or wants to close or roll over a milestone.
+description: Create, plan, track and close GitHub milestones. Writes a short milestone description plus a tracking issue with a system diagram, reports status from the milestone tool (counts, what is in review, what is blocked, done-when conditions), and proposes scope cuts. Milestones run in sequence with no due dates. Use when the user asks to create or plan a milestone or release, asks "where are we on <milestone>", wants a status update or burndown, or wants to close or roll over a milestone.
 license: MIT
 ---
 
@@ -12,14 +12,13 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
 ## Create
 
-1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, cadence, capacity). List open milestones to avoid a clash.
+1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, capacity). List open milestones to avoid a clash. Milestones run in sequence: the new one is the next version after the highest that exists. Do not set a due date.
 2. **Get the goal** in one sentence. If the user gives a list of features, ask what a user or the system can do when it ships.
 3. **Write done-when conditions.** 3 at most. Each one is observable: a command, a metric, a user action.
 4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements a milestone description cannot render.
 5. **Show the draft**, wait for a yes, then create:
    ```bash
-   gh api repos/{owner}/{repo}/milestones -f title="<title>" \
-     -f due_on="<YYYY-MM-DD>T00:00:00Z" -F description=@.wat-tmp/milestone.md
+   gh api repos/{owner}/{repo}/milestones -f title="<title>" -F description=@.wat-tmp/milestone.md
    ```
 6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then put its number in the description's `Tracking` line.
 
@@ -35,25 +34,40 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
 ## Report status
 
-1. Pull live data. Do not reuse numbers from memory.
+1. **Get the numbers from the tool.** Do not count or compute them yourself.
    ```bash
-   gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | select(.title=="<title>")'
-   gh issue list --milestone "<title>" --state all --limit 200 \
-     --json number,title,state,labels,assignees,updatedAt,closedAt
-   gh pr list --search 'milestone:"<title>"' --state all --json number,title,state,isDraft,reviewDecision
+   npx gh-wat-dis milestone            # the current milestone
+   npx gh-wat-dis milestone "<title>"  # a named one
    ```
-2. Compute: closed / total, in review (open PR linked), blocked, not started, days left, issues closed in the last 7 days.
-3. Rate it.
+   It prints JSON. Use it as given:
 
-   | Rating | Rule |
+   | Field | Meaning |
    |---|---|
-   | On track | Remaining ÷ 7-day close rate ≤ weeks left, and nothing blocked on outside work |
-   | At risk | Up to 1.5× the time left, or 1 external blocker |
-   | Off track | Over 1.5×, or the due date passed |
+   | `counts.total`, `closed`, `open` | Issues only. Pull requests and the tracking issue are not counted. |
+   | `tracking` | The tracking issue: the one named on the description's `Tracking:` line, else the issue with the most sub-issues |
+   | `open[].inReview` | Open pull requests whose closing keyword names the issue |
+   | `open[].blockedBy` | Open blockers from GitHub's relations. `inMilestone: false` means the blocker is outside the milestone. |
+   | `status`, `reason` | `done`, `blocked`, `stalled` or `moving`, and the one fact behind it |
+   | `doneWhen` | The conditions from the milestone description |
 
-   No due date or no closes yet: say "No rate yet" and give the counts.
-4. Write the Status comment format. Name the 1 to 3 issues that decide the outcome. If at risk or off track, propose the cut: which issues move out and what the milestone still delivers.
-5. Show it in chat. Post it as a comment on the tracking issue only when the user asks.
+2. **Check each done-when condition.** Run the check it names, or read the issue that delivers it. Mark it met or not met, with the evidence. A condition you could not check is "not checked", never "met".
+3. **Find what changed.** Read the comments on the tracking issue (`issue_read` with `get_comments`, or `gh issue view <tracking> --comments`). The last status comment is the baseline. No earlier status: write "First status."
+4. **Name the 1 to 3 issues that decide the outcome**: the ones that block others, or that a done-when condition needs.
+5. **Write** the Status comment format from `../wat/references/formats.md`. If `status` is `blocked` or `stalled`, propose what to do: which issue to unblock, or which issues move to the next milestone and what this one still delivers.
+6. **Show it in chat.** Post it as a comment on the tracking issue only when the user asks. Check a comment you post with `npx gh-wat-dis lint <file> --kind comment`.
+
+### Status has no dates
+
+Milestones here have no due dates, and a date never sets importance. The current milestone is the lowest open version, and it is always due now. So the status says whether work moves, not whether it is on schedule:
+
+| Status | The tool reports it when |
+|---|---|
+| `done` | Every issue is closed |
+| `blocked` | An open issue waits on something outside the milestone, or every open issue waits on another |
+| `stalled` | No issue closed in 7 days and no pull request is open |
+| `moving` | None of the above |
+
+Never ask the user for a due date, and never propose one.
 
 ## Close or roll over
 

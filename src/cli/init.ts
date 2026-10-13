@@ -43,7 +43,7 @@ export async function main(argv: string[]): Promise<number> {
     : null;
   const issueTypes = (typesOut ?? '').split('\n').map((t) => t.trim()).filter(Boolean);
   const milestones = repo.remote
-    ? ghList<{ title: string }>(root, ['api', 'repos/{owner}/{repo}/milestones?state=all&per_page=20&sort=due_on&direction=desc']).map((m) => m.title)
+    ? ghList<{ title: string }>(root, ['api', 'repos/{owner}/{repo}/milestones?state=all&per_page=20']).map((m) => m.title)
     : [];
   const text = JSON.stringify(defaultConfig({ ...repo, use, issueTypes, milestones }), null, 2) + '\n';
 
