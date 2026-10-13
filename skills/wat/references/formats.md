@@ -92,7 +92,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 | <name> | <what is different> | <reason> |
 
 ## Blast radius
-<Output of `npx gh-wat-dis blast`, trimmed. Always: the summary line and the linked `Files changed` list. Then what applies: dependents, changed exported signatures, contracts, owners.>
+<Only when the change reaches past its own diff. Output of `npx gh-wat-dis blast`, trimmed to what a reviewer would act on: code outside the diff that depends on the change, changed exported signatures, contracts, tests, files that usually change with these.>
 
 ## Verify
 - [x] <check you ran, with the command and the result>
@@ -129,8 +129,8 @@ Refs #<m>
   - Between two issues, use GitHub's relations and not a `Refs` line: a parent for "part of", blocked by for "must wait for".
 - Never put `close`, `fix` or `resolve` in front of an issue number anywhere else in the body or in a commit message. GitHub ignores the words around the keyword: "does not fix #12" closes #12.
 - `Follow-ups` lists issues that already exist. File them first. Omit the section when there are none.
-- A PR that changes no element, relationship or contract (typo, dependency bump, formatting) keeps only: the opening, `Blast radius` cut to its summary line and `Files changed` list, `Verify`, link lines.
-- Name a file in prose as a link when the reader should open it: copy the link from the `blast` output. A path in backticks alone gives the reader nothing to click.
+- A PR that changes no element, relationship or contract (typo, dependency bump, formatting) keeps only: the opening, `Verify`, link lines.
+- Name a file as a link when the reader should open it and it is not in the diff. `blast` prints its paths as links for this.
 
 ## Link lines
 
