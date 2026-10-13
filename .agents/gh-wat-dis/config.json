@@ -1,0 +1,225 @@
+{
+  "$schema": "https://thejustinwalsh.github.io/gh-wat-dis/config.schema.json",
+  "version": 1,
+  "policy": {
+    "use": "always",
+    "confirmBeforeWrite": true
+  },
+  "repo": {
+    "owner": "thejustinwalsh",
+    "name": "gh-wat-dis",
+    "defaultBranch": "main"
+  },
+  "issues": {
+    "types": [
+      "bug",
+      "enhancement",
+      "documentation",
+      "question"
+    ],
+    "priorities": [],
+    "defaultLabels": []
+  },
+  "pulls": {
+    "draft": false,
+    "closingKeyword": "Closes"
+  },
+  "milestones": {
+    "naming": "",
+    "capacity": null
+  },
+  "triage": {
+    "staleIssueDays": 60,
+    "stalePrDays": 14,
+    "needsInfoLabel": ""
+  },
+  "architecture": {
+    "system": {
+      "name": "gh-wat-dis",
+      "description": "Skills and tools that help agents write GitHub issues, pull requests and milestones"
+    },
+    "elements": [
+      {
+        "id": "engineer",
+        "type": "person",
+        "name": "Engineer",
+        "description": "Reads issues and PRs, approves drafts",
+        "paths": []
+      },
+      {
+        "id": "agent",
+        "type": "system",
+        "name": "Coding agent",
+        "external": true,
+        "description": "Claude Code, Codex, Cursor and others. Loads the skills and runs the tools",
+        "paths": []
+      },
+      {
+        "id": "github",
+        "type": "system",
+        "name": "GitHub",
+        "external": true,
+        "description": "Holds issues, pull requests, milestones and attachments",
+        "paths": []
+      },
+      {
+        "id": "skills",
+        "type": "container",
+        "name": "wat skills",
+        "technology": "Markdown",
+        "description": "Tell the agent what to write and which tool to run",
+        "paths": [
+          "skills/**"
+        ]
+      },
+      {
+        "id": "cli",
+        "type": "container",
+        "name": "gh-wat-dis CLI",
+        "technology": "TypeScript, Node",
+        "description": "Dispatches one small tool per command",
+        "paths": [
+          "src/bin.ts",
+          "src/main.ts",
+          "src/graph-dispatch.ts",
+          "src/spec.ts"
+        ]
+      },
+      {
+        "id": "setup",
+        "type": "component",
+        "parent": "cli",
+        "name": "Setup tools",
+        "technology": "TypeScript",
+        "description": "install, init, mcp, doctor",
+        "paths": [
+          "src/cli/**"
+        ]
+      },
+      {
+        "id": "facts",
+        "type": "component",
+        "parent": "cli",
+        "name": "Facts tools",
+        "technology": "TypeScript, ast-grep",
+        "description": "impact, reach, owners, elements, blast",
+        "paths": [
+          "src/impact/**"
+        ]
+      },
+      {
+        "id": "graph",
+        "type": "component",
+        "parent": "cli",
+        "name": "Graph filters",
+        "technology": "TypeScript",
+        "description": "Reshape a diagram spec",
+        "paths": [
+          "src/graph/**"
+        ]
+      },
+      {
+        "id": "diagram",
+        "type": "component",
+        "parent": "cli",
+        "name": "Diagram renderer",
+        "technology": "TypeScript, elkjs",
+        "description": "Lints a spec and draws an SVG",
+        "paths": [
+          "src/diagram/**",
+          "examples/diagrams/**"
+        ]
+      },
+      {
+        "id": "ghtools",
+        "type": "component",
+        "parent": "cli",
+        "name": "GitHub tools",
+        "technology": "TypeScript, gh",
+        "description": "related, links",
+        "paths": [
+          "src/gh/**"
+        ]
+      },
+      {
+        "id": "lint",
+        "type": "component",
+        "parent": "cli",
+        "name": "Body backstop",
+        "technology": "TypeScript",
+        "description": "Catches what GitHub would break in a body",
+        "paths": [
+          "src/lint/**"
+        ]
+      },
+      {
+        "id": "site",
+        "type": "container",
+        "name": "Site",
+        "technology": "Static HTML, GitHub Pages",
+        "description": "Explains the project and serves llms.txt",
+        "paths": [
+          "docs/**"
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "engineer",
+        "to": "agent",
+        "label": "Asks for an issue, PR or milestone"
+      },
+      {
+        "from": "agent",
+        "to": "skills",
+        "label": "Loads instructions from"
+      },
+      {
+        "from": "agent",
+        "to": "cli",
+        "label": "Runs tools through",
+        "technology": "npx"
+      },
+      {
+        "from": "agent",
+        "to": "github",
+        "label": "Writes issues and PRs to",
+        "technology": "gh CLI"
+      },
+      {
+        "from": "agent",
+        "to": "github",
+        "label": "Reads threads and diffs from",
+        "technology": "GitHub MCP server"
+      },
+      {
+        "from": "ghtools",
+        "to": "github",
+        "label": "Searches issues and reads PR links from",
+        "technology": "gh CLI"
+      },
+      {
+        "from": "setup",
+        "to": "skills",
+        "label": "Copies into the harness"
+      },
+      {
+        "from": "facts",
+        "to": "graph",
+        "label": "Emits diagram specs for",
+        "technology": "JSON"
+      },
+      {
+        "from": "graph",
+        "to": "diagram",
+        "label": "Passes shaped specs to",
+        "technology": "JSON"
+      },
+      {
+        "from": "engineer",
+        "to": "github",
+        "label": "Reads the result on"
+      }
+    ]
+  }
+}
