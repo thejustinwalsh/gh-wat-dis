@@ -246,6 +246,7 @@ async function checkTools(): Promise<Check[]> {
 
 const SANDBOX = 'codex sandbox';
 const DEP_CMD = `npm install --save-dev ${PKG.name}@${PKG.version}`;
+const FIX_CMD = `npx ${PKG.name} doctor --fix`;
 
 /** The project's own copy of the CLI, when the package is installed in it. npx runs this one with no fetch and no cache. */
 function localBin(root: string): boolean {
@@ -265,53 +266,55 @@ function checkSandbox(cwd: string): Check[] {
   if (!found) return [];
   const { state } = found;
   if (localBin(repoRoot(cwd))) return [{ status: 'ok', name: SANDBOX, detail: `npx runs this project's own copy of ${PKG.name}, which needs nothing the sandbox blocks` }];
-  if (!blocksNpx(state)) return [{ status: 'ok', name: SANDBOX, detail: state.mode === 'danger-full-access' ? 'the sandbox is off' : "npm's cache is writable inside the sandbox" }];
-  const fix = isOwnRepo(repoRoot(cwd))
-    ? `This is the ${PKG.name} repository, where only the Codex setting helps: run "npx ${PKG.name} doctor --sandbox config" in your own terminal.`
-    : `Fix: add it to this project with "${DEP_CMD}", or run "npx ${PKG.name} doctor" in your own terminal for the choices.`;
-  return [{ status: 'warn', name: SANDBOX, detail: `Codex's sandbox blocks npm's cache and the network, so npx cannot fetch ${PKG.name} there: it hangs, then runs out of memory. ${fix}` }];
+  if (state.mode === 'danger-full-access') return [{ status: 'ok', name: SANDBOX, detail: 'the sandbox is off' }];
+  if (!blocksNpx(state)) {
+    return [{ status: 'ok', name: SANDBOX, detail: `npm's cache is writable inside the sandbox${state.network ? ' and the network is on' : '. The network is off there: npx runs a package that is installed or cached, and cannot fetch a new one'}` }];
+  }
+  return [{ status: 'warn', name: SANDBOX, detail: `Codex's sandbox blocks npm's cache, so npx hangs there and then runs out of memory, and no ${PKG.name} tool starts inside Codex. Fix, from your own terminal: ${FIX_CMD}` }];
 }
 
 /**
- * Offer a way for npx to run inside Codex's sandbox. `mode` is the --sandbox flag.
- *   dep     add gh-wat-dis to this project as a dev dependency: npx then runs the local copy
- *   config  let Codex commands write npm's cache and reach the network (a Codex security setting)
- * It never changes the project or Codex's config without that flag or a yes.
+ * Offer a way for npx to run inside Codex's sandbox. `mode` is the --sandbox flag, or `cache` under --fix.
+ *   cache    let Codex commands write npm's cache folder: the smallest change, and what --fix applies
+ *   network  the same, plus network access, so npx can also fetch a package inside Codex
+ *   dep      add gh-wat-dis to this project as a dev dependency: npx then runs the local copy
+ * It never changes Codex's config or the project without a flag or a yes.
  */
 export async function offerSandbox(checks: Check[], mode?: string, cwd: string = process.cwd()): Promise<boolean> {
   if (mode === 'skip' || !checks.some((c) => c.name === SANDBOX && c.status === 'warn')) return false;
   const found = codexSandbox();
   if (!found) return false;
   const root = repoRoot(cwd);
-  const lines = fixLines(found.cache, 'both').split('\n').map((l) => `    ${l}`).join('\n');
+  const own = isOwnRepo(root);
   let choice = mode;
   if (!choice) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      console.log(`\nCodex's sandbox stops npx from fetching ${PKG.name}. Ask the person which they want:\n  1. Add it to this project (recommended). It needs the network once, so run it with their approval:\n       ${DEP_CMD}\n  2. Change Codex's sandbox, which is their security setting. They add these lines to ${found.file}:\n${lines}`);
+      console.log(`\nCodex's sandbox stops npx. This is fixed outside the sandbox, so ask the person to run one of these in their own terminal:\n  ${FIX_CMD}${' '.repeat(Math.max(1, 34 - FIX_CMD.length))}lets Codex's sandbox write npm's cache folder (${found.cache})${own ? '' : `\n  ${DEP_CMD}   adds ${PKG.name} to this project, so npx needs no cache and no network`}`);
       return false;
     }
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question(`\nCodex's sandbox stops npx from fetching ${PKG.name}, so its tools cannot run inside Codex.\n  [d] add ${PKG.name} to this project as a dev dependency (recommended): npx then runs the local copy\n  [c] change Codex's sandbox instead: commands may write npm's cache and reach the network\n  [s] skip\n> `)).trim().toLowerCase();
+    const answer = (await rl.question(`\nCodex's sandbox stops npx, so ${PKG.name} cannot run inside Codex.\n  [c] let the sandbox write npm's cache folder, ${found.cache} (recommended)\n  [n] the same, and let sandboxed commands reach the network, so npx can fetch a package\n${own ? '' : `  [d] add ${PKG.name} to this project as a dev dependency instead: no Codex setting changes\n`}  [s] skip\n> `)).trim().toLowerCase();
     rl.close();
-    choice = answer.startsWith('d') ? 'dep' : answer.startsWith('c') ? 'config' : 'skip';
+    choice = answer.startsWith('c') ? 'cache' : answer.startsWith('n') ? 'network' : answer.startsWith('d') ? 'dep' : 'skip';
   }
   if (choice === 'dep') {
-    if (isOwnRepo(root)) {
-      console.log(`\nThis is the ${PKG.name} repository, and a package cannot depend on itself. Use the Codex setting here: npx ${PKG.name} doctor --sandbox config`);
+    if (own) {
+      console.log(`\nThis is the ${PKG.name} repository, and a package cannot depend on itself. Use: ${FIX_CMD}`);
       return false;
     }
     console.log(`\n${DEP_CMD}`);
     const [cmd, ...rest] = DEP_CMD.split(' ');
     return spawnSync(cmd!, rest, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0;
   }
-  if (choice !== 'config') return false;
-  const res = applyFix('both');
+  if (choice !== 'cache' && choice !== 'network') return false;
+  const fix = choice === 'network' ? 'both' : 'cache';
+  const res = applyFix(fix);
   if (!res) return false;
   if (res.action === 'manual') {
-    console.log(`\n${res.file} already has a [sandbox_workspace_write] section in a form this tool does not edit. Add these to it by hand:\n${fixLines(found.cache, 'both')}`);
+    console.log(`\n${res.file} already has a [sandbox_workspace_write] section in a form this tool does not edit. Add these to it by hand:\n${fixLines(found.cache, fix)}`);
     return false;
   }
-  console.log(`\n${res.action === 'written' ? 'updated' : 'unchanged'}  ${res.file}\nRestart Codex so it reads the new settings.`);
+  console.log(`\n${res.action === 'written' ? 'updated' : 'unchanged'}  ${res.file}\n${fixLines(found.cache, fix).split('\n').map((l) => `  ${l}`).join('\n')}\nRestart Codex so it reads the new settings.`);
   return res.action === 'written';
 }
 
@@ -362,7 +365,7 @@ export function printChecks(checks: Check[]): number {
   return fails;
 }
 
-const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip] [--sandbox dep|config|skip]
+const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip] [--fix] [--sandbox cache|network|dep|skip]
 
 Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config. Offers a fix where it has one.
 Exits non-zero when a check fails.
@@ -372,17 +375,18 @@ Exits non-zero when a check fails.
   --no-login       do not offer to run gh auth login
   --mcp <scope>    where to write the GitHub MCP server config when none is found: user, project or skip
   --tools <mode>   optional analysis tools (cccc, for complexity facts): install without asking, or skip
-  --sandbox <mode> when Codex's sandbox stops npx: dep adds gh-wat-dis to this project as a dev dependency,
-                   config changes Codex's sandbox settings, skip does neither. Without the flag, doctor asks
-                   in a terminal and prints both choices elsewhere.
+  --fix            apply the fixes that need no choice from you. Today that is one: let Codex's sandbox write
+                   npm's cache folder, so npx can run inside Codex. It prints what it changed.
+  --sandbox <mode> choose the sandbox fix yourself: cache (what --fix does), network (the cache and network
+                   access), dep (add gh-wat-dis to this project as a dev dependency), or skip
 
 Optional tools are fetched from their own releases into your user cache, checked against a pinned sha256
 and the release's build attestation. A missing optional tool is a warning, never a failure.
 `;
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp', 'tools', 'sandbox'], aliases: { '-h': '--help' } });
-  if (args.sandbox && !['dep', 'config', 'skip'].includes(args.sandbox)) throw new UsageError('--sandbox must be dep, config or skip');
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help', 'fix'], strings: ['mcp', 'tools', 'sandbox'], aliases: { '-h': '--help' } });
+  if (args.sandbox && !['cache', 'network', 'dep', 'skip'].includes(args.sandbox)) throw new UsageError('--sandbox must be cache, network, dep or skip');
   if (args.tools && !['install', 'skip'].includes(args.tools)) throw new UsageError('--tools must be install or skip');
   if (args.help) { process.stdout.write(HELP); return 0; }
   let checks = await runChecks({ offline: args.offline });
@@ -397,7 +401,7 @@ export async function main(argv: string[]): Promise<number> {
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
   again = await offerTools(checks, args.tools) || again;
-  again = await offerSandbox(checks, args.sandbox) || again;
+  again = await offerSandbox(checks, args.sandbox ?? (args.fix ? 'cache' : undefined)) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks({ offline: args.offline });

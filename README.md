@@ -16,7 +16,7 @@ The agent installs the skills, runs the checks and explains what it set up.
 
 ## If you are the coding agent reading this
 
-0. **If your harness runs commands in a sandbox (Codex does by default):** `npx` cannot fetch a package there. It hangs, then dies with "heap out of memory". Do this first, with the person's approval, because it needs the network once: `npm install --save-dev gh-wat-dis`. After that `npx gh-wat-dis` runs the project's own copy inside the sandbox. In a project with no `package.json`, ask the person to run `npx gh-wat-dis doctor` in their own terminal: it offers the other way.
+0. **If your harness runs commands in a sandbox (Codex does by default):** `npx` cannot fetch a package there. It hangs, then dies with "heap out of memory". Do this first, with the person's approval, because it needs the network once: `npm install --save-dev gh-wat-dis`. After that `npx gh-wat-dis` runs the project's own copy inside the sandbox. In a project with no `package.json`, ask the person to run `npx gh-wat-dis doctor --fix` in their own terminal: it lets the sandbox write npm's cache folder.
 1. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
 2. Read the check lines. Fix each `FAIL` it prints. `warn` lines are optional.
 3. If `gh auth` fails, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
@@ -125,7 +125,7 @@ Run `npx gh-wat-dis doctor`.
 | `FAIL gh auth` | Not signed in, or the saved token expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
 | `FAIL skills` | Not installed, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
 | Skills do not trigger | Harness not restarted | Restart it |
-| `npx gh-wat-dis` hangs, then "heap out of memory", inside Codex | Codex's sandbox blocks npm's cache and the network | `npm install --save-dev gh-wat-dis` in the project, or `npx gh-wat-dis doctor` in your own terminal |
+| `npx gh-wat-dis` hangs, then "heap out of memory", inside Codex | Codex's sandbox blocks npm's cache and the network | `npx gh-wat-dis doctor --fix` in your own terminal, or `npm install --save-dev gh-wat-dis` in the project |
 | `warn codex sandbox` | The same, found before it bites | The same |
 | Image shows as a broken link | The file was not attached | Post with `gh ... --attach <file>` and check the body has an `https://` image URL |
 
