@@ -5,6 +5,8 @@ interface Snippet {
   lang: 'bash' | 'toml' | 'json';
   snippet: string;
   noToken?: boolean;
+  /** Where the same entry goes when a team wants it in one repository. */
+  project?: string;
   /** How this harness gets the token, when it is not an environment variable. */
   note?: string;
   /** A link that opens the harness on its own "add this MCP server" screen. Only some harnesses have one. */
@@ -17,7 +19,7 @@ const TOOLSETS = 'default,labels';
 const ENV_FILE = '.agents/gh-wat-dis/.env';
 
 /** Prints the Authorization header from the gh CLI's own login. Claude Code runs it at each connect, so no token is stored. */
-export const GH_HEADERS_HELPER = `printf '{"Authorization":"Bearer %s"}' "$(gh auth token)"`;
+export const GH_HEADERS_HELPER = 'echo "{\\"Authorization\\":\\"Bearer $(gh auth token)\\"}"';
 const json = (v: unknown): string => JSON.stringify(v, null, 2);
 const staticHeaders = (readonly: boolean): Record<string, string> => ({ 'X-MCP-Toolsets': TOOLSETS, ...(readonly ? { 'X-MCP-Readonly': 'true' } : {}) });
 const headers = (token: string, readonly: boolean): Record<string, string> => ({
@@ -28,30 +30,34 @@ const headers = (token: string, readonly: boolean): Record<string, string> => ({
 
 export const CLIENTS: Record<string, (readonly: boolean) => Snippet> = {
   claude: (ro) => ({
-    target: '.mcp.json in the project (shared with the team), or the same entry at user scope with: claude mcp add-json github --scope user \'<json>\'',
-    lang: 'json',
-    snippet: json({ mcpServers: { github: { type: 'http', url: URL, headersHelper: GH_HEADERS_HELPER, headers: staticHeaders(ro) } } }),
+    target: 'Claude Code, user scope (~/.claude.json). Works in every project, with no approval prompt in each one.',
+    lang: 'bash',
+    snippet: `claude mcp add-json github --scope user '${JSON.stringify({ type: 'http', url: URL, headersHelper: GH_HEADERS_HELPER, headers: staticHeaders(ro) })}'`,
     noToken: true,
-    note: 'Token: none stored. Claude Code runs the helper at each connect and reads the token from your gh login. Approve the project\'s trust dialog once so the helper may run.',
+    note: 'Token: none stored. Claude Code runs the helper at each connect and reads the token from your gh login.',
+    project: 'For one repository, put the same object under "mcpServers" in .mcp.json. Each person then approves the server and the trust dialog once.',
   }),
   codex: (ro) => ({
-    target: '~/.codex/config.toml',
+    target: '~/.codex/config.toml (user level)',
     lang: 'toml',
     snippet: `[mcp_servers.github]\nurl = "${URL}"\nbearer_token_env_var = "${ENV}"\nhttp_headers = { "X-MCP-Toolsets" = "${TOOLSETS}"${ro ? ', "X-MCP-Readonly" = "true"' : ''} }`,
   }),
   cursor: (ro) => ({
-    target: '~/.cursor/mcp.json (or .cursor/mcp.json in the project)',
+    target: '~/.cursor/mcp.json (user level)',
+    project: 'For one repository: .cursor/mcp.json.',
     lang: 'json',
     snippet: json({ mcpServers: { github: { url: URL, headers: headers(`\${env:${ENV}}`, ro) } } }),
     link: `https://cursor.com/en/install-mcp?name=github&config=${encodeURIComponent(Buffer.from(JSON.stringify({ url: URL, headers: headers(`\${env:${ENV}}`, ro) })).toString('base64'))}`,
   }),
   gemini: (ro) => ({
-    target: '~/.gemini/settings.json (or .gemini/settings.json in the project)',
+    target: '~/.gemini/settings.json (user level)',
+    project: 'For one repository: .gemini/settings.json.',
     lang: 'json',
     snippet: json({ mcpServers: { github: { httpUrl: URL, headers: headers(`$${ENV}`, ro) } } }),
   }),
   opencode: (ro) => ({
-    target: '~/.config/opencode/opencode.json (or opencode.json in the project)',
+    target: '~/.config/opencode/opencode.json (user level)',
+    project: 'For one repository: opencode.json.',
     lang: 'json',
     snippet: json({ mcp: { github: { type: 'remote', url: URL, enabled: true, oauth: false, headers: headers(`{env:${ENV}}`, ro) } } }),
   }),
@@ -61,7 +67,8 @@ export const CLIENTS: Record<string, (readonly: boolean) => Snippet> = {
     snippet: json({ mcpServers: { github: { type: 'http', url: URL, headers: headers(`\${${ENV}}`, ro) } } }),
   }),
   vscode: (ro) => ({
-    target: '.vscode/mcp.json. VS Code signs in to GitHub itself, so no token is needed.',
+    target: 'VS Code user configuration (command: "MCP: Open User Configuration"). VS Code signs in to GitHub itself, so no token is needed.',
+    project: 'For one repository: .vscode/mcp.json.',
     lang: 'json',
     snippet: json({ servers: { github: { type: 'http', url: URL, headers: { 'X-MCP-Toolsets': TOOLSETS, ...(ro ? { 'X-MCP-Readonly': 'true' } : {}) } } } }),
     noToken: true,
@@ -109,6 +116,7 @@ export async function main(argv: string[]): Promise<number> {
   console.log(readonly
     ? 'Mode: read-only. gh-wat-dis writes through the gh CLI. Pass --read-write to let the MCP server write too.'
     : 'Mode: read-write.');
-  console.log('Merge the snippet into the file. Keep every other entry. Restart the harness, then call get_me to check.');
+  if (c.project) console.log(c.project);
+  console.log(c.lang === 'bash' ? 'Run the command, restart the harness, then call get_me to check.' : 'Merge the snippet into the file. Keep every other entry. Restart the harness, then call get_me to check.');
   return 0;
 }
