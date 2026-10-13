@@ -60,6 +60,15 @@
         "paths": []
       },
       {
+        "id": "cccc",
+        "type": "system",
+        "name": "cccc",
+        "external": true,
+        "technology": "Rust binary",
+        "description": "Scores the complexity of each function",
+        "paths": []
+      },
+      {
         "id": "skills",
         "type": "container",
         "name": "wat skills",
@@ -90,7 +99,8 @@
         "technology": "TypeScript",
         "description": "install, init, mcp, doctor",
         "paths": [
-          "src/cli/**", "src/tools/**"
+          "src/cli/**",
+          "src/tools/**"
         ]
       },
       {
@@ -251,6 +261,18 @@
         "to": "site",
         "label": "Finds the install steps in llms.txt on",
         "technology": "HTTPS"
+      },
+      {
+        "from": "setup",
+        "to": "github",
+        "label": "Downloads the pinned cccc release and checks its attestation on",
+        "technology": "gh CLI"
+      },
+      {
+        "from": "facts",
+        "to": "cccc",
+        "label": "Scores changed files on base and head with",
+        "technology": "child process, JSON"
       }
     ]
   },
