@@ -33,6 +33,7 @@ Do not edit the installed skill directories. `install` owns them and will not ov
 | Node 24 or later (or Bun, or Deno) | Runs `npx gh-wat-dis` |
 | GitHub CLI 2.99 or later, signed in | Every write goes through `gh`. `--attach` uploads diagrams. |
 | GitHub MCP server (optional) | Reads and search. Skills fall back to `gh` without it. |
+| cccc (optional) | Complexity facts for `impact`. `npx gh-wat-dis doctor --tools install` fetches the pinned release and checks its sha256 and build attestation. |
 
 ## Use it
 
@@ -56,7 +57,7 @@ Every issue and PR:
 - states what changes in the system, with one diagram when structure changes
 - takes its claims about code from tools, each fact labeled with its source
 - lists risks, evidence and what is still unknown
-- keeps long data for agents in one collapsed block at the end
+- keeps long data for agents in one collapsed block at the end, as a code block you can copy into any agent
 
 The agent shows you the draft before it posts.
 
@@ -79,20 +80,26 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 
 | Tool | Does |
 |---|---|
-| `impact` | Collects facts on what a change touches and reaches. TypeScript, JavaScript and Rust get symbol-level analysis. |
+| `impact` | Collects facts on what a change touches and reaches. TypeScript, JavaScript and Rust get symbol-level analysis. With cccc installed it adds each function whose complexity the change moved. |
 | `reach <path\|symbol>` | Lists who depends on a file or symbol. No diff needed. |
 | `owners <path>` | Resolves CODEOWNERS. |
 | `elements` | Lists architecture elements and the files they map. |
+| `issues` | Lists open issues with type, surfaces, milestone and what each one is missing. |
+| `survey` | Reports what a repository with history holds before a migration: issues by what they lack, labels outside the plan, open milestones. |
 | `related` | Finds issues and PRs that share signals with a draft. |
 | `links` | Shows what a PR will close on merge and what it only mentions. |
 | `milestone` | Prints the numbers for a status report: counts, what is in review, what is blocked, and a status with no dates. |
 | `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. |
-| `labels` | Plans and creates the two kinds of label: `agents`, and one for each product surface. |
-| `graph <op>` | Reshapes a diagram spec: `from-facts`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `stats`, `ids`. |
-| `diagram` | Lints a C4 diagram spec and renders an SVG. |
-| `blast` | Formats impact facts as a Markdown section. |
+| `labels` | Plans and creates the labels: `agents`, one for each product surface, and the type labels on a user repository. |
+| `graph <op>` | Builds and reshapes a diagram spec: `from-facts`, `from-config`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `split`, `stats`, `ids`. |
+| `diagram` | Lints a C4 diagram spec and renders an SVG that fits GitHub's width. `--png` adds a PNG for the agent to look at. |
+| `legend` | Prints a diagram's relationships as a Markdown table. |
+| `blast` | Formats impact facts as a Markdown section: what a change reaches outside its diff, with file links. |
 | `lint` | Backstop: catches what GitHub would break in a body. |
-| `install`, `uninstall`, `init`, `mcp`, `doctor` | Set up and check. |
+| `install`, `uninstall`, `init`, `mcp`, `doctor` | Set up and check. `doctor --tools install` fetches the optional cccc binary and verifies it. |
+| `help` | Lists every tool with what it does and whether it writes. `help --json` prints the list for an agent. |
+
+`npx gh-wat-dis help` is the full list. `npx gh-wat-dis <tool> --help` gives one tool's options.
 
 ```bash
 npx gh-wat-dis impact \
