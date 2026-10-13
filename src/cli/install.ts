@@ -90,9 +90,10 @@ function apply(step: Step): void {
 
 export async function install(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['project', 'dry-run', 'force'], strings: ['client'],
+    booleans: ['project', 'dry-run', 'force'], strings: ['client', 'mcp'],
     aliases: { '-n': '--dry-run', '-f': '--force', '-c': '--client', '-p': '--project' },
   });
+  if (args.mcp && !['user', 'project', 'skip'].includes(args.mcp)) throw new UsageError('--mcp must be user, project or skip');
   const steps = plan({ project: args.project, clients: parseClients(args.client), force: args.force });
   for (const s of steps) console.log(`${s.action.padEnd(8)} ${s.dest}${s.note ? `  (${s.note})` : ''}`);
   if (args['dry-run']) {
@@ -110,7 +111,13 @@ export async function install(argv: string[]): Promise<number> {
   const { offerLogin, printChecks, runChecks } = await import('./doctor.ts');
   let checks = await runChecks();
   let fails = printChecks(checks);
-  if (await offerLogin(checks)) {
+  const noServer = checks.some((c) => c.name === 'github mcp' && c.status === 'warn' && c.detail.startsWith('no GitHub MCP server'));
+  let again = await offerLogin(checks);
+  if (noServer) {
+    const { offerMcpSetup } = await import('./mcp-apply.ts');
+    again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
+  }
+  if (again) {
     console.log('\nChecking again');
     checks = await runChecks();
     fails = printChecks(checks);

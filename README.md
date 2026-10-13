@@ -17,7 +17,7 @@ That is the whole thing.
 1. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
 2. Read the check lines. Fix each `FAIL` it prints. `warn` lines are optional.
 3. If `gh auth` fails, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
-4. If the human wants the GitHub MCP server, run `npx gh-wat-dis mcp <client>` and follow the `wat-setup` skill. Never ask for a token in chat. Never write a token into a file.
+4. The GitHub MCP server is optional: the skills read through `gh` without it. If the human wants it, ask whether to set it up for every repository or only this one, then run `npx gh-wat-dis mcp --apply --scope user` (or `--scope project`). Never ask for a token in chat. Never write a token into a file.
 5. In a repository that should always use these skills, run `npx gh-wat-dis init`, review `.agents/gh-wat-dis/config.json` with the human, and commit it.
 6. Tell the human to restart the harness so the skills load.
 7. Explain "Use it" below.

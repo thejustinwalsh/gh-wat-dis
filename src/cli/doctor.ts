@@ -254,14 +254,19 @@ export function printChecks(checks: Check[]): number {
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login'] });
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login'], strings: ['mcp'] });
   let checks = await runChecks({ offline: args.offline });
   if (args.json) {
     console.log(JSON.stringify(checks, null, 2));
     return checks.some((c) => c.status === 'FAIL') ? 1 : 0;
   }
   let fails = printChecks(checks);
-  if (!args['no-login'] && await offerLogin(checks)) {
+  let again = !args['no-login'] && await offerLogin(checks);
+  if (checks.some((c) => c.name === 'github mcp' && c.status === 'warn' && c.detail.startsWith('no GitHub MCP server'))) {
+    const { offerMcpSetup } = await import('./mcp-apply.ts');
+    again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
+  }
+  if (again) {
     console.log('\nChecking again');
     checks = await runChecks({ offline: args.offline });
     fails = printChecks(checks);

@@ -1,4 +1,6 @@
-import { parseArgs } from './util.ts';
+import { GH_HEADERS_HELPER, SCOPES, TARGETS, applyClient, detectClients, printApplied } from './mcp-apply.ts';
+import type { Scope } from './mcp-apply.ts';
+import { UsageError, parseArgs } from './util.ts';
 
 interface Snippet {
   target: string;
@@ -18,8 +20,6 @@ const ENV = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const TOOLSETS = 'default,labels';
 const ENV_FILE = '.agents/gh-wat-dis/.env';
 
-/** Prints the Authorization header from the gh CLI's own login. Claude Code runs it at each connect, so no token is stored. */
-export const GH_HEADERS_HELPER = 'echo "{\\"Authorization\\":\\"Bearer $(gh auth token)\\"}"';
 const json = (v: unknown): string => JSON.stringify(v, null, 2);
 const staticHeaders = (readonly: boolean): Record<string, string> => ({ 'X-MCP-Toolsets': TOOLSETS, ...(readonly ? { 'X-MCP-Readonly': 'true' } : {}) });
 const headers = (token: string, readonly: boolean): Record<string, string> => ({
@@ -81,12 +81,30 @@ export const CLIENTS: Record<string, (readonly: boolean) => Snippet> = {
   }),
 };
 
+const USAGE = `Usage: npx gh-wat-dis mcp <${'CLIENTS'}> [--read-write]        print the config for one harness
+       npx gh-wat-dis mcp --apply [--scope user|project] [--client a,b] [--read-write] [--dry-run]
+                                                     write it for every harness found on this machine`;
+
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['read-write', 'json'] });
+  const args = parseArgs(argv, { booleans: ['read-write', 'json', 'apply', 'dry-run', 'help'], strings: ['scope', 'client'], aliases: { '-h': '--help', '-n': '--dry-run' } });
+  const usage = USAGE.replace('CLIENTS', Object.keys(CLIENTS).join('|'));
+  if (args.help) { console.log(usage); return 0; }
+  if (args.apply) {
+    const scope = (args.scope ?? 'user') as Scope;
+    if (!SCOPES.includes(scope)) throw new UsageError('--scope must be user or project');
+    const clients = args.client ? args.client.split(',').map((c) => c.trim()).filter(Boolean) : detectClients();
+    const unknown = clients.find((c) => !TARGETS[c]);
+    if (unknown) throw new UsageError(`cannot write the config for "${unknown}". It can for: ${Object.keys(TARGETS).join(', ')}. Print the snippet instead: npx gh-wat-dis mcp ${unknown}`);
+    if (!clients.length) { console.log('No supported harness found on this machine. Name one: --client claude,codex,cursor,gemini,opencode'); return 1; }
+    const results = clients.map((c) => applyClient(c, { scope, readonly: !args['read-write'], dryRun: args['dry-run'] }));
+    printApplied(results);
+    if (args['dry-run']) console.log('\nDry run. Nothing changed.');
+    return results.some((r) => r.action === 'failed') ? 1 : 0;
+  }
   const client = args._[0];
   const make = client ? CLIENTS[client] : undefined;
   if (!client || !make) {
-    console.error(`Usage: npx gh-wat-dis mcp <${Object.keys(CLIENTS).join('|')}> [--read-write]`);
+    console.error(usage);
     return 2;
   }
   const readonly = !args['read-write'];

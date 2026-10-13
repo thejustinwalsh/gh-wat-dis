@@ -32,11 +32,12 @@ Every tool does one thing. Data goes out as JSON on stdout, so tools chain with 
 "-" or piped stdin stands in for a file argument.
 
 Set up
-  install [--project] [--client claude,agents] [--dry-run] [--force]
+  install [--project] [--mcp user|project|skip] [--dry-run] [--force]
   uninstall [--project]
   init [--use always|ask|never] [--force]     write .agents/gh-wat-dis/config.json
   mcp <client>                                print GitHub MCP server config for a harness
-  doctor [--offline] [--json]                 check skills, gh, MCP server, repo config
+  mcp --apply [--scope user|project]          write it for every harness found here
+  doctor [--offline] [--json]                 check skills, gh, MCP server, repo config; offer fixes
 
 Collect facts (JSON out)
   impact [--base <ref>] [--working-tree]      what a change touches and reaches

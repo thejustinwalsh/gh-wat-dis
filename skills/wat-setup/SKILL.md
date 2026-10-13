@@ -46,21 +46,26 @@ gh-wat-dis writes through `gh`. Attachments need **gh 2.99.0 or later**.
 
 gh-wat-dis reads through the GitHub MCP server. It is optional: every skill falls back to `gh` for reads.
 
-1. **Check first.** Look for a `github` server in the harness (`claude mcp list`, or the config file in [references/mcp-clients.md](references/mcp-clients.md)). If one is connected, stop here.
-2. **Print the snippet** for the harness:
+1. **Check first.** `npx gh-wat-dis doctor` reports whether a GitHub server is configured. If one is, stop here.
+2. **Ask the level, then write it.** Ask the user: every repository (user level, the default) or this repository only (project level). Then:
+   ```bash
+   npx gh-wat-dis mcp --apply --scope user     # or: --scope project
+   ```
+   It writes the entry for each harness it finds (Claude Code, Codex, Cursor, Gemini CLI, OpenCode) and never replaces an entry that is already there. `--dry-run` shows the plan. When a person runs `install` or `doctor` in a terminal, the tool asks this question itself.
+3. **For any other harness, print the snippet:**
    ```bash
    npx gh-wat-dis mcp <client>
    ```
    Clients: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `copilot`, `vscode`, `windsurf`.
-3. **Install at user level.** The skills are installed for the user and work in every repository, so the server is too. Each snippet targets the harness's user-level config. Use the project-level file only when the team wants the server pinned in one repository.
-4. **Show the user** the snippet and the target. Apply it after a yes. Merge into a file. Never replace it.
-5. **Token.** Never put a token in a global shell profile, in a committed file, or in the chat. Use the first option the harness supports:
+4. **Install at user level.** The skills are installed for the user and work in every repository, so the server is too. Each snippet targets the harness's user-level config. Use the project-level file only when the team wants the server pinned in one repository.
+5. **Show the user** the snippet and the target. Apply it after a yes. Merge into a file. Never replace it.
+6. **Token.** Never put a token in a global shell profile, in a committed file, or in the chat. Use the first option the harness supports:
    - **Claude Code: no stored token.** The command from `npx gh-wat-dis mcp claude` adds the server at user scope with a `headersHelper`. Claude Code runs it at each connect and it prints the token from the user's `gh` login.
    - **Hosts with their own GitHub sign-in (VS Code):** no token.
    - **Other harnesses** can only read an environment variable. Keep it scoped to the project: the user puts `GITHUB_PERSONAL_ACCESS_TOKEN=<token>` in `.agents/gh-wat-dis/.env`, and loads that file for this project with direnv or mise. `init` writes a `.gitignore` beside it, and `doctor` fails if git would commit the file. The user writes the token. You do not read, print or write it.
    - Scopes for a classic token: `repo`, `read:org`. Add `project` for Projects.
-6. **Toolsets.** The snippets enable `default,labels`. Add `projects` only if the repo config uses Projects. Fewer toolsets means less context spent on tool definitions.
-7. **Restart** the harness, then check: call `get_me`.
+7. **Toolsets.** The snippets enable `default,labels`. Add `projects` only if the repo config uses Projects. Fewer toolsets means less context spent on tool definitions.
+8. **Restart** the harness, then check: call `get_me`.
 
 Details, file paths and the local Docker variant: [references/mcp-clients.md](references/mcp-clients.md).
 
