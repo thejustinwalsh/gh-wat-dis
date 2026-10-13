@@ -1,0 +1,157 @@
+{
+  "title": "Text layout moves off the main thread",
+  "type": "component",
+  "scope": "the editor monorepo, inside one browser tab",
+  "elements": [
+    {
+      "id": "tab",
+      "type": "node",
+      "name": "Browser tab",
+      "kind": "Runtime"
+    },
+    {
+      "id": "main",
+      "type": "boundary",
+      "parent": "tab",
+      "name": "Main thread",
+      "kind": "Thread"
+    },
+    {
+      "id": "worker",
+      "type": "boundary",
+      "parent": "tab",
+      "name": "Layout worker",
+      "kind": "Web Worker",
+      "status": "added"
+    },
+    {
+      "id": "wasm",
+      "type": "boundary",
+      "parent": "worker",
+      "name": "layout-core.wasm",
+      "kind": "WASM module"
+    },
+    {
+      "id": "editor",
+      "type": "component",
+      "parent": "main",
+      "name": "@app/editor",
+      "kind": "npm package",
+      "technology": "TypeScript, React",
+      "description": "Owns the document and the selection",
+      "status": "changed"
+    },
+    {
+      "id": "renderer",
+      "type": "component",
+      "parent": "main",
+      "name": "@app/renderer",
+      "kind": "npm package",
+      "technology": "TypeScript, WebGPU",
+      "description": "Draws glyph quads from the atlas"
+    },
+    {
+      "id": "client",
+      "type": "component",
+      "parent": "main",
+      "name": "@app/layout-client",
+      "kind": "npm package",
+      "technology": "TypeScript",
+      "description": "Queues layout requests and matches replies",
+      "status": "added"
+    },
+    {
+      "id": "host",
+      "type": "component",
+      "parent": "worker",
+      "name": "@app/layout-worker",
+      "kind": "npm package",
+      "technology": "TypeScript",
+      "description": "Decodes messages and drives the WASM module",
+      "status": "added"
+    },
+    {
+      "id": "core",
+      "type": "component",
+      "parent": "wasm",
+      "name": "layout-core",
+      "kind": "Rust crate",
+      "technology": "Rust, wasm-bindgen",
+      "description": "Shapes text and breaks lines",
+      "status": "affected"
+    },
+    {
+      "id": "shaper",
+      "type": "component",
+      "parent": "wasm",
+      "name": "shaper",
+      "kind": "Rust crate",
+      "technology": "Rust, rustybuzz",
+      "description": "Maps characters to positioned glyphs"
+    },
+    {
+      "id": "atlas",
+      "type": "datastore",
+      "parent": "tab",
+      "name": "Glyph atlas",
+      "kind": "Shared memory",
+      "technology": "SharedArrayBuffer",
+      "description": "Rasterized glyphs, written by the worker"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "editor",
+      "to": "client",
+      "label": "Requests layout for dirty paragraphs",
+      "technology": "async function call",
+      "status": "added"
+    },
+    {
+      "from": "client",
+      "to": "host",
+      "label": "Posts LayoutRequest, gets glyph runs back",
+      "technology": "postMessage: structured clone out, transferred ArrayBuffer back",
+      "status": "added"
+    },
+    {
+      "from": "host",
+      "to": "core",
+      "label": "Calls layout_paragraph",
+      "technology": "wasm-bindgen ABI",
+      "status": "added"
+    },
+    {
+      "from": "core",
+      "to": "shaper",
+      "label": "Shapes each run with",
+      "technology": "Rust call"
+    },
+    {
+      "from": "host",
+      "to": "atlas",
+      "label": "Writes glyph bitmaps to",
+      "technology": "Atomics, Uint8Array view",
+      "status": "added"
+    },
+    {
+      "from": "renderer",
+      "to": "atlas",
+      "label": "Reads glyph bitmaps from",
+      "technology": "Uint8Array view"
+    },
+    {
+      "from": "editor",
+      "to": "renderer",
+      "label": "Submits glyph runs to",
+      "technology": "function call"
+    },
+    {
+      "from": "editor",
+      "to": "core",
+      "label": "Called layout_paragraph on the main thread",
+      "technology": "wasm-bindgen ABI",
+      "status": "removed"
+    }
+  ]
+}

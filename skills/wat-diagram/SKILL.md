@@ -105,7 +105,7 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 
 ## Inside one process or one repository
 
-Not every system is services and databases. For a library, an app in one browser tab, or a monorepo of packages, the same spec draws the software architecture. See `examples/diagrams/in-process.json` in the package.
+Not every system is services and databases. For a library, an app in one browser tab, or a monorepo of packages, the same spec draws the software architecture. See [examples/in-process.json](examples/in-process.json) in this skill's folder.
 
 | The thing | Draw it as |
 |---|---|
