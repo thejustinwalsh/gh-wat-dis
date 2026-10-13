@@ -13,6 +13,7 @@ const COMMANDS: Record<string, Loader> = {
   related: async () => (await import('./gh/cli.ts')).related,
   links: async () => (await import('./gh/cli.ts')).links,
   labels: async () => (await import('./gh/cli.ts')).labels,
+  milestone: async () => (await import('./gh/cli.ts')).milestone,
   relations: async () => (await import('./gh/cli.ts')).relations,
   relate: async () => (await import('./gh/cli.ts')).relateCmd,
   impact: async () => (await import('./impact/cli.ts')).impact,
@@ -50,6 +51,7 @@ Collect facts (JSON out)
   related (--issue <n> | --title "<t>")       issues and PRs that share signals with a draft
   links (--pr <n> | --body-file <f>)          what a PR closes on merge, what it only mentions
   relations <issue>                           parent, sub-issues, blocked by, blocking
+  milestone [<title>]                         status numbers for a milestone: counts, in review, blocked
   labels                                      the agents and surface labels the config wants vs GitHub
 
 Change GitHub
@@ -69,7 +71,7 @@ Render
   blast [facts.json]                          impact facts as a Markdown "Blast radius" section
 
 Check
-  lint <body.md> --kind issue|pr|milestone    backstop: catch what GitHub would break
+  lint <body.md> --kind issue|pr|milestone|comment   backstop: catch what GitHub would break
 
 Example
   npx gh-wat-dis impact | npx gh-wat-dis graph from-facts \\

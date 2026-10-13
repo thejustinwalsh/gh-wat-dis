@@ -8,7 +8,7 @@ export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['json'], strings: ['kind'], aliases: { '-k': '--kind' } });
   const file = args._[0];
   if (!file || !args.kind) {
-    console.error('Usage: npx gh-wat-dis lint <body.md> --kind issue|pr|milestone [--json]');
+    console.error('Usage: npx gh-wat-dis lint <body.md> --kind issue|pr|milestone|comment [--json]');
     return 2;
   }
   const text = file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8');

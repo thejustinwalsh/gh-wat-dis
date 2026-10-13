@@ -67,7 +67,7 @@ Propose a milestone only when at least one rule holds. State which.
 2. **Dependency.** An issue in the milestone is blocked by this one.
 3. **Same element, open work.** The milestone already changes this element and the fix is S. Batching saves a review cycle.
 4. **Regression.** A bug introduced by work in the current milestone goes in the current milestone.
-5. **P0 / P1 bug.** Goes in the nearest open milestone by due date.
+5. **A bug the user rates urgent.** Goes in the current milestone: the lowest open version. Milestones have no due dates.
 
 Otherwise: no milestone. Backlog is a valid answer. Flag when a proposal takes the milestone past `milestones.capacity`, and name what to move out.
 

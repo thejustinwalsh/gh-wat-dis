@@ -30,8 +30,9 @@ Always write the body to a file and pass `--body-file`. Never pass a body inline
 
 | Action | Command |
 |---|---|
-| List | `gh api "repos/{owner}/{repo}/milestones?state=open&sort=due_on" --jq '.[] \| {number,title,due_on,open_issues,closed_issues}'` |
-| Create | `gh api repos/{owner}/{repo}/milestones -f title="<t>" -f due_on="<YYYY-MM-DD>T00:00:00Z" -F description=@desc.md` |
+| List | `gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] \| {number,title,description}'` |
+| Status numbers | `npx gh-wat-dis milestone ["<title>"]` |
+| Create | `gh api repos/{owner}/{repo}/milestones -f title="<t>" -F description=@desc.md` (no due date) |
 | Edit | `gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -F description=@desc.md` |
 | Close | `gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -f state=closed` |
 | Issues in it | `gh issue list --milestone "<title>" --state all --json number,title,state,labels,assignees` |
@@ -75,6 +76,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --md` |
+| Status numbers for a milestone: counts, in review, blocked, done-when | `npx gh-wat-dis milestone ["<title>"]` |
 | An issue's parent, sub-issues, blocked by, blocking | `npx gh-wat-dis relations <n>` |
 | Labels the config wants, compared with GitHub | `npx gh-wat-dis labels --text` |
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |

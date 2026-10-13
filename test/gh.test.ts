@@ -202,3 +202,35 @@ test('label colours: valid hex, distinct hues, stable when a surface is appended
   const lumas = twelve.map(luma);
   assert.ok(Math.max(...lumas) - Math.min(...lumas) < 45, 'surfaces share one lightness');
 });
+
+test('milestone: counts issues only, finds what is in review and blocked, and rates without dates', async () => {
+  const { milestoneStatus, byVersion, doneWhen } = await import('../src/gh/milestone.ts');
+  const now = new Date('2026-10-13T12:00:00Z');
+  const issue = (number: number, state: string, closed?: string, subs = 0) => ({ number, title: `t${number}`, state, closed_at: closed ?? null, updated_at: closed ?? '2026-10-01T00:00:00Z', sub_issues_summary: { total: subs } });
+  const base = {
+    milestone: { title: 'v0.2.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- first thing\n- second thing\n\n**In scope:** x\n**Tracking:** #1' },
+    openMilestones: ['v0.10.0', 'v0.2.0', 'v1.0.0'],
+    items: [issue(1, 'open', undefined, 4), issue(2, 'closed', '2026-10-12T00:00:00Z'), issue(3, 'open'), issue(4, 'open'), { ...issue(9, 'closed', '2026-10-12T00:00:00Z'), pull_request: {} }],
+    blockedBy: new Map([[4, [{ number: 3, title: 't3', state: 'open' }]]]),
+    openPrs: [{ number: 20, closes: [3] }],
+    now,
+  };
+  const s = milestoneStatus(base);
+  assert.equal(s.tracking, 1);
+  assert.deepEqual(s.counts, { total: 3, closed: 1, open: 2, inReview: 1, blocked: 1, blockedOutside: 0, closedLast7Days: 1 });
+  assert.equal(s.status, 'moving');
+  assert.equal(s.milestone.current, true, 'v0.2.0 comes before v0.10.0');
+  assert.deepEqual(s.doneWhen, ['first thing', 'second thing']);
+  assert.deepEqual(s.open.map((o) => [o.number, o.inReview, o.blockedBy.map((b) => b.inMilestone)]), [[3, [20], []], [4, [], [true]]]);
+
+  const outside = milestoneStatus({ ...base, blockedBy: new Map([[3, [{ number: 77, title: 'other', state: 'open' }]]]) });
+  assert.equal(outside.status, 'blocked');
+  assert.match(outside.reason, /#3 waits on #77/);
+  const stalled = milestoneStatus({ ...base, openPrs: [], blockedBy: new Map(), now: new Date('2026-10-30T00:00:00Z') });
+  assert.equal(stalled.status, 'stalled');
+  const done = milestoneStatus({ ...base, items: [issue(1, 'open', undefined, 2), issue(2, 'closed', '2026-10-12T00:00:00Z')] });
+  assert.equal(done.status, 'done');
+  assert.deepEqual(['v1.0.0', 'v0.10.0', 'v0.2.0'].sort(byVersion), ['v0.2.0', 'v0.10.0', 'v1.0.0']);
+  assert.deepEqual(doneWhen('no list here'), []);
+  assert.ok(!('dueOn' in s.milestone) && !JSON.stringify(s).includes('due'), 'a status carries no date');
+});

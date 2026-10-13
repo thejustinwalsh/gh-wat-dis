@@ -131,7 +131,7 @@ Refs #<m>
 GitHub renders only basic Markdown in milestone descriptions. Use plain text, bold, lists and links. No alerts, no `<details>`, no Mermaid, no images.
 
 ```markdown
-<Goal: one sentence. What users or the system can do when this ships.>
+<Goal: one sentence. What users or the system can do when this ships. No date.>
 
 **Done when**
 - <observable condition>
@@ -147,7 +147,7 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 ## Status comment (milestone or epic)
 
 ```markdown
-**<On track | At risk | Off track>**: <one sentence, the reason>
+**<Moving | Blocked | Stalled | Done>**: <one sentence, the reason from the tool>
 
 | | Count |
 |---|---|
@@ -155,12 +155,18 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 | In review | <n> |
 | Blocked | <n> |
 
+**Done when**
+- [x] <condition> (<evidence>)
+- [ ] <condition> (<what is missing, or "not checked">)
+
 **Changed since last update**
-- <3 at most>
+- <3 at most, or "First status.">
 
 **Needs a decision**
 - <question> → @<owner>
 ```
+
+The numbers come from `npx gh-wat-dis milestone`. Counts are issues only: pull requests and the tracking issue are not counted. There is no schedule rating, because milestones have no due dates. Omit `Needs a decision` when there is none.
 
 ## Diagrams
 

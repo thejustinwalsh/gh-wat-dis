@@ -84,6 +84,7 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 | `elements` | Lists architecture elements and the files they map. |
 | `related` | Finds issues and PRs that share signals with a draft. |
 | `links` | Shows what a PR will close on merge and what it only mentions. |
+| `milestone` | Prints the numbers for a status report: counts, what is in review, what is blocked, and a status with no dates. |
 | `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. |
 | `labels` | Plans and creates the two kinds of label: `agents`, and one for each product surface. |
 | `graph <op>` | Reshapes a diagram spec: `from-facts`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `stats`, `ids`. |

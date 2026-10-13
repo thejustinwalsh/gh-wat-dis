@@ -1,13 +1,13 @@
 // A backstop, not a style guide. It catches what GitHub would break and what is grossly
 // off-shape. Wording, section choice and length are the skills' job: see skills/wat/references.
 
-const KINDS = ['issue', 'pr', 'milestone'] as const;
+const KINDS = ['issue', 'pr', 'milestone', 'comment'] as const;
 export type Kind = (typeof KINDS)[number];
 export interface Finding { line: number; msg: string }
 export interface BodyLint { errors: Finding[]; warnings: Finding[] }
 interface Line { n: number; t: string; kind: 'text' | 'blank' | 'heading' | 'code' | 'fence' | 'end'; lang?: string; inDetails: boolean }
 const MAX_CHARS = 60000;
-const GROSS_LINES: Record<Kind, number> = { issue: 150, pr: 200, milestone: 40 };
+const GROSS_LINES: Record<Kind, number> = { issue: 150, pr: 200, milestone: 40, comment: 80 };
 const GROSS_CODE_LINES = 40;
 const SAFE_MERMAID = ['flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'stateDiagram-v2', 'erDiagram', 'gantt', 'pie', 'gitGraph'];
 const AGENT_SUMMARY = /<summary>\s*(?:🤖\s*)?Agent context\s*<\/summary>/i;
@@ -56,7 +56,7 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
   const chars = [...text].length;
   if (chars > MAX_CHARS) err(0, `body is ${chars} characters. GitHub rejects bodies over 65,536. Stay under ${MAX_CHARS}.`);
 
-  if (first.kind === 'heading') warn(first.n, 'body opens with a heading. Open with a sentence that states the problem and the solution.');
+  if (first.kind === 'heading' && kind !== 'comment') warn(first.n, 'body opens with a heading. Open with a sentence that states the problem and the solution.');
 
   for (const l of md) {
     if (/<svg\b/i.test(l.t)) err(l.n, 'GitHub strips inline <svg>. Attach the file with gh --attach.');
