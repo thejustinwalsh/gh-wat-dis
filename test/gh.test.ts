@@ -106,7 +106,10 @@ The four services behind the gateway stop validating.
 <details>
 <summary>Agent context</summary>
 
+\`\`\`text
+You are working in acme/shop on this pull request.
 data
+\`\`\`
 
 </details>
 
@@ -116,6 +119,13 @@ Refs #2
 
 test('lint passes a well-formed body with link lines last', () => {
   assert.deepEqual(lintBody(GOOD, { kind: 'pr' }), { errors: [], warnings: [] });
+});
+
+test('lint warns when the agent context has no code block to copy', () => {
+  const plain = 'Outcome.\n\n<details>\n<summary>Agent context</summary>\n\ndata\n\n</details>\n';
+  const { errors, warnings } = lintBody(plain, { kind: 'issue' });
+  assert.equal(errors.length, 0);
+  assert.match(warnings[0]!.msg, /holds no code block/);
 });
 
 test('lint is a backstop: it does not police wording', () => {

@@ -28,7 +28,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    - `Verify`: list the checks you ran with command and result. Then list what the reviewer runs. If you ran nothing, say so.
    - `Risks`: start from the facts. A changed exported signature with dependents → name the callers. A migration or schema → state the deploy order. Risks describe what the change does to the system. They do not grade the code.
    - `Unknowns`: `coChange` lists files that changed with these in the last 90 days and are not in this diff. Check each one, then drop it or list it.
-   - `Agent context`: the facts JSON in a `json` block, commands run, follow-ups.
+   - `Agent context`: one `text` code block that starts with the leading prompt, then the facts JSON, commands run and follow-ups. See "Agent context" in the formats.
 6. **Set the links.** See "Links and auto-close" below. Decide with the user which issues this PR finishes. Write one `Closes #n` line for each, and `Refs #n` for every other issue the PR touches. No issue at all: ask whether to file one, or state "No linked issue" under `Unknowns`.
 7. **Read it as the reviewer.** Can a person who has not seen the diff say what the system does differently and where to look first? If not, add what is missing. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/pr.md --kind pr`.
 8. **Show the draft.** Wait for a yes unless `policy.confirmBeforeWrite` is `false`.

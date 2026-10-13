@@ -83,3 +83,14 @@ test('cli: help lists every tool, and every tool prints its usage for --help', a
     assert.match(r.stdout, /Usage|usage/, `${c} --help prints no usage`);
   }
 });
+
+test('site: each diagram on the page states the size its spec renders at', async () => {
+  const { render } = await import('../src/diagram/svg.ts');
+  const page = readFileSync(join(root, 'docs/index.html'), 'utf8');
+  const images = [...page.matchAll(/assets\/([a-z-]+)\.svg" width="(\d+)" height="(\d+)"/g)];
+  assert.ok(images.length >= 4, `found ${images.length} diagrams`);
+  for (const [, name, width, height] of images) {
+    const out = await render(JSON.parse(readFileSync(join(root, `examples/diagrams/${name}.json`), 'utf8')), {});
+    assert.deepEqual([out.width, out.height], [Number(width), Number(height)], `${name}.svg`);
+  }
+});

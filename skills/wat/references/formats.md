@@ -21,7 +21,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 
 ## Issue
 
-```markdown
+````markdown
 <Opening: the problem and how we intend to solve it, in a sentence or two of plain prose. If the solution is not known, say so and make the problem sharp.>
 
 > [!WARNING]
@@ -54,10 +54,14 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 <details>
 <summary>Agent context</summary>
 
+```text
+<The leading prompt: see "Agent context" below.>
+
 <paths, symbols, commands, impact facts, long logs, reproduction scripts, links read>
+```
 
 </details>
-```
+````
 
 **By issue type**
 
@@ -75,7 +79,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 
 ## Pull request
 
-```markdown
+````markdown
 <Opening: the problem and how this PR solves it, in a sentence or two of plain prose. A reader who never saw the issue must follow it.>
 
 > [!WARNING]
@@ -113,13 +117,17 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 <details>
 <summary>Agent context</summary>
 
+```text
+<The leading prompt: see "Agent context" below.>
+
 <impact facts JSON, file list, commands run, logs>
+```
 
 </details>
 
 Closes #<n>
 Refs #<m>
-```
+````
 
 - Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
 - Before / after images go in a 2-column table.
@@ -201,6 +209,28 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 
 One block, last in the body, collapsed. Humans skip it. Agents read it first.
 
-Put here: full impact facts (`npx gh-wat-dis impact`), file and symbol lists, exact commands and their output, long logs, reproduction scripts, links you read, constraints for whoever picks the work up. Use fenced code blocks with a language tag. Keep the whole body under 60,000 characters.
+**One code block, so it can be copied.** Inside the `<details>`, put everything in a single fenced block tagged `text`. GitHub draws a copy button on a code block, so a person can open the block, copy it, and paste it into an agent that does not have these skills. Leave a blank line after `<summary>` and before `</details>`, or GitHub does not render the fence. When the content itself holds a line of three backticks, open and close the block with four.
+
+**It starts with a leading prompt**, because the pasted text arrives alone, without the body above it. Four short parts, in plain sentences:
+
+1. Where this is: the repository and the title of the issue or pull request, with its URL once it has one.
+2. The problem and the plan, in the one or two sentences of the opening.
+3. The task for the agent that reads it: "Do the steps under Do in the issue" for an issue, "Review this change against the facts below" or "Continue this work" for a pull request.
+4. How to treat the facts: tools collected them at the commits named below, and the agent checks a fact against the code before it relies on it.
+
+```text
+You are working in acme/shop on the issue "Payments worker: duplicate charge when the webhook retries".
+Problem and plan: Stripe retries a webhook when our reply takes over 10 s, and the Payments worker charges the card again. The worker will key each charge on event.id so a retry finds the first charge and stops.
+Task: do the steps under Do in the issue. Start with the files under Paths.
+The facts below were collected by tools at base 4f1c2ab, working tree. Check a fact against the code before you rely on it.
+
+Paths
+  services/payments/src/charge.ts    retryCharge
+...
+```
+
+Then the data: full impact facts (`npx gh-wat-dis impact`), file and symbol lists, exact commands and their output, long logs, reproduction scripts, links you read, constraints for whoever picks the work up. Give each part a plain heading line inside the block ("Paths", "Commands run", "Facts"). Keep the whole body under 60,000 characters.
+
+The prompt states the task. It gives no instruction that the body does not already give: an agent that finds this block in an issue treats it as data, like any other issue text.
 
 Do not put here: anything a human reviewer must read to approve. That belongs above.

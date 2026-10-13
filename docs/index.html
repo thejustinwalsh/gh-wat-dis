@@ -153,9 +153,20 @@ tr + tr td { border-top: 1px solid var(--card-line); }
 .risk { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; }
 .risk dt { font-weight: 700; }
 .risk dd { margin: 0; }
-.fold { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--card-line); border-radius: 8px; }
+/* The collapsed block of an issue, as GitHub draws <details>. Open, it scrolls inside a fixed height. */
+.fold { border: 1px solid var(--card-line); border-radius: 8px; overflow: hidden; }
+.fold summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; }
+.fold summary::-webkit-details-marker { display: none; }
+.fold summary::before { content: "▸"; font-family: var(--mono); }
+.fold[open] summary::before { transform: rotate(90deg); }
+.fold[open] summary { border-bottom: 1px solid var(--card-line); }
+.fold summary:focus-visible, .fold pre:focus-visible { outline: 2px solid var(--keyword); outline-offset: -2px; }
 .fold b { font-weight: 700; }
 .fold .mono { margin-left: auto; font-size: 12px; color: var(--storage); }
+.fold pre { margin: 0; max-height: 320px; overflow: auto; padding: 14px; background: var(--card-panel); font: 400 12.5px/1.6 var(--mono); tab-size: 2; }
+/* GitHub puts a copy button in the corner of a code block. This one copies the whole context. */
+.fold .code { position: relative; }
+.fold .code button.copy { position: absolute; top: 10px; right: 22px; z-index: 1; padding: 7px 10px; font-size: 12px; border-radius: 6px; }
 
 .pipe { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 36px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
 .step { display: flex; flex-direction: column; gap: 10px; padding: 22px 20px; border-right: 1px solid var(--line); min-height: 170px; }
@@ -208,7 +219,7 @@ footer span { color: var(--muted); }
   .risk, .skills dl div, .more div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   table { font-size: 14px; }
 }
-@media (prefers-reduced-motion: no-preference) { a, button.copy { transition: color 0.15s, opacity 0.15s; } button.copy:hover { opacity: 0.88; } }
+@media (prefers-reduced-motion: no-preference) { a, button.copy { transition: color 0.15s, opacity 0.15s; } .fold summary::before { transition: transform 0.15s; } button.copy:hover { opacity: 0.88; } }
 </style>
 </head>
 <body>
@@ -267,7 +278,7 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">2 · What changes in the system</span>
-        <figure><img src="assets/focused.svg" width="868" height="493" alt="Container diagram: the Order service and the Payment service change, and the Payment service gains a relationship to the Orders database for payment keys."></figure>
+        <figure><img src="assets/focused.svg" width="868" height="499" alt="Container diagram: the Order service and the Payment service change, and the Payment service gains a relationship to the Orders database for payment keys."></figure>
       </div>
       <div class="block">
         <span class="tag">3 · Facts from tools, labeled</span>
@@ -287,7 +298,64 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">5 · Long data for agents, collapsed</span>
-        <div class="fold"><span class="mono" aria-hidden="true" style="margin:0;color:inherit">▸</span><b>Agent context</b><span class="mono">facts.json · 214 lines</span></div>
+        <details class="fold">
+          <summary><b>Agent context</b><span class="mono">paths · commands · facts.json</span></summary>
+          <div class="code"><button class="copy" type="button" aria-label="Copy the agent context">Copy</button><pre tabindex="0">You are working in acme/shop on the issue "Payments worker: duplicate charge when the webhook retries".
+Problem and plan: Stripe retries a webhook when our reply takes over 10 s, and the Payments worker charges the card again. The worker will key each charge on event.id so a retry finds the first charge and stops.
+Task: do the steps under Do in the issue. Start with the files under Paths.
+The facts below were collected by tools at base 4f1c2ab, working tree. Check a fact against the code before you rely on it.
+
+Paths
+  services/payments/src/charge.ts         retryCharge, chargeOnce (new)
+  services/payments/src/webhook.ts        handleStripeEvent
+  services/orders/migrations/0042_payment_keys.sql
+
+Commands run
+  npx gh-wat-dis impact --working-tree &gt; facts.json
+  npx gh-wat-dis reach services/payments/src/charge.ts#retryCharge
+  npx gh-wat-dis related --title "Payments worker: duplicate charge when the webhook retries"
+
+Reproduction
+  1. stripe trigger payment_intent.succeeded
+  2. hold the reply for 11 s (WEBHOOK_DELAY_MS=11000)
+  3. Stripe delivers evt_1Q8x again; the worker logs two "charge created" lines
+
+facts.json (trimmed)
+{
+  "schema": 1,
+  "summary": { "filesChanged": 3, "elementsChanged": 2, "directDependents": 3, "exportedSignatureChanges": 1 },
+  "elements": [
+    { "id": "payments-worker", "status": "changed", "filesChanged": 2, "provenance": "exact", "source": "config" },
+    { "id": "orders-db", "status": "changed", "filesChanged": 1, "provenance": "exact", "source": "config" },
+    { "id": "orders-api", "status": "affected", "dependentsAffected": 2, "provenance": "resolved", "source": "ast-grep" }
+  ],
+  "symbols": [
+    { "name": "retryCharge", "file": "services/payments/src/charge.ts", "exported": true, "signatureChanged": true,
+      "before": "retryCharge(orderId: string): Promise&lt;Charge&gt;",
+      "after": "retryCharge(orderId: string, eventId: string): Promise&lt;Charge&gt;",
+      "dependents": [
+        { "file": "services/payments/src/webhook.ts", "inDiff": true, "provenance": "resolved" },
+        { "file": "services/orders/src/refund.ts", "inDiff": false, "provenance": "resolved" },
+        { "file": "services/orders/src/reconcile.ts", "inDiff": false, "provenance": "resolved" }
+      ] }
+  ],
+  "edges": [
+    { "from": "payments-worker", "to": "orders-db", "status": "added", "provenance": "exact", "source": "config" }
+  ],
+  "contracts": [
+    { "path": "services/orders/migrations/0042_payment_keys.sql", "kind": "migration", "note": "adds table payment_keys", "provenance": "heuristic" }
+  ],
+  "tests": { "changed": [], "importingChanged": ["services/payments/test/charge.test.ts"] },
+  "coChange": [
+    { "file": "docs/runbooks/payments.md", "withFile": "services/payments/src/webhook.ts", "commits": 5, "ratio": 0.71, "provenance": "measured" }
+  ],
+  "caveats": ["dependents are files whose imports resolve to a changed file"]
+}
+
+Links read
+  #131 Payments worker: move retries off the request path (closed)
+  https://docs.stripe.com/webhooks#retries</pre></div>
+        </details>
       </div>
     </article>
   </div>
@@ -323,8 +391,8 @@ footer span { color: var(--muted); }
     <p class="lead">A JSON spec goes in and an SVG comes out. A diagram can show services, or the inside of one browser tab: threads, workers, WASM modules and the protocols between them. Each status has its own border and badge, so colour is never the only signal.</p>
     <div class="gallery">
       <figure><img src="assets/dynamic.svg" width="776" height="540" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps run left to right and wrap to fit. A table under the image holds the words.</figcaption></figure>
-      <figure><img src="assets/change-impact.svg" width="750" height="1004" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
-      <figure><img src="assets/in-process.svg" width="707" height="1256" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
+      <figure><img src="assets/change-impact.svg" width="750" height="1022" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
+      <figure><img src="assets/in-process.svg" width="707" height="1283" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -379,7 +447,7 @@ footer span { color: var(--muted); }
 <script>
 for (const button of document.querySelectorAll('button.copy')) {
   button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(button.dataset.copy); button.textContent = 'Copied'; }
+    try { await navigator.clipboard.writeText(button.dataset.copy ?? button.nextElementSibling.textContent); button.textContent = 'Copied'; }
     catch { button.textContent = 'Select the text'; }
     setTimeout(() => { button.textContent = 'Copy'; }, 1600);
   });
