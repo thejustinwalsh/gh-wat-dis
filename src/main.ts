@@ -93,7 +93,9 @@ export const TOOLS: Tool[] = [
 const EFFECTS: Record<Effect, string> = { reads: '', local: ' [writes local files]', github: ' [writes to GitHub]' };
 
 /** The tool list as text: one tool to a line, the way a harness lists its tool calls. */
-export function helpText(): string {
+export function helpText(skills: { name: string; does: string }[] = []): string {
+  const names = Math.max(0, ...skills.map((s) => s.name.length)) + 2;
+  const skillLines = skills.length ? `\nSkills (installed by "install"; an agent loads one when the task matches)\n${skills.map((s) => `  ${s.name.padEnd(names)}${s.does}`).join('\n')}\n` : '';
   const width = Math.max(...TOOLS.map((t) => t.name.length)) + 2;
   const groups = [...new Set(TOOLS.map((t) => t.group))].map((g) => [
     g, ...TOOLS.filter((t) => t.group === g).map((t) => `  ${t.name.padEnd(width)}${t.description}${EFFECTS[t.effect]}`),
@@ -107,14 +109,14 @@ Every tool does one thing. Data goes out as JSON on stdout, so tools chain with 
 "-" or piped stdin stands in for a file argument. A tool with no mark below only reads.
 
 ${groups.join('\n\n')}
-
+${skillLines}
 Example
   npx gh-wat-dis impact | npx gh-wat-dis graph from-facts \\
     | npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 \\
     | npx gh-wat-dis diagram -o change.svg
 
 npx gh-wat-dis <tool> --help    options of one tool
-npx gh-wat-dis help --json      this list as JSON: name, group, usage, description, effect
+npx gh-wat-dis help --json      this list as JSON: each tool's name, group, usage, description and effect, and each skill
 Docs: ${PKG.homepage}
 `;
 }
@@ -122,8 +124,8 @@ Docs: ${PKG.homepage}
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
-    if (rest.includes('--json')) console.log(JSON.stringify({ name: PKG.name, version: PKG.version, run: 'npx gh-wat-dis <name> [options]', tools: TOOLS }, null, 2));
-    else process.stdout.write(helpText());
+    if (rest.includes('--json')) console.log(JSON.stringify({ name: PKG.name, version: PKG.version, run: 'npx gh-wat-dis <name> [options]', tools: TOOLS, skills: (await setup()).skillList() }, null, 2));
+    else process.stdout.write(helpText((await setup()).skillList()));
     return 0;
   }
   if (cmd === '--version' || cmd === '-v' || cmd === 'version') {

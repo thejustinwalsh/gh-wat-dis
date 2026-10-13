@@ -26,6 +26,19 @@ export function skillNames(): string[] {
     .sort();
 }
 
+/** One skill as its own file describes it. `does` is what it does; `when` is the part that says when an agent uses it. */
+export interface SkillInfo { name: string; does: string; when: string }
+
+/** The shipped skills with the description from each SKILL.md, the entry skill first. */
+export function skillList(): SkillInfo[] {
+  return skillNames().map((name): SkillInfo => {
+    const text = readFileSync(join(SKILLS_SRC, name, 'SKILL.md'), 'utf8');
+    const description = /^description:\s*(.+)$/m.exec(text)?.[1]?.trim() ?? '';
+    const cut = description.search(/ Use (?:when|before)\b/);
+    return { name, does: (cut < 0 ? description : description.slice(0, cut)).trim(), when: cut < 0 ? '' : description.slice(cut).trim() };
+  }).sort((a, b) => Number(b.name === 'wat') - Number(a.name === 'wat') || a.name.localeCompare(b.name));
+}
+
 function listFiles(dir: string, base: string = dir): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d): string[] => {
     const p = join(dir, d.name);

@@ -122,3 +122,19 @@ test('sandbox: reads Codex settings and adds the two lines without touching the 
   assert.equal(readSandbox('[sandbox_workspace_write]\nwritable_roots = ["~"]\n', cache, home).cacheWritable, true, '~ covers ~/.npm');
   assert.equal(readSandbox('[sandbox_workspace_write]\nwritable_roots = ["/home/u/.npmx"]\n', cache, home).cacheWritable, false);
 });
+
+test('site: the "See all commands" list matches the CLI, and help lists the skills', async () => {
+  const { allCommandsHtml, withAllCommands } = await import('../scripts/site-commands.ts');
+  const { TOOLS } = await import('../src/main.ts');
+  const { skillList, skillNames } = await import('../src/cli/install.ts');
+  const page = readFileSync(join(root, 'docs/index.html'), 'utf8');
+  assert.equal(withAllCommands(page), page, 'docs/index.html is out of date: run "npm run site:commands"');
+  for (const t of TOOLS) assert.ok(allCommandsHtml().includes(`<dt>${t.name}</dt>`), `the page lists ${t.name}`);
+
+  const skills = skillList();
+  assert.deepEqual(skills.map((s) => s.name).sort(), skillNames());
+  assert.equal(skills[0]!.name, 'wat');
+  for (const s of skills) assert.ok(s.does.length > 20 && !/ Use (when|before)\b/.test(s.does), `${s.name} has a description of what it does`);
+  const listed = JSON.parse(spawnSync(process.execPath, [join(root, 'src/bin.ts'), 'help', '--json'], { encoding: 'utf8' }).stdout) as { skills: typeof skills };
+  assert.deepEqual(listed.skills, skills);
+});
