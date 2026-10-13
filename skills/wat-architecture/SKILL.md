@@ -143,8 +143,9 @@ The measure is how hard the change is to follow, not how much it touches. A chan
 
 | The facts show | Then |
 |---|---|
-| No function moved (`functions` is 0) | The flow did not change. No diagram for the logic, however many files changed. Draw one only if an element or relationship was added or removed. |
-| Every rise in cognitive complexity is under 5 | Small edits to existing flows. A sentence covers it. |
+| An element or a relationship has status `added` or `removed` (`elements`, `edges`) | Draw one, whatever the complexity numbers say. A new part or a new connection is a change to the structure, and small functions can make it. Check this row first. |
+| No function moved (`functions` is 0) | The flow did not change. No diagram for the logic, however many files changed. |
+| Every rise in cognitive complexity is under 5, and the first row does not apply | Small edits to existing flows. A sentence covers it. |
 | One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a component or dynamic diagram earns its place. |
 | Between those | Apply the test below. |
 
