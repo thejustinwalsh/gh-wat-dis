@@ -5,7 +5,7 @@
 ## Install it
 
 1. Install the package in the project: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json`: skip this step.
-2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Each check line is `ok`, `FIX` or `off`. Under every `FIX` line an arrow names what to do: do it.
+2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills`, writes the repository config when there is none, and then runs every check. Each check line is `ok`, `FIX` or `off`. Under every `FIX` line an arrow names what to do: do it.
 
 Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.
 

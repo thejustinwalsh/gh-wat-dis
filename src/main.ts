@@ -49,9 +49,9 @@ const CHECK = 'Check';
 
 /** Every tool, in the order help prints them. The first word of `name` is the command. */
 export const TOOLS: Tool[] = [
-  { name: 'install', group: SETUP, effect: 'local', usage: 'install [--project] [--client <names>] [--mcp user|project|skip] [--dry-run] [--force]', description: 'Copy the wat skills to where each agent harness looks, then run the doctor checks.' },
+  { name: 'install', group: SETUP, effect: 'local', usage: 'install [--project] [--client <names>] [--mcp user|project|skip] [--no-config] [--dry-run] [--force]', description: 'Set up gh-wat-dis in one step: copy the wat skills to where each agent harness looks, write this repository\'s config when it has none, then run the doctor checks.' },
   { name: 'uninstall', group: SETUP, effect: 'local', usage: 'uninstall [--project] [--client <names>] [--dry-run]', description: 'Remove the skill directories this package installed.' },
-  { name: 'init', group: SETUP, effect: 'local', usage: 'init [--use always|ask|never] [--dry-run] [--force]', description: 'Write the repository config at .agents/gh-wat-dis/config.json: policy, labels, issue types, milestones, architecture map.' },
+  { name: 'init', group: SETUP, effect: 'local', usage: 'init [--use always|ask|never] [--dry-run] [--force]', description: 'Write the repository config at .agents/gh-wat-dis/config.json again. install writes it the first time; use this with --force for a fresh one.' },
   { name: 'mcp', group: SETUP, effect: 'local', usage: 'mcp <client> | mcp --apply [--scope user|project] [--dry-run]', description: 'Print the GitHub MCP server config for a harness, or write it for every harness found here. Stores no token.' },
   { name: 'doctor', group: SETUP, effect: 'local', usage: 'doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]', description: 'Check the runtime, gh, the skills, the GitHub MCP server, the config and the optional tools. Offers a fix where it has one, and installs an optional tool when asked.' },
 

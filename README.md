@@ -19,11 +19,11 @@ That is the whole thing.
 You were pointed here by that prompt. Do these, in order:
 
 1. Install the package: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json` in this project: skip this step.
-2. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
+2. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, writes `.agents/gh-wat-dis/config.json` for this repository when there is none, then runs every check. Add `--project` to install the skills into this repository only.
 3. Read the check lines. Each is `ok`, `FIX` or `off`. Under every `FIX` line an arrow names the one thing to do: do it. An `off` line is an optional feature, and its arrow says how to turn it on.
 4. If the `GitHub sign-in` line says `FIX`, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
 5. The GitHub MCP server is optional: the skills read through `gh` without it. If the human wants it, ask whether to set it up for every repository or only this one, then run `npx gh-wat-dis mcp --apply --scope user` (or `--scope project`). Never ask for a token in chat. Never write a token into a file.
-6. In a repository that should always use these skills, run `npx gh-wat-dis init`, review `.agents/gh-wat-dis/config.json` with the human, and commit it.
+6. Review `.agents/gh-wat-dis/config.json` with the human: the `wat-setup` skill has the questions to ask. Then commit it.
 7. Tell the human to restart the harness so the skills load.
 8. Then read "Use it" below and explain it to them in your own words. The prompt asked for it.
 
@@ -75,7 +75,7 @@ The agent shows you the draft before it posts.
 | `always` | Use the skills without asking |
 | `ask` | Ask once per session |
 | `never` | Do not use them |
-| no config file | Ask before the first use, and offer `init` |
+| no config file | Ask before the first use, and offer `install` |
 
 The file also holds the issue types, the surface labels, milestone naming and capacity, and the architecture map that gives every issue and PR the same names for the same parts of the system.
 

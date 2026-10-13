@@ -223,7 +223,7 @@ function checkConfig(cwd: string): Check {
   const root = repoRoot(cwd);
   const path = join(root, CONFIG_REL);
   if (!existsSync(path)) {
-    return { status: 'off', name: 'repository config (optional)', detail: 'this repository has none, so the skills ask before each use', action: 'to set it up: npx gh-wat-dis init' };
+    return { status: 'off', name: 'repository config (optional)', detail: 'this repository has none, so the skills ask before each use', action: 'to set it up: npx gh-wat-dis install' };
   }
   const cfg = readJson<Config>(path);
   if (!cfg) return { status: 'fix', name: 'repository config', detail: `${CONFIG_REL} is not valid JSON`, action: `correct the file, or write a new one: npx gh-wat-dis init --force` };

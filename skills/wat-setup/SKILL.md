@@ -83,21 +83,19 @@ Details, file paths and the local Docker variant: [references/mcp-clients.md](re
 
 ## 4. Repo config
 
-```bash
-npx gh-wat-dis init
-```
+`npx gh-wat-dis install` writes the config for a repository that has none, in the same run that installs the skills. There is no second command to run. To throw a config away and write a fresh one: `npx gh-wat-dis init --force`.
 
-`init` reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: owner, name, default branch, the labels and milestones that exist, and `policy.use`. It adds `.wat-tmp/` to `.gitignore`. It never overwrites an existing config.
+It reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: owner, name, default branch, the labels and milestones that exist, and `policy.use`. It adds `.wat-tmp/` to `.gitignore`. It never overwrites an existing config.
 
 ### Setup interview
 
-`init` writes defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
+The config starts as defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
 
-Run the interview after `init` writes a new config. For a config that already exists, ask only the rows the user wants to change.
+Run the interview after `install` writes a new config. For a config that already exists, ask only the rows the user wants to change.
 
 **Ask each of these.**
 
-| Key | Question | `init` wrote |
+| Key | Question | Starts as |
 |---|---|---|
 | `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo, ask once per session, or never? | `always` |
 | `policy.confirmBeforeWrite` | Show each draft and wait for a yes before posting? | `true` |
@@ -108,7 +106,7 @@ Run the interview after `init` writes a new config. For a config that already ex
 
 **Then confirm the rest in one question.** Show these values as a table and ask: keep them all, or change one?
 
-| Key | Meaning | `init` wrote |
+| Key | Meaning | Starts as |
 |---|---|---|
 | `milestones.naming` | How milestone titles are written | A guess from one existing title, or empty |
 | `milestones.capacity` | How many issues fit one milestone | Unset |
