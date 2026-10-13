@@ -23,12 +23,12 @@ List the open milestones first (`gh api "repos/{owner}/{repo}/milestones?state=o
 | Stale issues | Open, no update in 60 days | `gh issue list --search "updated:<DATE sort:updated-asc" --json number,title,updatedAt,labels,milestone` |
 | Stale PRs | Open, no update in 14 days | `gh pr list --search "updated:<DATE" --json number,title,updatedAt,isDraft,reviewDecision,author` |
 | Awaiting author | The last comment is a question from a maintainer, with no reply in 14 days | `gh issue list --search "updated:<DATE comments:>0"`, then read the last comment |
-| Missing fields | Open issues with no type, more than one type label, or no surface label | `npx gh-wat-dis issues` → rows where `missing` is not empty |
+| Missing fields | Open issues with no type, no surface, no priority or no size label, or with more than one type, priority or size | `npx gh-wat-dis issues` → rows where `missing` is not empty |
 | Stalled or blocked milestone | The current milestone with no issue closed in 7 days, or with an issue blocked from outside. A later milestone that reports `stalled` has not started: that is not a finding. | `npx gh-wat-dis milestone` → `status` |
 | Finished milestone left open | Every issue closed | `npx gh-wat-dis milestone "<title>"` → `status: done` |
 | Orphan PRs | Open PR that closes no issue | `gh pr list --json number,title,closingIssuesReferences` |
 | Done but open | Issue whose linked PR merged. Also an open issue in the current milestone that a merged PR names with `Refs`: read the PR and say whether it finished the work. | `gh issue list --search "linked:pr is:open"` then check PR state. For the second: `gh pr list --state merged --search "<n> in:body" --json number,title` |
-| Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan (priority and status are not labels; type is a label only on a user repository) | `npx gh-wat-dis labels --text` |
+| Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan (status is not a label; type is a label only on a user repository) | `npx gh-wat-dis labels --text` |
 | Blocked chains | Issues blocked by a closed or stale issue | `npx gh-wat-dis relations <n>` for each issue from `gh issue list --search "is:blocked"` |
 | Format drift | Open issues in the current milestone with no clear problem statement, no system statement, a body GitHub renders wrong, or a `Refs #n` line that repeats a parent or blocked-by relation the issue already has. A Task meets the system statement by naming its element in the opening: it needs no `System` section. | read each body against `../wat/references/formats.md`; relations from `npx gh-wat-dis relations <n>` |
 | Out-of-date facts | A statement in an open issue of the current milestone that another issue, a merged PR or the code now contradicts | read while you check format drift; name the source that contradicts it |

@@ -37,7 +37,7 @@ export interface Survey {
   viewer: { login: string; permission: string };
   types: { source: 'issue-type' | 'label'; names: string[] };
   /** Open pull requests are counted and never listed: a migration leaves them alone. */
-  counts: { openIssues: number; openPrs: number; byViewer: number; byOthers: number; noType: number; severalTypes: number; noSurface: number; noMilestone: number; tracking: number };
+  counts: { openIssues: number; openPrs: number; byViewer: number; byOthers: number; noType: number; severalTypes: number; noSurface: number; noPriority: number; noSize: number; noMilestone: number; tracking: number };
   bodies: { empty: number; opensWithHeading: number; noFormatSection: number; withCheckedTasks: number };
   labels: {
     /** Surface labels in the config. Zero means no issue can have a surface yet. */
@@ -123,6 +123,7 @@ export function survey(input: SurveyInput): Survey {
       byViewer: count((r) => r.mine), byOthers: count((r) => !r.mine),
       noType: count((r) => r.missing.includes('type')), severalTypes: count((r) => r.missing.includes('one type')),
       noSurface: count((r) => !r.surfaces.length && !r.tracking), noMilestone: count((r) => r.milestone === null && !r.tracking),
+      noPriority: count((r) => r.missing.includes('priority')), noSize: count((r) => r.missing.includes('size')),
       tracking: count((r) => r.tracking),
     },
     bodies: {

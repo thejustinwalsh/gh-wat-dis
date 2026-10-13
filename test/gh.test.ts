@@ -181,7 +181,7 @@ test('labels: agents plus one per surface; other labels are extra and never drop
   assert.equal(cfg.issues.typeSource, 'label', 'a repository with no issue types uses type labels');
   const plan = planLabels(cfg, [{ name: 'bug', description: 'x', color: 'd73a4a' }, { name: 'Agents', description: 'old', color: 'ffffff' }, { name: 'wontfix', description: '', color: 'ffffff' }]);
   assert.equal(plan.surfacesFrom, 'architecture');
-  assert.deepEqual(plan.create.map((l) => [l.name, l.role]), [['task', 'type'], ['feature', 'type'], ['site', 'surface']]);
+  assert.deepEqual(plan.create.map((l) => [l.name, l.role]), [['task', 'type'], ['feature', 'type'], ['critical', 'priority'], ['major', 'priority'], ['minor', 'priority'], ['nit', 'priority'], ['s', 'size'], ['m', 'size'], ['l', 'size'], ['xl', 'size'], ['site', 'surface']]);
   assert.deepEqual(plan.update.map((l) => l.name), ['bug', 'agents']);
   assert.deepEqual(plan.extra.map((l) => l.name), ['wontfix']);
   const org = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Task', 'Bug', 'Feature'] });
@@ -189,7 +189,18 @@ test('labels: agents plus one per surface; other labels are extra and never drop
   assert.ok(!planLabels(org, []).create.some((l) => l.role === 'type'), 'an organization repository gets no type labels');
   cfg.issues = { types: [], typeSource: 'issue-type' };
   cfg.labels.surfaces = [{ name: 'checkout', description: 'The checkout flow' }];
-  assert.deepEqual(planLabels(cfg, []).create.map((l) => [l.name, l.role]), [['agents', 'agents'], ['checkout', 'surface']]);
+  assert.deepEqual(planLabels(cfg, []).create.map((l) => [l.name, l.role]), [['agents', 'agents'], ['critical', 'priority'], ['major', 'priority'], ['minor', 'priority'], ['nit', 'priority'], ['s', 'size'], ['m', 'size'], ['l', 'size'], ['xl', 'size'], ['checkout', 'surface']]);
+
+  // Priority runs red to yellow, most urgent first. Size keeps one hue and gets brighter and more saturated.
+  const { priorityColor, sizeColor } = await import('../src/gh/color.ts');
+  const rgb = (hex: string): number[] => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const pr = [0, 1, 2, 3].map((i) => rgb(priorityColor(i, 4)));
+  assert.ok(pr[0]![0]! > 200 && pr[0]![1]! < 100, 'critical is red');
+  assert.ok(pr[3]![0]! > 200 && pr[3]![1]! > 200 && pr[3]![2]! < 120, 'nit is yellow');
+  for (let i = 1; i < 4; i++) assert.ok(pr[i]![1]! > pr[i - 1]![1]!, 'green rises step by step from red to yellow');
+  const sz = [0, 1, 2, 3].map((i) => rgb(sizeColor(i, 4)));
+  for (let i = 1; i < 4; i++) assert.ok(Math.max(...sz[i]!) > Math.max(...sz[i - 1]!), 'each size is brighter than the one before');
+  assert.equal(new Set([0, 1, 2, 3].flatMap((i) => [priorityColor(i, 4), sizeColor(i, 4)])).size, 8);
 });
 
 test('relations: reads all four kinds and sends database ids when it writes', async () => {
@@ -274,8 +285,8 @@ test('issues: reads type and surfaces from the config, and says what is missing'
   const raw = (number: number, labels: string[], extra: object = {}) => ({ number, title: `t${number}`, state: 'open', comments: 0, updated_at: 'x', labels: labels.map((name) => ({ name })), milestone: null, ...extra });
   const rows = issueRows(cfg, [
     raw(1, ['task'], { sub_issues_summary: { total: 3, completed: 1 }, milestone: { title: 'v1' } }),
-    raw(2, ['bug', 'site', 'ci', 'agents']),
-    raw(3, ['bug', 'feature', 'site']),
+    raw(2, ['bug', 'site', 'ci', 'agents', 'major', 'm']),
+    raw(3, ['bug', 'feature', 'site', 'minor', 'nit', 's']),
     raw(4, ['wontfix']),
     raw(5, ['task', 'site'], { pull_request: {} }),
   ]);
@@ -283,8 +294,9 @@ test('issues: reads type and surfaces from the config, and says what is missing'
   assert.equal(rows.length, 4, 'pull requests are left out');
   assert.deepEqual([by.get(1)!.tracking, by.get(1)!.missing, by.get(1)!.type], [true, [], 'Task'], 'a tracking issue needs no surface');
   assert.deepEqual([by.get(2)!.type, by.get(2)!.surfaces, by.get(2)!.agents, by.get(2)!.missing], ['Bug', ['site', 'ci'], true, []]);
-  assert.deepEqual(by.get(3)!.missing, ['one type']);
-  assert.deepEqual([by.get(4)!.missing, by.get(4)!.otherLabels], [['type', 'surface'], ['wontfix']]);
+  assert.deepEqual([by.get(2)!.priority, by.get(2)!.size, by.get(2)!.otherLabels], ['major', 'm', []]);
+  assert.deepEqual([by.get(3)!.missing, by.get(3)!.priority, by.get(3)!.size], [['one type', 'one priority'], null, 's']);
+  assert.deepEqual([by.get(4)!.missing, by.get(4)!.otherLabels], [['type', 'surface', 'priority', 'size'], ['wontfix']]);
   const org = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Bug'] });
   const typed = issueRows(org, [raw(9, ['bug', 'wontfix'], { type: { name: 'Bug' } })])[0]!;
   assert.deepEqual([typed.type, typed.otherLabels], ['Bug', ['bug', 'wontfix']], 'with issue types, a label named "bug" is one more label');
@@ -331,9 +343,9 @@ test('survey: counts what open issues lack and describes bodies without rating t
   assert.deepEqual(rows.find((r) => r.number === 2)!.otherLabels, ['bug', 'needs-repro']);
 
   const s = survey(input);
-  assert.deepEqual(s.counts, { openIssues: 4, openPrs: 1, byViewer: 3, byOthers: 1, noType: 1, severalTypes: 0, noSurface: 1, noMilestone: 1, tracking: 1 });
+  assert.deepEqual(s.counts, { openIssues: 4, openPrs: 1, byViewer: 3, byOthers: 1, noType: 1, severalTypes: 0, noSurface: 1, noPriority: 3, noSize: 3, noMilestone: 1, tracking: 1 });
   assert.deepEqual(s.bodies, { empty: 1, opensWithHeading: 1, noFormatSection: 3, withCheckedTasks: 1 });
-  assert.deepEqual(s.labels.create, ['agents']);
+  assert.deepEqual(s.labels.create, ['agents', 'critical', 'major', 'minor', 'nit', 's', 'm', 'l', 'xl']);
   assert.deepEqual(s.labels.other.map((l) => [l.name, l.openIssues, l.type, l.untyped]), [['bug', 1, 'Bug', 1], ['enhancement', 1, 'Feature', 0], ['needs-repro', 1, null, 0]]);
   assert.deepEqual(s.milestones.map((m) => [m.title, m.current, m.dueOn, m.description, m.doneWhen, m.tracking]), [
     ['v0.2.0', true, '2026-12-01T08:00:00Z', false, 0, null], ['v0.10.0', false, null, true, 1, 4],

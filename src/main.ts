@@ -65,7 +65,7 @@ export const TOOLS: Tool[] = [
   { name: 'links', group: FACTS, effect: 'reads', usage: 'links (--pr <n> | --body-file <file>) [--closes <n,n>|none] [--text]', description: 'Which issues a pull request closes on merge and which it only mentions, from the body and the commit messages. Exits non-zero when that differs from --closes.' },
   { name: 'relations', group: FACTS, effect: 'reads', usage: 'relations <issue>', description: "An issue's parent, sub-issues, blocked by and blocking, from GitHub's native relations." },
   { name: 'milestone', group: FACTS, effect: 'reads', usage: 'milestone [<title>] [--stalled-after 7]', description: 'Status numbers for a milestone: counts, what is in review, what is blocked, the done-when conditions, the tracking issue. No dates.' },
-  { name: 'labels', group: FACTS, effect: 'reads', usage: 'labels [--text]', description: 'The agents, surface and type labels the config wants, compared with the labels on GitHub.' },
+  { name: 'labels', group: FACTS, effect: 'reads', usage: 'labels [--text]', description: 'The agents, surface, priority, size and type labels the config wants, compared with the labels on GitHub.' },
 
   { name: 'relate', group: WRITE, effect: 'github', usage: 'relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]', description: 'Set or remove a native relation between issues: parent, blocked by, blocks.' },
   { name: 'labels apply', group: WRITE, effect: 'github', usage: 'labels apply [--prune] [--dry-run]', description: 'Create and update the labels the config wants. --prune also deletes the others.' },

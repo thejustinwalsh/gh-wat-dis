@@ -95,7 +95,7 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 | `links` | Shows what a PR will close on merge and what it only mentions. |
 | `milestone` | Prints the numbers for a status report: counts, what is in review, what is blocked, and a status with no dates. |
 | `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. |
-| `labels` | Plans and creates the labels: `agents`, one for each product surface, and the type labels on a user repository. |
+| `labels` | Plans and creates the labels: `agents`, one for each product surface, priority (`critical` to `nit`), size (`s` to `xl`), and the type labels on a user repository. |
 | `graph <op>` | Builds and reshapes a diagram spec: `from-facts`, `from-config`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `split`, `stats`, `ids`. |
 | `diagram` | Lints a C4 diagram spec and renders an SVG that fits GitHub's width. `--png` adds a PNG for the agent to look at. |
 | `legend` | Prints a diagram's relationships as a Markdown table. |

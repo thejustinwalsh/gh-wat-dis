@@ -150,6 +150,6 @@ Post the rows, add each issue to `done.txt`, report the batch with links, and ru
 
 - Close an issue outside a triage row the user approved
 - Delete a label, or run `labels apply --prune`, unless the user asks for that label by name
-- Set a priority or a due date
+- Set a priority label outside a triage row the user approved, or set a due date
 - Post a rewrite before the user has agreed to the first before and after
 - Go on to the next milestone or the backlog without asking
