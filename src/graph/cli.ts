@@ -22,8 +22,8 @@ Usage: npx gh-wat-dis graph <op> [spec.json|-] [options]
   diff <base.json> <head.json>
                            one spec with added, removed and changed statuses
   set [--title t] [--type t] [--scope s] [--direction DOWN|RIGHT]
-  set --element <id> key=value ...
-  set --relationship <from>:<to> key=value ...
+  set --element <id,id> key=value ...
+  set --relationship <from>:<to>,<from>:* key=value ...   "*" matches any element
                            edit fields; "key=" deletes the key
   rename <oldId> <newId> [spec.json|-]
                            rename an id everywhere

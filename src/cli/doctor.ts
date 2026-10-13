@@ -106,29 +106,73 @@ function checkSkills(cwd: string): Check[] {
 
 type Servers = Record<string, unknown> | undefined;
 
-function checkMcp(cwd: string): Check {
+const TOKEN_VARS = ['GITHUB_PERSONAL_ACCESS_TOKEN', 'GITHUB_MCP_PAT', 'GITHUB_PAT_TOKEN', 'GITHUB_PAT', 'GITHUB_TOKEN', 'GH_TOKEN'];
+
+/** Names of the environment variables a GitHub server entry reads its token from. Never the values. */
+function tokenVars(entry: string): string[] {
+  const names = [...entry.matchAll(/\$\{(?:env:)?([A-Z][A-Z0-9_]*)\}|\{env:([A-Z][A-Z0-9_]*)\}|\$([A-Z][A-Z0-9_]*)|bearer_token_env_var\s*=\s*"([A-Z][A-Z0-9_]*)"/g)]
+    .map((m) => m[1] ?? m[2] ?? m[3] ?? m[4]!);
+  return [...new Set(names)].filter((n) => /TOKEN|PAT|KEY/.test(n));
+}
+
+async function tokenWorks(name: string): Promise<boolean | null> {
+  try {
+    const res = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${process.env[name]}`, 'User-Agent': 'gh-wat-dis-doctor' } });
+    return res.status === 200 ? true : res.status === 401 ? false : null;
+  } catch { return null; }
+}
+
+async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
   const home = homedir();
-  const key = (k: string) => (p: string): Servers => readJson<Record<string, Servers>>(p)?.[k];
-  const places: [label: string, path: string, get: (path: string) => Servers][] = [
-    ['Claude Code (user)', join(home, '.claude.json'), key('mcpServers')],
-    ['Claude Code (project)', join(cwd, '.mcp.json'), key('mcpServers')],
-    ['Codex', join(home, '.codex/config.toml'), (p) => (/^\[mcp_servers\.github\]/m.test(readFileSync(p, 'utf8')) ? { github: {} } : {})],
-    ['Cursor', join(home, '.cursor/mcp.json'), key('mcpServers')],
-    ['Cursor (project)', join(cwd, '.cursor/mcp.json'), key('mcpServers')],
-    ['Gemini CLI', join(home, '.gemini/settings.json'), key('mcpServers')],
-    ['OpenCode', join(home, '.config/opencode/opencode.json'), key('mcp')],
-    ['VS Code (project)', join(cwd, '.vscode/mcp.json'), key('servers')],
+  const json = (k: string) => (text: string): string | undefined => {
+    const servers = (JSON.parse(text) as Record<string, Servers>)[k] ?? {};
+    const key = Object.keys(servers).find((n) => /github/i.test(n));
+    return key ? JSON.stringify(servers[key]) : undefined;
+  };
+  const toml = (text: string): string | undefined => text.match(/^\[mcp_servers\.github\][^[]*/m)?.[0];
+  const places: [label: string, path: string, entry: (text: string) => string | undefined][] = [
+    ['Claude Code (user)', join(home, '.claude.json'), json('mcpServers')],
+    ['Claude Code (project)', join(cwd, '.mcp.json'), json('mcpServers')],
+    ['Codex', join(home, '.codex/config.toml'), toml],
+    ['Cursor', join(home, '.cursor/mcp.json'), json('mcpServers')],
+    ['Cursor (project)', join(cwd, '.cursor/mcp.json'), json('mcpServers')],
+    ['Gemini CLI', join(home, '.gemini/settings.json'), json('mcpServers')],
+    ['OpenCode', join(home, '.config/opencode/opencode.json'), json('mcp')],
+    ['VS Code (project)', join(cwd, '.vscode/mcp.json'), json('servers')],
   ];
   const found: string[] = [];
-  for (const [label, path, get] of places) {
+  const wanted = new Set<string>();
+  for (const [label, path, entry] of places) {
     if (!existsSync(path)) continue;
     try {
-      if (Object.keys(get(path) ?? {}).some((k) => /github/i.test(k))) found.push(label);
+      const e = entry(readFileSync(path, 'utf8'));
+      if (e === undefined) continue;
+      found.push(label);
+      for (const v of tokenVars(e)) wanted.add(v);
     } catch { /* an unreadable harness config is not ours to report */ }
   }
-  return found.length
-    ? { status: 'ok', name: 'github mcp', detail: `configured for ${found.join(', ')}` }
-    : { status: 'warn', name: 'github mcp', detail: 'no GitHub MCP server found in a known config. Optional: skills read through gh without it. Set up: npx gh-wat-dis mcp <client>' };
+  const present = TOKEN_VARS.filter((n) => process.env[n]);
+  if (!found.length) {
+    const have = present.length ? ` ${present[0]} is already set in this environment, so no new token is needed.` : '';
+    return { status: 'warn', name: 'github mcp', detail: `no GitHub MCP server found in a known config. Optional: skills read through gh without it.${have} Set up: npx gh-wat-dis mcp <client>` };
+  }
+  const where = `configured for ${found.join(', ')}`;
+  if (!wanted.size) return { status: 'ok', name: 'github mcp', detail: `${where}. The config names no token variable (the harness signs in itself).` };
+  const missing = [...wanted].filter((n) => !process.env[n]);
+  if (missing.length) {
+    const reuse = present.length
+      ? `${present[0]} is set: point the config at it, or run: export ${missing[0]}="$${present[0]}"`
+      : `set it in your shell profile: export ${missing[0]}="$(gh auth token)"`;
+    return { status: 'warn', name: 'github mcp', detail: `${where}, but ${missing.join(', ')} is not set in this environment. ${reuse}. Then restart the harness.` };
+  }
+  if (!offline) {
+    for (const n of wanted) {
+      if ((await tokenWorks(n)) === false) {
+        return { status: 'FAIL', name: 'github mcp', detail: `${where}. ${n} is set, but GitHub rejects it (expired or revoked). Refresh it: export ${n}="$(gh auth token)"` };
+      }
+    }
+  }
+  return { status: 'ok', name: 'github mcp', detail: `${where}. ${[...wanted].join(', ')} is set${offline ? '' : ' and GitHub accepts it'}.` };
 }
 
 function checkConfig(cwd: string): Check {
@@ -167,7 +211,7 @@ async function checkTools(): Promise<Check[]> {
 }
 
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), checkMcp(cwd), checkConfig(cwd), ...(await checkTools())];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), checkConfig(cwd), ...(await checkTools())];
 }
 
 export function printChecks(checks: Check[]): number {
