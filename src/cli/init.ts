@@ -55,6 +55,13 @@ export async function main(argv: string[]): Promise<number> {
   writeFileSync(path, text);
   console.log(`write    ${path}`);
 
+  // A token file for harnesses that can only read an environment variable. It must never be committed.
+  const localIgnore = join(dirname(path), '.gitignore');
+  if (!existsSync(localIgnore)) {
+    writeFileSync(localIgnore, '.env\n.env.*\n');
+    console.log(`write    ${localIgnore}  (ignore .env)`);
+  }
+
   const gi = join(root, '.gitignore');
   const cur = existsSync(gi) ? readFileSync(gi, 'utf8') : '';
   if (!cur.split('\n').some((l) => l.trim() === `${TMP_DIR}/`)) {

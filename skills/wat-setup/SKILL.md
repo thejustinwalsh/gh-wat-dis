@@ -53,10 +53,11 @@ gh-wat-dis reads through the GitHub MCP server. It is optional: every skill fall
    ```
    Clients: `claude`, `codex`, `cursor`, `gemini`, `opencode`, `copilot`, `vscode`, `windsurf`.
 3. **Show the user** the snippet and the target file. Apply it after a yes. Merge into the file. Never replace it.
-4. **Token.** Every snippet reads the token from an environment variable. Hosts with their own GitHub sign-in (VS Code) need no token.
-   - The user creates the token and sets the variable themselves. Never ask them to paste a token into the chat. Never write a token into a file.
+4. **Token.** Never put a token in a global shell profile, in a committed file, or in the chat. Use the first option the harness supports:
+   - **Claude Code: no stored token.** The snippet from `npx gh-wat-dis mcp claude` uses a `headersHelper`. Claude Code runs it at each connect and it prints the token from the user's `gh` login. The user approves the project's trust dialog once.
+   - **Hosts with their own GitHub sign-in (VS Code):** no token.
+   - **Other harnesses** can only read an environment variable. Keep it scoped to the project: the user puts `GITHUB_PERSONAL_ACCESS_TOKEN=<token>` in `.agents/gh-wat-dis/.env`, and loads that file for this project with direnv or mise. `init` writes a `.gitignore` beside it, and `doctor` fails if git would commit the file. The user writes the token. You do not read, print or write it.
    - Scopes for a classic token: `repo`, `read:org`. Add `project` for Projects.
-   - Fastest path for a user who already ran `gh auth login`: `export GITHUB_PERSONAL_ACCESS_TOKEN="$(gh auth token)"` in their shell profile. Tell them this reuses the CLI's token.
 5. **Toolsets.** The snippets enable `default,labels`. Add `projects` only if the repo config uses Projects. Fewer toolsets means less context spent on tool definitions.
 6. **Restart** the harness, then check: call `get_me`.
 
