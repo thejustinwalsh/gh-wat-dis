@@ -20,8 +20,8 @@ You were pointed here by that prompt. Do these, in order:
 
 1. Install the package: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json` in this project: skip this step.
 2. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
-3. Read the check lines. Fix each `FAIL` it prints. `warn` lines are optional.
-4. If `gh auth` fails, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
+3. Read the check lines. Each is `ok`, `FIX` or `off`. Under every `FIX` line an arrow names the one thing to do: do it. An `off` line is an optional feature, and its arrow says how to turn it on.
+4. If the `GitHub sign-in` line says `FIX`, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
 5. The GitHub MCP server is optional: the skills read through `gh` without it. If the human wants it, ask whether to set it up for every repository or only this one, then run `npx gh-wat-dis mcp --apply --scope user` (or `--scope project`). Never ask for a token in chat. Never write a token into a file.
 6. In a repository that should always use these skills, run `npx gh-wat-dis init`, review `.agents/gh-wat-dis/config.json` with the human, and commit it.
 7. Tell the human to restart the harness so the skills load.
@@ -125,9 +125,9 @@ Run `npx gh-wat-dis doctor`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `FAIL gh` | GitHub CLI older than 2.99 | `brew upgrade gh`, or https://cli.github.com |
-| `FAIL gh auth` | Not signed in, or the saved token expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
-| `FAIL skills` | Not installed, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
+| `FIX GitHub CLI` | GitHub CLI missing, or older than 2.99 | `brew upgrade gh`, or https://cli.github.com |
+| `FIX GitHub sign-in` | Not signed in, or the saved sign-in expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
+| `FIX skills` | Not installed, out of date, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
 | Skills do not trigger | Harness not restarted | Restart it |
 | A command hangs, then "heap out of memory" | The harness's sandbox blocks npm | See your harness's sandbox docs ([Codex](https://developers.openai.com/codex/security)) |
 | Image shows as a broken link | The file was not attached | Post with `gh ... --attach <file>` and check the body has an `https://` image URL |

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export const PKG: { name: string; version: string; homepage: string } =
+export const PKG: { name: string; version: string; homepage: string; bugs: string } =
   JSON.parse(readFileSync(join(PKG_ROOT, 'package.json'), 'utf8'));
 export const CONFIG_REL = '.agents/gh-wat-dis/config.json';
 export const TMP_DIR = '.wat-tmp';

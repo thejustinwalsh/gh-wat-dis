@@ -145,7 +145,7 @@ export async function install(argv: string[]): Promise<number> {
   const { offerLogin, printChecks, runChecks } = await import('./doctor.ts');
   let checks = await runChecks();
   let fails = printChecks(checks);
-  const noServer = checks.some((c) => c.name === 'github mcp' && c.status === 'warn' && c.detail.startsWith('no GitHub MCP server'));
+  const noServer = checks.some((c) => c.code === 'mcp-none');
   let again = await offerLogin(checks);
   if (noServer) {
     const { offerMcpSetup } = await import('./mcp-apply.ts');

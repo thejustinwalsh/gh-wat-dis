@@ -6,11 +6,19 @@ license: MIT
 
 # wat-setup
 
-Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each prints one `ok`, `warn` or `FAIL` line for each part. Fix only what fails.
+Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each check prints one line, and the line is one of three things:
+
+| Line | Means | Do |
+|---|---|---|
+| `ok` | Nothing to do | Move on |
+| `FIX` | Something is wrong, and gh-wat-dis will not work properly until it is fixed | The next line starts with `→` and names the one action. Do it, or hand it to the user when it says a person runs it |
+| `off` | An optional feature that is not set up | Nothing, unless the user wants it. The `→` line says how to turn it on |
+
+Fix only the `FIX` lines.
 
 **A harness that sandboxes commands.** Some harnesses run commands in a sandbox that blocks the network or npm's cache (Codex does by default). `npx` then hangs and dies with "heap out of memory" before gh-wat-dis starts. We cannot fix every harness from here, so give advice: read the harness's own sandbox documentation (Codex: https://developers.openai.com/codex/security), tell the user what it says the command needs, and let them decide. One thing that helps: the package installed in the project as a dev dependency, so `npx` has nothing to fetch. Do not change a sandbox setting yourself.
 
-`doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. It is a warning when missing, never a failure. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
+`doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. When it is missing its line says `off`, never `FIX`. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
 
 A project needs three things and no more: the `gh` CLI, `gh-wat-dis` (as a dev dependency where there is a `package.json`, through `npx` alone where there is not), and (optional) the GitHub MCP server. Never tell a project to install another tool.
 
@@ -42,8 +50,8 @@ gh-wat-dis writes through `gh`. Attachments need **gh 2.99.0 or later**.
 | Check | Fix |
 |---|---|
 | `gh --version` is below 2.99.0 | `brew upgrade gh`, or the method at https://cli.github.com |
-| `gh auth` fails: not signed in, or the saved token is no longer valid | Sign-in opens a browser and needs a person. Ask the user to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in and checks again. Or they run `gh auth login --hostname github.com --web` themselves. Do not run the sign-in for them. |
-| `gh auth` fails: token lacks the `repo` scope | The user runs `gh auth refresh --scopes repo`. |
+| `FIX GitHub sign-in`: not signed in, or the saved sign-in has expired | Sign-in opens a browser and needs a person. Ask the user to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in and checks again. Or they run `gh auth login --hostname github.com --web` themselves. Do not run the sign-in for them. |
+| `FIX GitHub sign-in`: without permission to write to repositories | The user runs `gh auth refresh --scopes repo`. |
 | `gh issue create --help` has no `--attach` | The version is too old, or the host is GitHub Enterprise Server. Use the branch fallback in `../wat/references/rendering.md`. |
 
 ## 3. GitHub MCP server

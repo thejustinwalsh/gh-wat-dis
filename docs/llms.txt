@@ -5,7 +5,7 @@
 ## Install it
 
 1. Install the package in the project: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json`: skip this step.
-2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
+2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Each check line is `ok`, `FIX` or `off`. Under every `FIX` line an arrow names what to do: do it.
 
 Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.
 
@@ -16,7 +16,7 @@ Needs: Node 24 or later (or Bun, or Deno), and the GitHub CLI 2.99 or later, sig
 ## Rules an agent must follow
 
 - Never ask a human for a GitHub token in chat, and never write a token to a file. `npx gh-wat-dis mcp <client>` prints config that reads the token from an environment variable.
-- If `gh auth` fails, the human runs `gh auth login` in their own terminal.
+- If the `GitHub sign-in` check says `FIX`, the human runs `gh auth login` in their own terminal.
 - Check `.agents/gh-wat-dis/config.json` in a repository before you use the skills there. `policy.use` is `always`, `ask` or `never`. No file: ask the human first.
 - Show the human each draft before you post it.
 - The tools collect facts. They do not review code, score it or give verdicts.
