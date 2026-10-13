@@ -4,6 +4,7 @@ import { textWidth, wrap } from './measure.ts';
 import { STATUS_BADGE, STATUS_MARK, active, kindLine } from './vocab.ts';
 
 export interface Pt { x: number; y: number }
+export interface Rect { x: number; y: number; w: number; h: number }
 export interface TextLine { text: string; cls: string; dy: number }
 export interface NodeBox {
   el: SpecElement;
@@ -11,8 +12,10 @@ export interface NodeBox {
   depth: number;
   x: number; y: number; w: number; h: number;
   lines: TextLine[];
+  /** Where the status badge is drawn. It lies inside the box, where no relationship line runs. */
+  badge?: Rect;
 }
-export interface EdgeLabel { x: number; y: number; w: number; h: number; lines: TextLine[] }
+export interface EdgeLabel extends Rect { lines: TextLine[] }
 export interface EdgePath { rel: SpecRelationship; points: Pt[]; label?: EdgeLabel }
 export interface Layout { width: number; height: number; nodes: NodeBox[]; edges: EdgePath[]; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean }
 export interface LayoutOptions {
@@ -33,17 +36,51 @@ export const PIPE_RX = 11;
 export const GROUP_NAME_PX = 13;
 export const GROUP_KIND_PX = 10.5;
 export const BADGE_PX = 9.5;
+export const BADGE_H = 16;
+/** A group keeps this much clear on each side of its label. */
+export const GROUP_PAD_X = 14;
+const BADGE_GAP = 10;
+/** How far a self-relationship reaches out of its element, and how much of the side it spans. */
+const LOOP_OUT = 30;
+const LOOP_SPAN = 34;
+const LOOP_SPAN_MAX = 48;
+/** ELK draws a self-loop about 10px deep. Its label is given this much more room so the larger loop fits. */
+const LOOP_PAD = LOOP_OUT - 10;
 const PAD_X = 14;
 const LABEL_MAX = 170;
 const FULL_DETAIL_MAX = 5;
 const TOP_INSET: Record<string, number> = { person: 40, datastore: 2 * CYLINDER_RY + 8 };
 
-export const badgeWidth = (status: string): number => textWidth(STATUS_BADGE[status] ?? '', BADGE_PX, true) + 14;
+export const badgeWidth = (status: string): number => Math.ceil(textWidth(STATUS_BADGE[status] ?? '', BADGE_PX, true) + 14);
+
+/** The badge sits inside the top right corner of a leaf: under the lid of a cylinder, left of the face of a pipe. */
+const BADGE_TOP: Record<string, number> = { datastore: 2 * CYLINDER_RY + 5 };
+const BADGE_RIGHT: Record<string, number> = { datastore: 8, queue: 2 * PIPE_RX + 3, person: 7 };
+const badgeTop = (type: string): number => BADGE_TOP[type] ?? 5;
+
+function leafBadge(b: NodeBox): Rect | undefined {
+  const status = active(b.el.status);
+  if (!status) return undefined;
+  const w = badgeWidth(status);
+  return { x: b.x + b.w - (BADGE_RIGHT[b.el.type] ?? 6) - w, y: b.y + badgeTop(b.el.type), w, h: BADGE_H };
+}
+
+/** True when the polyline comes within `pad` of the rectangle. Segments are axis aligned, so their bounds are exact. */
+export function crossesRect(points: Pt[], r: Rect, pad = 0): boolean {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!, b = points[i]!;
+    if (Math.max(a.x, b.x) > r.x - pad && Math.min(a.x, b.x) < r.x + r.w + pad
+      && Math.max(a.y, b.y) > r.y - pad && Math.min(a.y, b.y) < r.y + r.h + pad) return true;
+  }
+  return false;
+}
 
 function leafText(el: SpecElement, compact: boolean, width: number): { h: number; lines: TextLine[] } {
   const inner = width - 2 * PAD_X - (el.type === 'queue' ? 2 * PIPE_RX : 0);
   const lines: TextLine[] = [];
   let y = TOP_INSET[el.type] ?? (compact ? 11 : 14);
+  // The name starts under the badge, so a long name never runs into it.
+  if (active(el.status)) y = Math.max(y, badgeTop(el.type) + BADGE_H - 1);
   const add = (texts: string[], cls: string, lineHeight: number, ascent: number): void => {
     for (const text of texts) { lines.push({ text, cls, dy: y + ascent }); y += lineHeight; }
   };
@@ -76,9 +113,95 @@ function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number;
   return { w: Math.ceil(w + 12), h: Math.ceil(y + 3), lines };
 }
 
-/** Width of an empty group. ELK sizes a group with children from the children alone, so svg.ts fits the label to it. */
-const emptyGroupWidth = (el: SpecElement): number =>
-  Math.ceil(Math.max(160, textWidth(el.name, GROUP_NAME_PX, true) + 8 + textWidth(kindLine(el), GROUP_KIND_PX) + 30));
+/** Width of a group's label on one line: name, then kind. */
+export const groupLabelWidth = (el: SpecElement): number =>
+  textWidth(el.name, GROUP_NAME_PX, true) + 8 + textWidth(kindLine(el), GROUP_KIND_PX);
+
+/** The narrowest a group can be and still show its label on one line, with its badge beside it. */
+export function groupMinWidth(el: SpecElement): number {
+  const status = active(el.status);
+  return Math.ceil(groupLabelWidth(el) + 2 * GROUP_PAD_X + 2 + (status ? badgeWidth(status) + BADGE_GAP : 0));
+}
+
+/**
+ * The badge of a group sits in the label row, as far right as it can without covering a line.
+ * Lines cross a group to reach its children, so the row is searched for a clear place.
+ * `hits` counts the lines under the best place found; `layout` widens the group when it is not 0.
+ */
+function groupBadge(b: NodeBox, edges: EdgePath[]): { rect: Rect; hits: number } | undefined {
+  const status = active(b.el.status);
+  if (!status) return undefined;
+  const w = badgeWidth(status);
+  const y = b.y + 13;
+  const right = b.x + b.w - 12 - w;
+  const left = Math.min(right, b.x + GROUP_PAD_X + groupLabelWidth(b.el) + BADGE_GAP);
+  const places: number[] = [];
+  for (let x = right; x >= left; x -= 2) places.push(x);
+  places.push(right + 2, right + 4, right + 6);
+  let best = { x: right, hits: Infinity };
+  for (const x of places) {
+    const hits = edges.filter((e) => crossesRect(e.points, { x, y, w, h: BADGE_H }, 4)).length;
+    if (hits < best.hits) best = { x, hits };
+    if (hits === 0) break;
+  }
+  return { rect: { x: best.x, y, w, h: BADGE_H }, hits: best.hits };
+}
+
+type Side = 'N' | 'E' | 'S' | 'W';
+function sideOf(p: Pt, b: Rect): Side | undefined {
+  if (Math.abs(p.y - b.y) < 0.5) return 'N';
+  if (Math.abs(p.y - (b.y + b.h)) < 0.5) return 'S';
+  if (Math.abs(p.x - b.x) < 0.5) return 'W';
+  if (Math.abs(p.x - (b.x + b.w)) < 0.5) return 'E';
+  return undefined;
+}
+
+/**
+ * ELK draws a self-relationship as a loop about 10px deep, too small to read.
+ * This redraws it on the same side of the element, deeper and wider, and puts the label beyond it.
+ * `placed` is the room ELK kept for the label, which `LOOP_PAD` made large enough for both.
+ */
+function growLoop(path: EdgePath, box: NodeBox, placed: Rect | undefined, others: EdgePath[]): void {
+  const first = path.points[0], last = path.points.at(-1);
+  const label = path.label;
+  if (label && placed) {
+    label.x = placed.x + (placed.w - label.w) / 2;
+    label.y = placed.y + (placed.h - label.h) / 2;
+  }
+  if (!first || !last || path.points.length < 2) return;
+  const side = sideOf(first, box);
+  if (!side || side !== sideOf(last, box)) return;
+  const flat = side === 'N' || side === 'S';
+  const along = (p: Pt): number => (flat ? p.x : p.y);
+  const corner = box.el.type === 'person' ? 20 : 8;
+  let lo = (flat ? box.x : box.y) + corner, hi = (flat ? box.x + box.w : box.y + box.h) - corner;
+  const mid = (along(first) + along(last)) / 2;
+  // Stay clear of the other lines that end on this side.
+  for (const other of others) {
+    const ends = [other.rel.from === box.el.id ? other.points[0] : undefined, other.rel.to === box.el.id ? other.points.at(-1) : undefined];
+    for (const p of ends) {
+      if (!p || sideOf(p, box) !== side) continue;
+      if (along(p) < mid) lo = Math.max(lo, along(p) + 10); else hi = Math.min(hi, along(p) - 10);
+    }
+  }
+  const span = Math.min(Math.max(Math.abs(along(last) - along(first)), LOOP_SPAN), LOOP_SPAN_MAX, Math.max(0, hi - lo));
+  if (span < 16) return;
+  const start = Math.max(lo, Math.min(mid - span / 2, hi - span));
+  const [a, z] = along(first) <= along(last) ? [start, start + span] : [start + span, start];
+  const out = side === 'N' ? box.y - LOOP_OUT : side === 'S' ? box.y + box.h + LOOP_OUT : side === 'W' ? box.x - LOOP_OUT : box.x + box.w + LOOP_OUT;
+  const edge = side === 'N' ? box.y : side === 'S' ? box.y + box.h : side === 'W' ? box.x : box.x + box.w;
+  const pt = (pos: number, depth: number): Pt => (flat ? { x: pos, y: depth } : { x: depth, y: pos });
+  path.points = [pt(a, edge), pt(a, out), pt(z, out), pt(z, edge)];
+  if (!label) return;
+  const centre = start + span / 2;
+  if (flat) {
+    label.x = centre - label.w / 2;
+    label.y = side === 'N' ? out - 5 - label.h : out + 5;
+  } else {
+    label.y = centre - label.h / 2;
+    label.x = side === 'W' ? out - 5 - label.w : out + 5;
+  }
+}
 
 /** Move an edge end from the bounding box onto the curved side of a cylinder or pipe. */
 function snap(p: Pt, n: NodeBox): void {
@@ -126,72 +249,121 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   };
   const boxes = new Map<string, NodeBox>();
   // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
-  const build = (el: SpecElement, depth: number, seen: Set<string>): any => {
+  const build = (el: SpecElement, depth: number, seen: Set<string>, widen: Map<string, number>): any => {
     const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
     const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
     const text = group ? { h: 64, lines: [] } : leafText(el, compact, nodeW);
-    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyGroupWidth(el) : nodeW, h: text.h, lines: text.lines });
+    const emptyW = Math.max(160, groupMinWidth(el));
+    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyW : nodeW, h: text.h, lines: text.lines });
     if (!group) return { id: el.id, width: nodeW, height: text.h };
     const below = new Set(seen).add(el.id);
+    const side = compact ? 14 : 18;
     return {
       id: el.id,
-      width: emptyGroupWidth(el),
+      width: emptyW,
       height: 64,
       layoutOptions: {
         ...common,
-        'elk.padding': compact ? '[top=38,left=14,bottom=14,right=14]' : '[top=46,left=18,bottom=18,right=18]',
+        'elk.padding': `[top=${compact ? 38 : 46},left=${side},bottom=${side},right=${side + (widen.get(el.id) ?? 0)}]`,
       },
-      children: children.map((c) => build(c, depth + 1, below)),
+      children: children.map((c) => build(c, depth + 1, below, widen)),
     };
   };
-  const children = (kids.get(undefined) ?? []).map((el) => build(el, 0, new Set()));
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
-  const edges = spec.relationships.flatMap((rel, i) => {
-    if (!boxes.has(rel.from) || !boxes.has(rel.to)) return [];
-    const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
-    labels.set(i, label);
-    return [{ id: `e${i}`, sources: [rel.from], targets: [rel.to], labels: [{ id: `l${i}`, text: rel.label, width: label.w, height: label.h, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
-  });
-  // Model order keeps the layout close to the order the spec lists things in.
-  // ELK rejects it on some nested graphs, so the second attempt runs without it.
-  const graph = (modelOrder: boolean): unknown => ({
-    id: 'root',
-    layoutOptions: {
-      ...common,
-      ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}),
-      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-      'elk.padding': '[top=0,left=0,bottom=0,right=0]',
-      'elk.json.edgeCoords': 'ROOT',
-      'elk.json.shapeCoords': 'ROOT',
-    },
-    children,
-    edges,
-  });
   const elk = new (ELK as any)();
-  const done: any = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
-
-  const paths: EdgePath[] = [];
-  const walk = (node: any): void => {
-    for (const child of node.children ?? []) {
-      Object.assign(boxes.get(child.id)!, { x: child.x, y: child.y, w: child.width, h: child.height });
-      walk(child);
-    }
-    for (const edge of node.edges ?? []) {
-      const i = Number(String(edge.id).slice(1));
-      const rel = spec.relationships[i]!;
-      const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint])
-        .map((p: Pt) => ({ x: p.x, y: p.y }));
-      const placed = edge.labels?.[0];
-      const label = labels.get(i)!;
-      paths.push({ rel, points, label: placed ? { x: placed.x, y: placed.y, w: label.w, h: label.h, lines: label.lines } : undefined });
-    }
+  const run = async (widen: Map<string, number>): Promise<any> => {
+    boxes.clear();
+    const children = (kids.get(undefined) ?? []).map((el) => build(el, 0, new Set(), widen));
+    const edges = spec.relationships.flatMap((rel, i) => {
+      if (!boxes.has(rel.from) || !boxes.has(rel.to)) return [];
+      const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
+      labels.set(i, label);
+      const pad = rel.from === rel.to ? LOOP_PAD : 0;
+      return [{ id: `e${i}`, sources: [rel.from], targets: [rel.to], labels: [{ id: `l${i}`, text: rel.label, width: label.w + pad, height: label.h + pad, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
+    });
+    // Model order keeps the layout close to the order the spec lists things in.
+    // ELK rejects it on some nested graphs, so the second attempt runs without it.
+    const graph = (modelOrder: boolean): unknown => ({
+      id: 'root',
+      layoutOptions: {
+        ...common,
+        ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}),
+        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+        'elk.padding': '[top=0,left=0,bottom=0,right=0]',
+        'elk.json.edgeCoords': 'ROOT',
+        'elk.json.shapeCoords': 'ROOT',
+      },
+      children,
+      edges,
+    });
+    const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
+    const place = (node: any): void => {
+      for (const child of node.children ?? []) {
+        Object.assign(boxes.get(child.id)!, { x: child.x, y: child.y, w: child.width, h: child.height });
+        place(child);
+      }
+    };
+    place(done);
+    return done;
   };
-  walk(done);
-  for (const path of paths) {
-    if (path.points.length < 2) continue;
-    snap(path.points[0]!, boxes.get(path.rel.from)!);
-    snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
+  const read = (done: any): EdgePath[] => {
+    const paths: EdgePath[] = [];
+    const loops: { path: EdgePath; placed?: Rect }[] = [];
+    const walk = (node: any): void => {
+      for (const child of node.children ?? []) walk(child);
+      for (const edge of node.edges ?? []) {
+        const i = Number(String(edge.id).slice(1));
+        const rel = spec.relationships[i]!;
+        const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint])
+          .map((p: Pt) => ({ x: p.x, y: p.y }));
+        const placed = edge.labels?.[0];
+        const label = labels.get(i)!;
+        const path: EdgePath = { rel, points, label: placed ? { x: placed.x, y: placed.y, w: label.w, h: label.h, lines: label.lines } : undefined };
+        paths.push(path);
+        if (rel.from === rel.to) loops.push({ path, placed: placed ? { x: placed.x, y: placed.y, w: placed.width, h: placed.height } : undefined });
+      }
+    };
+    walk(done);
+    for (const { path, placed } of loops) growLoop(path, boxes.get(path.rel.from)!, placed, paths.filter((p) => p !== path));
+    for (const path of paths) {
+      if (path.points.length < 2) continue;
+      snap(path.points[0]!, boxes.get(path.rel.from)!);
+      snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
+    }
+    return paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
+  };
+  // ELK sizes a group from its children alone, and does not know about the label or the badge.
+  // A group narrower than its label, or one whose label row has no place for the badge that is
+  // clear of lines, is laid out again with that much more padding on the right.
+  // (`elk.nodeSize.minimum` would do the first in one pass, but elkjs 0.12 swaps its width and
+  // height on a group with children in a top-down layout.)
+  const widen = new Map<string, number>();
+  const roomed = new Set<string>();
+  let done: any, paths: EdgePath[] = [];
+  for (let pass = 0; pass < 5; pass++) {
+    done = await run(widen);
+    paths = read(done);
+    let again = false;
+    // Deepest first: a group that grows makes the groups around it grow too.
+    const groups = [...boxes.values()].filter((g) => g.group).sort((a, z) => z.depth - a.depth);
+    const gained = new Map<string | undefined, number>();
+    for (const b of groups) {
+      const inside = gained.get(b.el.id) ?? 0;
+      const missing = Math.max(0, Math.ceil(groupMinWidth(b.el) - b.w - inside));
+      if (missing > 0) { widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + missing); again = true; }
+      gained.set(b.el.parent, Math.max(gained.get(b.el.parent) ?? 0, inside + missing));
+    }
+    if (!again) {
+      for (const b of groups) {
+        const found = groupBadge(b, paths);
+        if (!found || found.hits === 0 || roomed.has(b.el.id)) continue;
+        roomed.add(b.el.id);
+        widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + found.rect.w + BADGE_GAP);
+        again = true;
+      }
+    }
+    if (!again) break;
   }
-  paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
+  for (const b of boxes.values()) b.badge = b.group ? groupBadge(b, paths)?.rect : leafBadge(b);
   return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact };
 }
