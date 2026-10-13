@@ -1,5 +1,7 @@
 # gh-wat-dis
 
+![A confused tabby cat stares at a laptop full of code. Caption: GH WAT DIS? I CAN HAS CONTEXT?](docs/og.jpg)
+
 Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on in two minutes: the problem and the solution first, the system design next, the long data for agents folded away at the end.
 
 It ships as one npm package: nine skills, plus small tools the skills call through `npx`. A project installs nothing.

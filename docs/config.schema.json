@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tjw.dev/gh-wat-dis/config.schema.json",
+  "title": "gh-wat-dis repository config",
+  "description": "Policy and defaults for the wat skills in one repository. Lives at .agents/gh-wat-dis/config.json.",
+  "type": "object",
+  "required": [
+    "version",
+    "policy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "use"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "use": {
+          "enum": [
+            "always",
+            "ask",
+            "never"
+          ],
+          "description": "always: agents use the skills without asking. ask: once per session. never: do not use them."
+        },
+        "confirmBeforeWrite": {
+          "type": "boolean",
+          "description": "Show each draft to the user before it is posted."
+        }
+      }
+    },
+    "repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "defaultBranch": {
+          "type": "string"
+        }
+      }
+    },
+    "issues": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The kinds of work, for example Task, Bug, Feature."
+        },
+        "typeSource": {
+          "enum": [
+            "issue-type",
+            "label"
+          ],
+          "description": "issue-type: GitHub issue types (organization repositories). label: one label per type (a repository under a user account has no issue types)."
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agents": {
+          "type": "string",
+          "description": "The label for agent memory, agentic workflows and work managed by autonomous agents."
+        },
+        "surfaces": {
+          "type": "array",
+          "description": "One label for each part of the product an issue can touch.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "elements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Ids of the architecture elements this surface covers."
+              }
+            }
+          }
+        }
+      }
+    },
+    "pulls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "draft": {
+          "type": "boolean"
+        },
+        "closingKeyword": {
+          "type": "string"
+        }
+      }
+    },
+    "milestones": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "naming": {
+          "type": "string"
+        },
+        "capacity": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "staleIssueDays": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stalePrDays": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
+          }
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "person",
+                  "system",
+                  "container",
+                  "component",
+                  "datastore",
+                  "queue",
+                  "boundary",
+                  "node"
+                ]
+              },
+              "technology": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "parent": {
+                "type": "string"
+              },
+              "external": {
+                "type": "boolean"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Globs. The first element that matches a file owns it."
+              }
+            }
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "technology": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
