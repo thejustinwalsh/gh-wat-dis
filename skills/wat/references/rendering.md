@@ -35,6 +35,7 @@ Use the richest element that carries the information in the fewest words. Check 
 
 ## Images
 
+- **Centre a diagram** by wrapping its image line in `<div align="center">` and `</div>`, with a blank line inside each tag. GitHub keeps the `align` attribute and centres the image. The image line stays Markdown, so `gh --attach` still finds the local path.
 - **Attach with `gh`.** `gh issue create --body-file body.md --attach ./diagram.svg`. Reference the local path in the body (`![Title](./diagram.svg)`) and `gh` swaps in the uploaded URL. Without a reference, `gh` appends the image.
 - Formats: PNG, JPEG, GIF, WebP, SVG, MP4, MOV, WebM. 10 MB per image.
 - Needs gh 2.99.0 or later, GitHub.com or Enterprise Cloud, and write access.

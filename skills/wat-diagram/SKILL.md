@@ -51,11 +51,15 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ```
    Check that no label overlaps a box, that nothing is cut at an edge, and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram. This command is the way to see a diagram: it draws the whole image at twice its size, which a preview or thumbnail tool does not promise. The PNG is for you to inspect. GitHub gets the SVG. The PNG shows the light colours, and both colour schemes share one layout, so one look covers both.
 7. **No issue or PR to put it in?** When the user asked only for the diagram, stop here: give the path of the SVG and print the legend table when the lines are numbered. Do not attach it anywhere.
-8. **Reference it** in the body by its local path. The alt text is the diagram title:
+8. **Reference it** in the body by its local path, centred. The alt text is the diagram title:
    ```markdown
+   <div align="center">
+
    ![Checkout: payment retries move to a worker](./<name>.svg)
+
+   </div>
    ```
-   Write the path relative to the body file. Put the diagram right after the opening and the alert.
+   Write the three parts at the start of their lines in the body, with the blank lines as shown: GitHub centres what is inside the `div`, and it renders the image only when a blank line separates it from the tags. Write the path relative to the body file. Put the diagram right after the opening and the alert.
 9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. Run `gh` from the folder that holds the body file, and pass each file as the body writes it: the body says `![Title](./<name>.svg)`, the flag says `--attach ./<name>.svg`. `gh` matches the two, uploads the file and puts the uploaded URL where the local path was. Then read the posted body: every image link starts with `https://`. A local path still in the body means the two did not match and `gh` put the image at the end. Repair it by moving that URL into the image line and updating the body with `gh issue edit` or `gh pr edit --body-file`.
 
 ## Spec

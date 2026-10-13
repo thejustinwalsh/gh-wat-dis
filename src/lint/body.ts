@@ -68,6 +68,23 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       if (local && exists && !exists(target)) err(l.n, `image file "${target}" does not exist next to the body. gh --attach has nothing to upload.`);
     }
   }
+  // A diagram on a line of its own is centred: <div align="center">, a blank line, the image, a blank line, </div>.
+  const OPEN = /^\s*<div\s+align=["']center["']\s*>\s*$/i;
+  const CLOSE = /^\s*<\/div>\s*$/i;
+  L.forEach((l, i) => {
+    if (l.kind === 'code' || l.kind === 'fence' || !/^\s*!\[[^\]]*\]\([^)]+\)\s*$/.test(l.t)) return;
+    const before = L[i - 1];
+    const after = L[i + 1];
+    if ((before && OPEN.test(before.t)) || (after && CLOSE.test(after.t))) {
+      err(l.n, 'leave a blank line between <div align="center"> and the image, and between the image and </div>. GitHub does not render the image without them.');
+      return;
+    }
+    const prev = L.slice(0, i).reverse().find((x) => x.kind !== 'blank');
+    const next = L.slice(i + 1).find((x) => x.kind !== 'blank');
+    if (!(prev && OPEN.test(prev.t) && next && CLOSE.test(next.t))) {
+      warn(l.n, 'this image is not centred. Wrap it: <div align="center">, a blank line, the image, a blank line, </div>.');
+    }
+  });
   for (const l of L) {
     if (l.kind === 'fence' && l.lang === 'mermaid') {
       const type = (L[l.n]?.t ?? '').split(/\s+/)[0];

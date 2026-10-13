@@ -121,6 +121,18 @@ test('lint passes a well-formed body with link lines last', () => {
   assert.deepEqual(lintBody(GOOD, { kind: 'pr' }), { errors: [], warnings: [] });
 });
 
+test('lint: a diagram on its own line is centred, with blank lines inside the div', () => {
+  const body = (img: string): string => `Opening sentence.\n\n${img}\n\n## System\nText.\n`;
+  const ok = lintBody(body('<div align="center">\n\n![Title](https://example.com/a.svg)\n\n</div>'), { kind: 'issue' });
+  assert.deepEqual(ok, { errors: [], warnings: [] });
+  const bare = lintBody(body('![Title](https://example.com/a.svg)'), { kind: 'issue' });
+  assert.match(bare.warnings[0]!.msg, /not centred/);
+  const tight = lintBody(body('<div align="center">\n![Title](https://example.com/a.svg)\n</div>'), { kind: 'issue' });
+  assert.match(tight.errors[0]!.msg, /leave a blank line/);
+  const inTable = lintBody(body('| Before | After |\n|---|---|\n| ![a](https://example.com/a.png) | ![b](https://example.com/b.png) |'), { kind: 'pr' });
+  assert.deepEqual(inTable.warnings, []);
+});
+
 test('lint warns when the agent context has no code block to copy', () => {
   const plain = 'Outcome.\n\n<details>\n<summary>Agent context</summary>\n\ndata\n\n</details>\n';
   const { errors, warnings } = lintBody(plain, { kind: 'issue' });
