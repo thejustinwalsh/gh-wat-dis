@@ -80,16 +80,16 @@ test('select resolves ids and status selectors', () => {
   assert.throws(() => focus(big(), { on: ['nope'] }), UsageError);
 });
 
-test('collapse folds descendants in, re-points and merges parallel relationships', () => {
+test('collapse folds descendants in, re-points, and merges only relationships that say the same thing', () => {
   const frozen = JSON.stringify(big());
   const input = big();
   const out = collapse(input, { toType: 'container' });
   assert.equal(JSON.stringify(input), frozen, 'input mutated');
   assert.deepEqual(idsOf(out), ['user', 'sys', 'web', 'api', 'db', 'mail', 'lonely']);
-  assert.deepEqual(edges(out), ['user>web', 'web>api', 'api>db', 'api>mail']);
-  const merged = out.relationships[1]!;
-  assert.equal(merged.label, 'Posts orders; Reads prices');
-  assert.equal(merged.technology, 'HTTPS, gRPC');
+  assert.deepEqual(edges(out), ['user>web', 'web>api', 'web>api', 'api>db', 'api>mail']);
+  assert.deepEqual(out.relationships.slice(1, 3).map((r) => [r.label, r.technology]), [['Posts orders', 'HTTPS'], ['Reads prices', 'gRPC']], 'two different labels stay two lines');
+  const same = collapse({ ...input, relationships: input.relationships.map((r) => ({ ...r, label: 'Calls' })) }, { toType: 'container' });
+  assert.deepEqual(edges(same), ['user>web', 'web>api', 'api>db', 'api>mail'], 'the same label merges into one line');
   const api = out.elements.find((e) => e.id === 'api')!;
   assert.equal(api.meta?.collapsed, 2);
   assert.equal(api.status, 'changed');

@@ -90,8 +90,9 @@ export function collapse(spec: DiagramSpec, opts: CollapseOptions): DiagramSpec 
     const from = into.get(r.from) ?? r.from, to = into.get(r.to) ?? r.to;
     const moved = from !== r.from || to !== r.to;
     if (moved && from === to) continue;
-    // Only relationships that were re-pointed merge; parallels the author drew stay apart.
-    const key = moved ? JSON.stringify([from, to]) : `as-is ${groups.size}`;
+    // Only relationships that were re-pointed merge, and only when they say the same thing: two labels
+    // joined into one line read as nothing. Parallels the author drew stay apart.
+    const key = moved ? JSON.stringify([from, to, r.label]) : `as-is ${groups.size}`;
     const group = groups.get(key) ?? { moved, rels: [] };
     group.rels.push(moved ? { ...r, from, to } : r);
     groups.set(key, group);
