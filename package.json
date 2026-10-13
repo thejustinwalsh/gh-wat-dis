@@ -42,7 +42,8 @@
     "typecheck": "tsc -p .",
     "test": "node --test \"test/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "site:skills": "node scripts/site-skills.ts"
   },
   "dependencies": {
     "@ast-grep/lang-rust": "^0.0.7",

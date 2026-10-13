@@ -195,6 +195,16 @@ tr + tr td { border-top: 1px solid var(--card-line); }
 .skills dl div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; align-items: baseline; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .skills dt { font: 700 15px/1.6 var(--mono); color: var(--type); }
 .skills dd { margin: 0; color: var(--string); }
+/* The full list, with each skill's own description. Written by scripts/site-skills.ts. */
+.skills details.all { grid-column: 2; margin-top: -40px; }
+.skills details.all summary { display: inline-flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; font: 500 14px/1.4 var(--mono); color: var(--muted); }
+.skills details.all summary::-webkit-details-marker { display: none; }
+.skills details.all summary::before { content: "▸"; }
+.skills details.all[open] summary::before { transform: rotate(90deg); }
+.skills details.all summary:hover { color: var(--strong); }
+.skills details.all summary:focus-visible { outline: 2px solid var(--keyword); outline-offset: 4px; }
+.skills details.all dl { margin-top: 8px; }
+.skills details.all dd { color: var(--ink); }
 
 .closing { border-top: 1px solid var(--line); }
 .closing .wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 72px; }
@@ -207,6 +217,7 @@ footer span { color: var(--muted); }
 
 @media (max-width: 1000px) {
   .stage .wrap, .skills .wrap, .closing .wrap { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .skills details.all { grid-column: 1; margin-top: -20px; }
   .pipe { grid-template-columns: minmax(0, 1fr); }
   .step { border-right: 0; border-bottom: 1px solid var(--line); min-height: 0; }
   .step:last-child { border-bottom: 0; }
@@ -415,6 +426,23 @@ Links read
       <div><dt>wat-setup</dt><dd>“Set up gh-wat-dis and the GitHub MCP server.”</dd></div>
       <div><dt>wat-migrate</dt><dd>“Migrate this repo and its open issues to gh-wat-dis.”</dd></div>
     </dl>
+    <details class="all">
+      <summary>See all skills</summary>
+      <!-- skills:all -->
+      <dl>
+        <div><dt>wat</dt><dd>Entry point and house rules for GitHub project management.</dd></div>
+        <div><dt>wat-architecture</dt><dd>Understand and describe software architecture for issues and PRs. Maps a repository to C4 elements (systems, containers, components), saves the map in .agents/gh-wat-dis/config.json, collects labeled facts on what a change reaches with git and AST analysis (TypeScript, JavaScript, Rust), and picks the right diagram type.</dd></div>
+        <div><dt>wat-diagram</dt><dd>Make a system design diagram as an SVG and attach it to a GitHub issue, PR or comment. Writes a small JSON spec of C4 elements and relationships with optional change status (added, changed, removed, affected), lints it against C4 notation, renders it with ELK layout, and uploads it with gh --attach.</dd></div>
+        <div><dt>wat-issue</dt><dd>Create or edit a GitHub issue that states the system design impact, the work, the risks and the evidence in a fixed, scannable shape, with an attached diagram when structure changes.</dd></div>
+        <div><dt>wat-maintain</dt><dd>Run GitHub project maintenance. Audits stale issues and PRs, label hygiene, stalled or blocked milestones, issues missing fields, broken links between issues and PRs, and bodies that fail the gh-wat-dis format, then proposes a batch of fixes.</dd></div>
+        <div><dt>wat-migrate</dt><dd>Migrate a GitHub repository that already has history onto gh-wat-dis. Makes sure gh-wat-dis is installed and configured, surveys the open issues, labels and milestones, then walks the user through the milestones, triage of the open issues, and rewrites of issue bodies. Shows one rewrite as a local before and after first, then works in batches of 5, one milestone at a time, then the backlog. Leaves open pull requests alone.</dd></div>
+        <div><dt>wat-milestone</dt><dd>Create, plan, track and close GitHub milestones. Writes a short milestone description plus a tracking issue with a system diagram, reports status from the milestone tool (counts, what is in review, what is blocked, done-when conditions), and proposes scope cuts. Milestones run in sequence with no due dates.</dd></div>
+        <div><dt>wat-pr</dt><dd>Open or rewrite a GitHub pull request whose description states the design decision, the measured blast radius, how to verify it and what can go wrong, with a change-impact diagram when structure changes.</dd></div>
+        <div><dt>wat-setup</dt><dd>Set up gh-wat-dis. Installs the wat skills into the user's agent harness, connects the GitHub MCP server (Claude Code, Codex, Cursor, Gemini CLI, OpenCode, GitHub Copilot, VS Code, Windsurf), checks the GitHub CLI, and writes the repo config at .agents/gh-wat-dis/config.json.</dd></div>
+        <div><dt>wat-triage</dt><dd>Triage GitHub issues. Sets the issue type and the product-surface labels, proposes a priority for a person to decide, finds duplicates and missing information, records parent and blocked-by relations, helps define the label set, and proposes which milestone each issue belongs to with a reason.</dd></div>
+      </dl>
+      <!-- /skills:all -->
+    </details>
   </div>
 </section>
 
