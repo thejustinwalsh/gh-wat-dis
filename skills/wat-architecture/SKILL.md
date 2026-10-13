@@ -20,10 +20,11 @@ The map gives every issue and PR the same names for the same things. It lives in
    - Any: `Dockerfile`, `docker-compose.yml`, `Procfile`, Kubernetes and Terraform files, serverless config, CI deploy jobs
    - Connection strings and client constructors for data stores, queues and third-party APIs
 2. **Find the people and external systems.** Who calls in (users, other teams' systems, webhooks) and what the code calls out to (payment, email, auth providers).
-3. **Find components only where work happens.** A component is a group of code behind one interface: a module with a public entry file, a library crate. Map components for the containers that change often. Skip the rest.
-4. **Name relationships by intent and protocol.** "Reads orders from [SQL]", "Publishes OrderPlaced to [Kafka]". Never a bare "uses".
-5. **Check against the code.** Run `npx gh-wat-dis elements` to see which files each element maps and which files are unmapped. Run `npx gh-wat-dis impact --base <an older ref>` and compare `edges` with your relationships. An import edge the map lacks is a missing relationship. Add it or ask the user.
-6. **Show the user** a container diagram (`wat-diagram`) and the element list. Save the map only after a yes.
+3. **Find the execution contexts inside a container.** In a browser app or a native app, the boundaries that matter are often inside one process: main thread, Web Workers, a WASM module, a native addon. Map each as a `boundary` with a `kind`. Calls that cross one have a protocol: an ABI, a message format, shared memory. That protocol is a contract.
+4. **Find components only where work happens.** A component is a group of code behind one interface: a module with a public entry file, a library crate. Map components for the containers that change often. Skip the rest.
+5. **Name relationships by intent and protocol.** "Reads orders from [SQL]", "Publishes OrderPlaced to [Kafka]". Never a bare "uses".
+6. **Check against the code.** Run `npx gh-wat-dis elements` to see which files each element maps and which files are unmapped. Run `npx gh-wat-dis impact --base <an older ref>` and compare `edges` with your relationships. An import edge the map lacks is a missing relationship. Add it or ask the user.
+7. **Show the user** a container diagram (`wat-diagram`) and the element list. Save the map only after a yes.
 
 ```json
 "architecture": {
@@ -103,6 +104,7 @@ A yes goes in `Risks` with what the change does about it, or in `Unknowns` with 
 | New external system or new kind of user | System context |
 | Adds, removes or rewires a container or data store | Container, with change status |
 | Reshapes modules or crates inside one container | Component, for that container only |
+| Moves work across a thread, worker or WASM boundary, or changes an ABI or message format | Component, with the execution contexts as nested boundaries |
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
 | Stays inside one component, no contract change | None. Use a `diff` block or a table. |

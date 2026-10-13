@@ -1,5 +1,5 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
-import type { DiagramSpec } from '../spec.ts';
+import type { DiagramSpec, Detail } from '../spec.ts';
 import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, PIPE_RX, badgeWidth, layout } from './layout.ts';
 import type { EdgePath, NodeBox, Pt } from './layout.ts';
 import { escapeXml, fit, textWidth } from './measure.ts';
@@ -210,8 +210,8 @@ function describe(spec: DiagramSpec, subtitle: string): string {
   return `${subtitle}. ${els.length} elements: ${els.join(', ')}. ${rels.length} relationships: ${rels.join('; ')}.`;
 }
 
-export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName } = {}): Promise<string> {
-  const g = await layout(spec);
+export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName; detail?: Detail } = {}): Promise<string> {
+  const g = await layout(spec, { detail: opts.detail });
   const kind = spec.type[0]!.toUpperCase() + spec.type.slice(1);
   const subtitle = `${kind} diagram${spec.scope ? ` for ${spec.scope}` : ''}`;
   const width = Math.ceil(Math.max(g.width, textWidth(spec.title, 18, true), textWidth(subtitle, 12.5), MIN_WIDTH) + 2 * MARGIN);

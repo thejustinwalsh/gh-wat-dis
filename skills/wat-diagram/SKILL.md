@@ -82,7 +82,9 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
 | `type` | `context`, `container`, `component`, `dynamic`, `deployment`, `landscape` |
 | `direction` | `DOWN` (default), `RIGHT` for pipelines and sequences |
 | element `type` | `person`, `system`, `container`, `component`, `datastore`, `queue`, `boundary`, `node` |
+| `kind` | Free text that replaces the type label: `Web Worker`, `WASM module`, `Thread`, `npm package`, `Rust crate`, `Shared memory` |
 | `parent` | id of a `boundary`, `node` or `system` element: nests the element inside it |
+| `detail` | `auto` (default), `full`, `compact`. Compact shows name and technology only. `auto` goes compact above 5 elements. |
 | `external` | `true` for anything the team does not own |
 | `status` | `added`, `changed`, `removed`, `affected` (reached, not modified). Omit for unchanged. |
 | relationship `order` | Step number on a `dynamic` diagram |
@@ -97,11 +99,35 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
 - **A dynamic diagram has 8 steps at most.** Longer flows go in a numbered list.
 - The renderer adds the title, the subtitle and the key. Do not repeat them in the body.
 
+## Inside one process or one repository
+
+Not every system is services and databases. For a library, an app in one browser tab, or a monorepo of packages, the same spec draws the software architecture. See `examples/diagrams/in-process.json` in the package.
+
+| The thing | Draw it as |
+|---|---|
+| Execution context: thread, Web Worker, WASM instance, process, iframe | `boundary` with a `kind`, nested by `parent` |
+| Package, crate or module | `component` with `kind`: `npm package`, `Rust crate` |
+| Shared memory, a cache, an in-memory store | `datastore` with a `kind` |
+| A call across a boundary | A relationship whose `technology` names the mechanism: `wasm-bindgen ABI`, `postMessage, structured clone`, `transferred ArrayBuffer`, `SharedArrayBuffer + Atomics`, `FFI`, `function call` |
+
+- **The mechanism is the point.** A reviewer needs to see where data is copied, transferred or shared, and where a call turns async. Put it on the edge.
+- **Draw a request and its reply as one edge** when they travel the same channel: "Posts LayoutRequest, gets glyph runs back".
+- **Leave out build-time edges** such as `import type` of a shared types package, unless the change is to that contract. Name the package in the body.
+- **Nest by where code runs, not by folder.** A package that runs in two contexts appears in the one this change touches.
+
+## Keep it compact
+
+- Above 5 elements the renderer drops descriptions. The body's `Change` table carries them.
+- A chain of more than 5 steps top to bottom reads as a scroll. Cut it with `graph focus`, or fold a side with `graph collapse`.
+- `direction: RIGHT` suits a pipeline of 4 or fewer stages. It gets wide fast.
+- Remove an edge that the reader does not need for this change.
+
 ## Options
 
 | Need | Command |
 |---|---|
 | Check a spec only | `npx gh-wat-dis diagram spec.json --lint-only` |
+| Show or hide descriptions | `--detail full` or `--detail compact` |
 | Force a palette | `--theme light` or `--theme dark` (default `auto` follows the reader's system) |
 | Two files for a `<picture>` tag | `--theme split` writes `.light.svg` and `.dark.svg` |
 | Mermaid text, no file | `npx gh-wat-dis diagram spec.json --mermaid` |

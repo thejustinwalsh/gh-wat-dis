@@ -16,4 +16,4 @@ export type ActiveStatus = Exclude<Status, 'unchanged'>;
 export const active = (s: Status | undefined): ActiveStatus | undefined => (s === 'unchanged' ? undefined : s);
 
 export const kindLine = (el: SpecElement): string =>
-  `[${el.external ? 'External ' : ''}${TYPE_LABEL[el.type] ?? el.type}${el.technology ? `: ${el.technology}` : ''}]`;
+  `[${el.external ? 'External ' : ''}${el.kind?.trim() || (TYPE_LABEL[el.type] ?? el.type)}${el.technology ? `: ${el.technology}` : ''}]`;

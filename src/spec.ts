@@ -15,10 +15,15 @@ export const PROVENANCE = ['exact', 'resolved', 'measured', 'heuristic'] as cons
 /** The kind of source behind a fact. It names where the fact came from. It is not a rating. */
 export type Provenance = (typeof PROVENANCE)[number];
 
+export const DETAILS = ['auto', 'full', 'compact'] as const;
+export type Detail = (typeof DETAILS)[number];
+
 export interface SpecElement {
   id: string;
   type: ElementType;
   name: string;
+  /** Replaces the type label: "Web Worker", "WASM module", "npm package", "Rust crate", "Thread". */
+  kind?: string;
   technology?: string;
   description?: string;
   /** id of a boundary, node or system element that contains this one */
@@ -45,6 +50,8 @@ export interface DiagramSpec {
   type: DiagramType;
   scope?: string;
   direction?: 'DOWN' | 'RIGHT';
+  /** How much text each element shows. `auto` (default) drops descriptions once a diagram has more than 5 elements. */
+  detail?: Detail;
   elements: SpecElement[];
   relationships: SpecRelationship[];
 }

@@ -1,5 +1,5 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
-import type { DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
+import type { Detail, DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
 import { textWidth, wrap } from './measure.ts';
 import { STATUS_BADGE, STATUS_MARK, active, kindLine } from './vocab.ts';
 
@@ -23,23 +23,24 @@ export const GROUP_NAME_PX = 13;
 export const GROUP_KIND_PX = 10.5;
 export const BADGE_PX = 9.5;
 const PAD_X = 14;
-const LABEL_MAX = 150;
+const LABEL_MAX = 170;
+const FULL_DETAIL_MAX = 5;
 const TOP_INSET: Record<string, number> = { person: 40, datastore: 2 * CYLINDER_RY + 8 };
 
 export const badgeWidth = (status: string): number => textWidth(STATUS_BADGE[status] ?? '', BADGE_PX, true) + 14;
 
-function leafText(el: SpecElement): { h: number; lines: TextLine[] } {
+function leafText(el: SpecElement, compact: boolean): { h: number; lines: TextLine[] } {
   const inner = NODE_W - 2 * PAD_X - (el.type === 'queue' ? 2 * PIPE_RX : 0);
   const lines: TextLine[] = [];
-  let y = TOP_INSET[el.type] ?? 14;
+  let y = TOP_INSET[el.type] ?? (compact ? 11 : 14);
   const add = (texts: string[], cls: string, lineHeight: number, ascent: number): void => {
     for (const text of texts) { lines.push({ text, cls, dy: y + ascent }); y += lineHeight; }
   };
   add(wrap(el.name, 14, inner, true), 'nm', 18, 13.5);
   y += 1;
   add(wrap(kindLine(el), 11, inner), 'ty', 14, 10.5);
-  if (el.description) { y += 6; add(wrap(el.description, 12, inner), 'ds', 16, 11.5); }
-  return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : 13)), lines };
+  if (el.description && !compact) { y += 6; add(wrap(el.description, 12, inner), 'ds', 16, 11.5); }
+  return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : compact ? 10 : 13)), lines };
 }
 
 function edgeLabel(rel: SpecRelationship): { w: number; h: number; lines: TextLine[] } {
@@ -78,8 +79,12 @@ function snap(p: Pt, n: NodeBox): void {
   }
 }
 
-export async function layout(spec: DiagramSpec): Promise<Layout> {
+export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}): Promise<Layout> {
   const direction = spec.direction === 'RIGHT' ? 'RIGHT' : 'DOWN';
+  const detail = opts.detail ?? spec.detail ?? 'auto';
+  const parents = new Set(spec.elements.map((e) => e.parent));
+  const leaves = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node').length;
+  const compact = detail === 'compact' || (detail === 'auto' && leaves > FULL_DETAIL_MAX);
   const ids = new Set(spec.elements.map((e) => e.id));
   const kids = new Map<string | undefined, SpecElement[]>();
   for (const el of spec.elements) {
@@ -90,13 +95,13 @@ export async function layout(spec: DiagramSpec): Promise<Layout> {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
     'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '26',
-    'elk.spacing.nodeNode': '26',
+    'elk.layered.spacing.nodeNodeBetweenLayers': compact ? '18' : '26',
+    'elk.spacing.nodeNode': compact ? '20' : '26',
     'elk.spacing.edgeNode': '18',
     'elk.spacing.edgeEdge': '14',
     'elk.spacing.edgeLabel': '5',
     'elk.spacing.labelLabel': '6',
-    'elk.layered.spacing.edgeNodeBetweenLayers': '20',
+    'elk.layered.spacing.edgeNodeBetweenLayers': compact ? '14' : '20',
     'elk.layered.spacing.edgeEdgeBetweenLayers': '12',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
@@ -106,7 +111,7 @@ export async function layout(spec: DiagramSpec): Promise<Layout> {
   const build = (el: SpecElement, depth: number, seen: Set<string>): any => {
     const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
     const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
-    const text = group ? { h: 64, lines: [] } : leafText(el);
+    const text = group ? { h: 64, lines: [] } : leafText(el, compact);
     boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyGroupWidth(el) : NODE_W, h: text.h, lines: text.lines });
     if (!group) return { id: el.id, width: NODE_W, height: text.h };
     const below = new Set(seen).add(el.id);
@@ -116,7 +121,7 @@ export async function layout(spec: DiagramSpec): Promise<Layout> {
       height: 64,
       layoutOptions: {
         ...common,
-        'elk.padding': '[top=46,left=18,bottom=18,right=18]',
+        'elk.padding': compact ? '[top=38,left=14,bottom=14,right=14]' : '[top=46,left=18,bottom=18,right=18]',
       },
       children: children.map((c) => build(c, depth + 1, below)),
     };

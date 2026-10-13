@@ -146,7 +146,7 @@ test('svg: status is text and line style, and the key lists only what is used', 
   const plain = key(await renderSvg(example('container')));
   assert.match(plain, />Person<.*>Container<.*>Data Store<.*>Queue<.*>External<.*>Boundary<.*>Relationship</);
   assert.doesNotMatch(plain, /Added|Changed|Removed|Affected|Component/);
-  assert.match(await renderSvg(example('dynamic')), />1\. Submits the checkout<.*>Numbered step</s);
+  assert.match(await renderSvg(example('dynamic')), />1\. Submits the checkout.*>Numbered step</s);
 });
 
 test('svg: a 12 element container diagram stays near 900px wide', async () => {
