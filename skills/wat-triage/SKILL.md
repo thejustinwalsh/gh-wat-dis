@@ -42,7 +42,7 @@ Labels mean two things: `agents`, and the product surface. On a repository under
 
 1. Run `npx gh-wat-dis labels --text`. With `labels.surfaces` empty, it proposes one surface for each mapped architecture element.
 2. A surface is a part of the product a user or a team would name: "checkout", "billing", "site". Merge elements that people treat as one. 5 to 12 surfaces suit most repositories. Show the list and let the user rename.
-3. Save the agreed list in `labels.surfaces`, then `npx gh-wat-dis labels apply`.
+3. Save the agreed list in `labels.surfaces`, then `npx gh-wat-dis labels apply`. The tool picks the colours: each surface gets its own hue at one shared lightness, and the type and `agents` labels are stronger. Add a new surface at the end of the list so the others keep their colours. Set `color` on a surface only when the user asks for one.
 4. Labels outside the plan show as `extra`. Leave them unless the user asks: `labels apply --prune` deletes them from every issue, and that cannot be undone.
 5. An issue that touches a surface with no label is a signal: propose a new surface in the `Decide` list.
 
