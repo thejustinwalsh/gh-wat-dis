@@ -37,7 +37,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 ## 3. Rules for every artifact
 
 1. **Problem, then solution.** Know both before you write. Open every issue and PR with a sentence or two of plain prose: what the problem is and how we solved it or intend to. No label, no heading. If nobody knows the solution yet, say so, and make the problem clear at once. Never write a body whose problem you cannot state.
-2. **Design first.** State how the work changes the system: which elements, which relationships, which contracts. A body with no system statement is not done. When no element, relationship or contract changes, the statement is one sentence that names the element the work sits in and says nothing changes. It can sit in the opening: do not add a `System` section for it.
+2. **Design first.** State how the work changes the system: which elements, which relationships, which contracts. A body with no system statement is not done. When no element, relationship or contract changes, the statement is one sentence that names the element the work sits in and says nothing changes. It can sit in the opening: do not add a `System` section for it. A Task is the usual case: its opening names the element, and that is its system statement.
 3. **Facts only.** Take paths, symbols, counts and dependents from `npx gh-wat-dis impact`, the diff, or a file you read. Never invent a version, line number, flag or metric. Mark what you did not check as an unknown.
 4. **Consistent shape, no filler.** Use the section names and order in [references/formats.md](references/formats.md), and only the sections that have something to say. Structure without substance is noise: a short body in plain sentences beats a full template of thin sections.
 5. **Plain language.** Follow [references/style.md](references/style.md).
@@ -47,7 +47,11 @@ The config also holds the project defaults: labels, issue types, milestone namin
 9. **Backstop check before you post.** Run `npx gh-wat-dis lint <file> --kind issue|pr|milestone`. It catches only what GitHub would break and gross shape errors. Passing it does not mean the body is good: these skills decide that.
 10. **Show the draft, then write.** Posting to GitHub is public. Show the user the body and wait for a yes, unless `policy.confirmBeforeWrite` is `false`.
 
-## 4. Stay in lane
+## 4. Answering in chat
+
+When the user asks a question and wants no issue, PR or comment, answer in prose: the answer first, then the facts behind it, then what you could not check. Do not borrow the sections of a body. A skill that has its own chat shape says so.
+
+## 5. Stay in lane
 
 gh-wat-dis decides how to communicate: the shape, the words, the diagram, the fields. It does not decide how the team builds software.
 
@@ -55,10 +59,10 @@ gh-wat-dis decides how to communicate: the shape, the words, the diagram, the fi
 - Analysis tools collect and check facts for the text you write. Do not turn their output into a review, a score or a verdict.
 - Never write "safe", "ready", "clean" or "looks good". State what changed, what it reaches and what you verified.
 
-## 5. Tools
+## 6. Tools
 
 - **Write with `gh`.** Create and edit issues, PRs, comments and milestones with the GitHub CLI. Only `gh` can upload attachments (`--attach`, needs gh 2.99.0 or later).
-- **Read with the GitHub MCP server.** Search, list, read threads, diffs and check runs. If the server is not connected, use `gh` for reads too and suggest `wat-setup`. Where a step shows a `gh` read command, that is the fallback: the matching MCP tool is the first choice. Where a step names an `npx gh-wat-dis` tool, use that tool and do not rebuild its output from raw reads.
+- **Read with the GitHub MCP server.** Search, list, read threads, diffs and check runs. If the server is not connected, use `gh` for reads too and suggest `wat-setup`. Where a step shows a `gh` read command, that is the fallback: the matching MCP tool is the first choice. The exception is a read the server cannot do: milestones, a search by `updated:<DATE`, `linked:pr` or `is:blocked`, and a PR's closing references. Use `gh` first for those. Where a step names an `npx gh-wat-dis` tool, use that tool and do not rebuild its output from raw reads.
 - **Measure with `npx gh-wat-dis`.** `impact`, `diagram`, `related`, `links`, `lint`. The package carries everything these commands need. Never ask a project to install another tool for them.
 
 Scratch files go in `.wat-tmp/`. Check it first and never overwrite a file you did not write: see "Scratch files" in the command map.

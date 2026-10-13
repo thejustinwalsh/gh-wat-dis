@@ -69,7 +69,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 |---|---|---|---|
 | Bug | The wrong behaviour, where it shows, expected vs actual | `Evidence` with expected vs actual and a reproduction; `System` names the failing element | `Change` until the cause is known |
 | Feature | What users or the system cannot do today, and what that costs | `System`, `Change`, `Do` | — |
-| Task / chore | What is out of date, missing or in the way | `Do` | Diagram, `Evidence` |
+| Task / chore | What is out of date, missing or in the way, and the element it sits in | `Do` | Diagram, `System`, `Evidence` |
 | Spike / research | The decision that is blocked, and what is not known | `Unknowns` as the main section, a time limit in `Do` | `Change` |
 | Tracking issue | The gap between the system today and the goal | `System` with a diagram; work as **sub-issues**, not checkboxes | `Do` |
 

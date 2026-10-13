@@ -63,6 +63,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 |---|---|
 | Facts on what a change touches and reaches | `npx gh-wat-dis impact > facts.json` |
 | The same, with uncommitted work | `npx gh-wat-dis impact --working-tree > facts.json` |
+| The same, between any two commits (a merged PR) | `npx gh-wat-dis impact --base <ref> --head <ref> > facts.json` |
 | Blast radius section for a PR body: what the change reaches outside its diff, with file links | `npx gh-wat-dis blast facts.json` |
 | Who depends on a file or symbol (no diff needed) | `npx gh-wat-dis reach src/price.ts#formatPrice` |
 | Owners of paths | `npx gh-wat-dis owners <path>...` |
@@ -83,7 +84,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Labels the config wants, compared with GitHub | `npx gh-wat-dis labels --text` |
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |
 | The same, for an open PR | `npx gh-wat-dis links --pr <n> --closes <n>,<m> --text` |
-| Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone` |
+| Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone\|comment` |
 | Health check | `npx gh-wat-dis doctor` |
 
 ### Compose them
