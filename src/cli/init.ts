@@ -75,8 +75,8 @@ export async function main(argv: string[]): Promise<number> {
   if (!repo.remote) console.log('No GitHub remote found through gh. Fill in repo.owner and repo.name when the remote exists.');
   console.log(issueTypes.length
     ? `Issue types: ${issueTypes.join(', ')}. ${milestones.length} milestones.`
-    : `Issue types: none. GitHub offers them to organization repositories only, so type is left unset here. ${milestones.length} milestones.`);
-  console.log('Labels: after you map the architecture, run "npx gh-wat-dis labels" to see the agents label and one label for each product surface.');
+    : `Issue types: none here, because GitHub offers them to organization repositories only. Type is a label in this repository: task, bug, feature. ${milestones.length} milestones.`);
+  console.log('Labels: run "npx gh-wat-dis labels --text" to see what to create, then "npx gh-wat-dis labels apply". Map the architecture first to get one label for each product surface.');
   console.log(`policy.use is "${use}". Next: review the file, map the architecture (wat-architecture skill), commit it.`);
   return 0;
 }

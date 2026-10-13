@@ -19,12 +19,12 @@ Run the checks the user asks for. Default: all. Thresholds come from `.agents/gh
 | Stale issues | Open, no update in 60 days | `gh issue list --search "updated:<DATE sort:updated-asc" --json number,title,updatedAt,labels,milestone` |
 | Stale PRs | Open, no update in 14 days | `gh pr list --search "updated:<DATE" --json number,title,updatedAt,isDraft,reviewDecision,author` |
 | Awaiting author | The last comment is a question from a maintainer, with no reply in 14 days | `gh issue list --search "updated:<DATE comments:>0"`, then read the last comment |
-| Missing fields | Open issues with no issue type (where the repository has types) or no surface label | `gh issue list --search "no:label"`, and `--json number,title,labels` checked against `labels.surfaces` |
+| Missing fields | Open issues with no type (issue type, or type label on a user repository), more than one type label, or no surface label | `gh issue list --search "no:label"`, and `--json number,title,labels` checked against `labels.surfaces` |
 | Milestones past due | Open milestone, `due_on` before today | `gh api "repos/{owner}/{repo}/milestones?state=open"` |
 | Empty milestones | Open, 0 open issues | same call: `open_issues == 0` |
 | Orphan PRs | Open PR that closes no issue | `gh pr list --json number,title,closingIssuesReferences` |
 | Done but open | Issue whose linked PR merged | `gh issue list --search "linked:pr is:open"` then check PR state |
-| Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan (type, priority and status labels belong in fields) | `npx gh-wat-dis labels --text` |
+| Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan (priority and status are not labels; type is a label only on a user repository) | `npx gh-wat-dis labels --text` |
 | Blocked chains | Issues blocked by a closed or stale issue | `npx gh-wat-dis relations <n>` for each issue from `gh issue list --search "is:blocked"` |
 | Format drift | Open issues in the current milestone with no clear problem statement, no system statement, or a body GitHub renders wrong | read each body against `../wat/references/formats.md` |
 

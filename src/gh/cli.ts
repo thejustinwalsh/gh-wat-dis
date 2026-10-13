@@ -170,7 +170,8 @@ function loadConfig(): Config {
 const LABELS_USAGE = `Usage: npx gh-wat-dis labels [--text]                 compare the labels the config wants with GitHub
        npx gh-wat-dis labels apply [--prune] [--dry-run]  create and update them. --prune also deletes the rest.
 Labels mean two things: "agents", and the product surface an issue touches (labels.surfaces in the config,
-or one for each mapped architecture element when that list is empty).`;
+or one for each mapped architecture element when that list is empty). A repository under a user account
+has no GitHub issue types, so there the types (task, bug, feature) are labels too.`;
 
 export async function labels(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['text', 'prune', 'dry-run', 'help'], aliases: { '-h': '--help', '-n': '--dry-run' } });

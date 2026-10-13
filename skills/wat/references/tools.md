@@ -15,10 +15,11 @@ Always write the body to a file and pass `--body-file`. Never pass a body inline
 | Create PR | `gh pr create --title "<t>" --body-file body.md --base <branch> --draft --attach ./d.svg` |
 | Edit PR | `gh pr edit <n> --body-file body.md --add-label <l> --milestone "<title>"` |
 | Create label | `gh label create "<name>" --color <hex> --description "<d>"` |
-| Set the issue type | `gh issue create --type Bug`, `gh issue edit <n> --type Feature` (organization repositories only) |
+| Set the type, organization repository | `gh issue create --type Bug`, `gh issue edit <n> --type Feature` |
+| Set the type, user repository | `gh issue create --label bug`, `gh issue edit <n> --add-label feature --remove-label task` |
 | Make an issue a sub-issue | `npx gh-wat-dis relate <n> --parent <parent>` |
 | Record what blocks an issue | `npx gh-wat-dis relate <n> --blocked-by <a>,<b>` · `--blocks <c>` · add `--remove` to undo |
-| Create the agents and surface labels | `npx gh-wat-dis labels apply` |
+| Create the labels the config wants (type labels on a user repository, `agents`, surfaces) | `npx gh-wat-dis labels apply` |
 | Pin issue | `gh issue pin <n>` |
 
 `relate` looks up the ids that GitHub's relation calls need. You pass issue numbers.

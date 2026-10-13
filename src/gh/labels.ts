@@ -1,11 +1,12 @@
 // Labels mean two things: "agents", and the product surface an issue touches.
-// Type is a GitHub issue type and priority is a person's call, so neither is a label.
+// Type is a GitHub issue type where the repository has them (organizations). A repository under
+// a user account has none, so there each type is a label too. Priority is a person's call and is never a label.
 
-import { AGENTS_LABEL, SURFACE_COLOR, proposeSurfaces } from '../cli/config.ts';
+import { AGENTS_LABEL, SURFACE_COLOR, TYPE_LABELS, proposeSurfaces, typeLabel } from '../cli/config.ts';
 import type { Config } from '../cli/config.ts';
 
 export interface LiveLabel { name: string; description: string; color: string }
-export interface WantedLabel extends LiveLabel { role: 'agents' | 'surface' }
+export interface WantedLabel extends LiveLabel { role: 'type' | 'agents' | 'surface' }
 export interface LabelPlan {
   /** Where the surface list came from: the config, or a proposal from the architecture map. */
   surfacesFrom: 'config' | 'architecture' | 'none';
@@ -23,6 +24,10 @@ export function wantedLabels(cfg: Config): { labels: WantedLabel[]; surfacesFrom
   return {
     surfacesFrom: configured.length ? 'config' : surfaces.length ? 'architecture' : 'none',
     labels: [
+      ...(cfg.issues?.typeSource === 'label' ? (cfg.issues.types ?? []).map((t): WantedLabel => {
+        const name = typeLabel(t);
+        return { role: 'type', name, description: TYPE_LABELS[name]?.description ?? `Type: ${t}`, color: TYPE_LABELS[name]?.color ?? 'ededed' };
+      }) : []),
       { role: 'agents', name: agents, description: AGENTS_LABEL.description, color: AGENTS_LABEL.color },
       ...surfaces.map((l): WantedLabel => ({ role: 'surface', name: l.name, description: l.description.slice(0, 100), color: SURFACE_COLOR })),
     ],

@@ -11,8 +11,12 @@
     "defaultBranch": "main"
   },
   "issues": {
-    "types": [],
-    "typeSource": "none"
+    "types": [
+      "Task",
+      "Bug",
+      "Feature"
+    ],
+    "typeSource": "label"
   },
   "pulls": {
     "draft": false,

@@ -149,11 +149,16 @@ test('labels: agents plus one per surface; other labels are extra and never drop
     { id: 'stripe', name: 'Stripe', type: 'system', external: true, paths: [] },
     { id: 'user', name: 'User', type: 'person', paths: [] },
   ];
-  const plan = planLabels(cfg, [{ name: 'bug', description: 'x', color: 'd73a4a' }, { name: 'Agents', description: 'old', color: 'ffffff' }]);
+  assert.equal(cfg.issues.typeSource, 'label', 'a repository with no issue types uses type labels');
+  const plan = planLabels(cfg, [{ name: 'bug', description: 'x', color: 'd73a4a' }, { name: 'Agents', description: 'old', color: 'ffffff' }, { name: 'wontfix', description: '', color: 'ffffff' }]);
   assert.equal(plan.surfacesFrom, 'architecture');
-  assert.deepEqual(plan.create.map((l) => l.name), ['site']);
-  assert.deepEqual(plan.update.map((l) => l.name), ['agents']);
-  assert.deepEqual(plan.extra.map((l) => l.name), ['bug']);
+  assert.deepEqual(plan.create.map((l) => [l.name, l.role]), [['task', 'type'], ['feature', 'type'], ['site', 'surface']]);
+  assert.deepEqual(plan.update.map((l) => l.name), ['bug', 'agents']);
+  assert.deepEqual(plan.extra.map((l) => l.name), ['wontfix']);
+  const org = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Task', 'Bug', 'Feature'] });
+  assert.equal(org.issues.typeSource, 'issue-type');
+  assert.ok(!planLabels(org, []).create.some((l) => l.role === 'type'), 'an organization repository gets no type labels');
+  cfg.issues = { types: [], typeSource: 'issue-type' };
   cfg.labels.surfaces = [{ name: 'checkout', description: 'The checkout flow' }];
   assert.deepEqual(planLabels(cfg, []).create.map((l) => [l.name, l.role]), [['agents', 'agents'], ['checkout', 'surface']]);
 });

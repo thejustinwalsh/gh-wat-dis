@@ -13,7 +13,7 @@ Triage proposes. The user decides. Apply nothing until the user approves the tab
 ## Steps
 
 1. **Load the rules.** From `.agents/gh-wat-dis/config.json`: `issues.types` and `issues.typeSource`, `labels`, `triage.*`, `architecture.elements`. Run `npx gh-wat-dis labels --text` to compare the labels the config wants with GitHub. Load open milestones with descriptions.
-2. **Pick the queue.** Default: open issues with no type, no surface label or no milestone, newest first, 30 at most per pass. **If the queue is empty** and the user asked what is left to do, this is planning, not triage: use the `wat-milestone` skill, "Plan scope".
+2. **Pick the queue.** Default: open issues with no type (issue type or type label), no surface label or no milestone, newest first, 30 at most per pass. **If the queue is empty** and the user asked what is left to do, this is planning, not triage: use the `wat-milestone` skill, "Plan scope".
    ```bash
    gh issue list --state open --search "no:milestone sort:created-desc" --limit 30 \
      --json number,title,body,labels,author,createdAt,updatedAt,comments,reactionGroups
@@ -23,7 +23,7 @@ Triage proposes. The user decides. Apply nothing until the user approves the tab
 
    | Field | How |
    |---|---|
-   | Type | The GitHub issue type: Task, Bug, Feature, or the names in `issues.types`. Never a label. With `typeSource: none`, show your reading in the table and leave the field unset. |
+   | Type | One of `issues.types`: Task, Bug, Feature by default. Written as the GitHub issue type when `issues.typeSource` is `issue-type`, and as the type label (`task`, `bug`, `feature`) when it is `label`. Exactly one. |
    | Surface | The surface label for the architecture element it touches. Search the code for names in the issue if unclear. |
    | Agents | The `agents` label, only for agent memory, an agentic workflow, or work an autonomous agent manages. |
    | Priority | A proposal for the person, by the rules below. Show it in the table. Never write it to a label. |
@@ -34,11 +34,11 @@ Triage proposes. The user decides. Apply nothing until the user approves the tab
 5. **Check for duplicates.** Run `npx gh-wat-dis related --issue <n> --md` for each issue. For a draft that is not filed yet, use `--title` and `--body-file`. Read every candidate above 30 points and apply the test in the `wat-issue` skill, "Related, duplicate or new". Same root cause in the same element: duplicate. Same symptom, different element: link, do not close. The tool gives signals. A duplicate call needs your reading of both issues.
 6. **Match a milestone.** Rules below.
 7. **Show one table**, then the short lists. Wait for the user.
-8. **Apply the approved rows** with `gh issue edit --type <t> --add-label <surface> --milestone <m>`, `npx gh-wat-dis relate`, `gh issue comment`, `gh issue close`. Report counts.
+8. **Apply the approved rows** with `gh issue edit --type <T> --add-label <surface> --milestone <m>` (on a user repository the type goes in `--add-label`, and any other type label comes off with `--remove-label`), `npx gh-wat-dis relate`, `gh issue comment`, `gh issue close`. Report counts.
 
 ## Labels
 
-Labels mean two things: `agents`, and the product surface. Help the user define them, here or in `wat-setup`:
+Labels mean two things: `agents`, and the product surface. On a repository under a user account the type is a label as well, because GitHub has no issue types there. Help the user define the labels, here or in `wat-setup`:
 
 1. Run `npx gh-wat-dis labels --text`. With `labels.surfaces` empty, it proposes one surface for each mapped architecture element.
 2. A surface is a part of the product a user or a team would name: "checkout", "billing", "site". Merge elements that people treat as one. 5 to 12 surfaces suit most repositories. Show the list and let the user rename.

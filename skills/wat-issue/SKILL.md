@@ -21,7 +21,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 5. **Decide on a diagram.** Draw one when the issue adds, removes or rewires an element or relationship, or when a bug crosses 3 or more elements. Use the `wat-diagram` skill. Otherwise skip it.
 6. **Draft** `.wat-tmp/issue.md` in the Issue format. Pick the row in "By issue type" and follow it.
 7. **Set fields, not prose.**
-   - **Type:** the GitHub issue type (Task, Bug, Feature, or the names in `issues.types`). When `issues.typeSource` is `none` the repository has no issue types: leave type unset. Never use a label for type.
+   - **Type:** one of `issues.types` (Task, Bug, Feature by default). It is the GitHub issue type when `issues.typeSource` is `issue-type` (organization repositories), and the type label when it is `label` (a repository under a user account has no issue types, so `task`, `bug` or `feature` is a label there). Set exactly one.
    - **Labels:** one or more surface labels from `labels.surfaces` for the parts of the product the work touches. Add the `agents` label only for agent memory, an agentic workflow, or work an autonomous agent manages. No other labels.
    - **Priority:** a person decides it. Do not set it.
    - **Relations:** a parent when the issue is part of a larger one, blocked by when it must wait. See step 10.
@@ -30,8 +30,9 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 9. **Show the draft.** Print title, fields and body. Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
 10. **Post.**
    ```bash
-   gh issue create --title "<title>" --body-file .wat-tmp/issue.md --type "<type>" \
+   gh issue create --title "<title>" --body-file .wat-tmp/issue.md --type "<Type>" \
      --label "<surface>" --milestone "<milestone>" --attach .wat-tmp/<diagram>.svg
+   # user repository: drop --type and add the type label: --label "<type>,<surface>"
    npx gh-wat-dis relate <new> --parent <parent> --blocked-by <blocker>
    ```
    Omit flags you have no value for. Use `relate` for every true relation. Do not write "part of #12" or "blocked by #12" in the body in its place.

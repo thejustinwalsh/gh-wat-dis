@@ -22,15 +22,26 @@ export interface SurfaceLabel { name: string; description: string; elements?: st
 
 export const AGENTS_LABEL = { name: 'agents', description: 'Agent memory, an agentic workflow, or work managed by autonomous agents', color: '5319e7' };
 export const SURFACE_COLOR = 'c5def5';
+export const DEFAULT_TYPES = ['Task', 'Bug', 'Feature'] as const;
+/** Colour and wording for a type label on a user repository. The wording follows GitHub's own issue types. */
+export const TYPE_LABELS: Record<string, { description: string; color: string }> = {
+  task: { description: 'A specific piece of work', color: 'fbca04' },
+  bug: { description: 'An unexpected problem or behavior', color: 'd73a4a' },
+  feature: { description: 'A request, idea, or new functionality', color: '0e8a16' },
+};
+export const typeLabel = (type: string): string => type.trim().toLowerCase().replace(/\s+/g, '-');
 
 export interface Config {
   $schema?: string;
   version: 1;
   policy: { use: Use; confirmBeforeWrite: boolean };
   repo: { owner: string; name: string; defaultBranch: string };
-  /** `types` are GitHub issue types. `typeSource` is `none` when the repository has none (issue types belong to organizations). */
-  issues: { types: string[]; typeSource: 'issue-type' | 'none' };
-  /** Labels mean two things only: the agents label, and the product surface an issue touches. */
+  /**
+   * The kinds of work. An organization repository has GitHub issue types (`issue-type`).
+   * A repository under a user account has none, so there each type is a label (`label`).
+   */
+  issues: { types: string[]; typeSource: 'issue-type' | 'label' };
+  /** Besides type labels on a user repository, labels mean two things: the agents label, and the product surface an issue touches. */
   labels: { agents: string; surfaces: SurfaceLabel[] };
   pulls: { draft: boolean; closingKeyword: string };
   milestones: { naming: string; capacity: number | null };
@@ -53,7 +64,7 @@ export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', u
     version: 1,
     policy: { use, confirmBeforeWrite: true },
     repo: { owner, name, defaultBranch },
-    issues: { types: issueTypes, typeSource: issueTypes.length ? 'issue-type' : 'none' },
+    issues: issueTypes.length ? { types: issueTypes, typeSource: 'issue-type' } : { types: [...DEFAULT_TYPES], typeSource: 'label' },
     labels: { agents: AGENTS_LABEL.name, surfaces: [] },
     pulls: { draft: false, closingKeyword: 'Closes' },
     milestones: { naming: milestones[0] ? `like "${milestones[0]}"` : '', capacity: null },
