@@ -8,6 +8,7 @@ import type { Config } from './config.ts';
 import { MANIFEST, hashDir, skillNames, targets } from './install.ts';
 import type { Manifest } from './install.ts';
 import { CCCC, install as installCccc, locate as locateCccc, platformKey } from '../tools/cccc.ts';
+import { applyFix, blocksNpx, codexSandbox, fixLines } from './sandbox.ts';
 import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, readJson, repoRoot, run } from './util.ts';
 
 const MIN_GH = '2.99.0';
@@ -243,6 +244,77 @@ async function checkTools(): Promise<Check[]> {
   return res;
 }
 
+const SANDBOX = 'codex sandbox';
+const DEP_CMD = `npm install --save-dev ${PKG.name}@${PKG.version}`;
+
+/** The project's own copy of the CLI, when the package is installed in it. npx runs this one with no fetch and no cache. */
+function localBin(root: string): boolean {
+  return !isOwnRepo(root) && existsSync(join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${PKG.name}.cmd` : PKG.name));
+}
+
+/** The gh-wat-dis repository itself. npx resolves a command named after the root package through npm's cache, so a local copy does not help there. */
+const isOwnRepo = (root: string): boolean => readJson<{ name?: string }>(join(root, 'package.json'))?.name === PKG.name;
+
+/**
+ * Only when Codex is set up here. Its default sandbox blocks npm's cache and the network. With those
+ * blocked, an npx that has to fetch the package hangs and runs out of memory, so no gh-wat-dis tool
+ * starts inside Codex. An npx that finds the package in the project's node_modules needs neither.
+ */
+function checkSandbox(cwd: string): Check[] {
+  const found = codexSandbox();
+  if (!found) return [];
+  const { state } = found;
+  if (localBin(repoRoot(cwd))) return [{ status: 'ok', name: SANDBOX, detail: `npx runs this project's own copy of ${PKG.name}, which needs nothing the sandbox blocks` }];
+  if (!blocksNpx(state)) return [{ status: 'ok', name: SANDBOX, detail: state.mode === 'danger-full-access' ? 'the sandbox is off' : "npm's cache is writable inside the sandbox" }];
+  const fix = isOwnRepo(repoRoot(cwd))
+    ? `This is the ${PKG.name} repository, where only the Codex setting helps: run "npx ${PKG.name} doctor --sandbox config" in your own terminal.`
+    : `Fix: add it to this project with "${DEP_CMD}", or run "npx ${PKG.name} doctor" in your own terminal for the choices.`;
+  return [{ status: 'warn', name: SANDBOX, detail: `Codex's sandbox blocks npm's cache and the network, so npx cannot fetch ${PKG.name} there: it hangs, then runs out of memory. ${fix}` }];
+}
+
+/**
+ * Offer a way for npx to run inside Codex's sandbox. `mode` is the --sandbox flag.
+ *   dep     add gh-wat-dis to this project as a dev dependency: npx then runs the local copy
+ *   config  let Codex commands write npm's cache and reach the network (a Codex security setting)
+ * It never changes the project or Codex's config without that flag or a yes.
+ */
+export async function offerSandbox(checks: Check[], mode?: string, cwd: string = process.cwd()): Promise<boolean> {
+  if (mode === 'skip' || !checks.some((c) => c.name === SANDBOX && c.status === 'warn')) return false;
+  const found = codexSandbox();
+  if (!found) return false;
+  const root = repoRoot(cwd);
+  const lines = fixLines(found.cache, 'both').split('\n').map((l) => `    ${l}`).join('\n');
+  let choice = mode;
+  if (!choice) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.log(`\nCodex's sandbox stops npx from fetching ${PKG.name}. Ask the person which they want:\n  1. Add it to this project (recommended). It needs the network once, so run it with their approval:\n       ${DEP_CMD}\n  2. Change Codex's sandbox, which is their security setting. They add these lines to ${found.file}:\n${lines}`);
+      return false;
+    }
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = (await rl.question(`\nCodex's sandbox stops npx from fetching ${PKG.name}, so its tools cannot run inside Codex.\n  [d] add ${PKG.name} to this project as a dev dependency (recommended): npx then runs the local copy\n  [c] change Codex's sandbox instead: commands may write npm's cache and reach the network\n  [s] skip\n> `)).trim().toLowerCase();
+    rl.close();
+    choice = answer.startsWith('d') ? 'dep' : answer.startsWith('c') ? 'config' : 'skip';
+  }
+  if (choice === 'dep') {
+    if (isOwnRepo(root)) {
+      console.log(`\nThis is the ${PKG.name} repository, and a package cannot depend on itself. Use the Codex setting here: npx ${PKG.name} doctor --sandbox config`);
+      return false;
+    }
+    console.log(`\n${DEP_CMD}`);
+    const [cmd, ...rest] = DEP_CMD.split(' ');
+    return spawnSync(cmd!, rest, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0;
+  }
+  if (choice !== 'config') return false;
+  const res = applyFix('both');
+  if (!res) return false;
+  if (res.action === 'manual') {
+    console.log(`\n${res.file} already has a [sandbox_workspace_write] section in a form this tool does not edit. Add these to it by hand:\n${fixLines(found.cache, 'both')}`);
+    return false;
+  }
+  console.log(`\n${res.action === 'written' ? 'updated' : 'unchanged'}  ${res.file}\nRestart Codex so it reads the new settings.`);
+  return res.action === 'written';
+}
+
 const TOOLS_CMD = 'npx gh-wat-dis doctor --tools install';
 
 /** Optional: complexity scores for the facts. A missing tool is a warning, never a failure. */
@@ -279,7 +351,7 @@ export async function offerTools(checks: Check[], mode?: string): Promise<boolea
 }
 
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity()];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity(), ...checkSandbox(cwd)];
 }
 
 export function printChecks(checks: Check[]): number {
@@ -290,7 +362,7 @@ export function printChecks(checks: Check[]): number {
   return fails;
 }
 
-const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]
+const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip] [--sandbox dep|config|skip]
 
 Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config. Offers a fix where it has one.
 Exits non-zero when a check fails.
@@ -300,13 +372,17 @@ Exits non-zero when a check fails.
   --no-login       do not offer to run gh auth login
   --mcp <scope>    where to write the GitHub MCP server config when none is found: user, project or skip
   --tools <mode>   optional analysis tools (cccc, for complexity facts): install without asking, or skip
+  --sandbox <mode> when Codex's sandbox stops npx: dep adds gh-wat-dis to this project as a dev dependency,
+                   config changes Codex's sandbox settings, skip does neither. Without the flag, doctor asks
+                   in a terminal and prints both choices elsewhere.
 
 Optional tools are fetched from their own releases into your user cache, checked against a pinned sha256
 and the release's build attestation. A missing optional tool is a warning, never a failure.
 `;
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp', 'tools'], aliases: { '-h': '--help' } });
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp', 'tools', 'sandbox'], aliases: { '-h': '--help' } });
+  if (args.sandbox && !['dep', 'config', 'skip'].includes(args.sandbox)) throw new UsageError('--sandbox must be dep, config or skip');
   if (args.tools && !['install', 'skip'].includes(args.tools)) throw new UsageError('--tools must be install or skip');
   if (args.help) { process.stdout.write(HELP); return 0; }
   let checks = await runChecks({ offline: args.offline });
@@ -321,6 +397,7 @@ export async function main(argv: string[]): Promise<number> {
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
   again = await offerTools(checks, args.tools) || again;
+  again = await offerSandbox(checks, args.sandbox) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks({ offline: args.offline });

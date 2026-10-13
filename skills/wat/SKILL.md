@@ -69,6 +69,7 @@ gh-wat-dis decides how to communicate: the shape, the words, the diagram, the fi
   3. Everything else goes through `gh`: every read when no server is connected, and these reads always, because the server has no tool for them: milestones, a search by `updated:<DATE`, `linked:pr` or `is:blocked`, and a pull request's closing references.
 
   A `gh` command shown in a step is the form to use under 3. With no server connected, mention `wat-setup` once.
+- **If an `npx gh-wat-dis` command hangs or dies with "heap out of memory"**, your harness sandboxes commands and `npx` could not fetch the package. Stop retrying and use the `wat-setup` skill, "A harness that sandboxes commands".
 - **Measure with `npx gh-wat-dis`.** `impact`, `diagram`, `related`, `links`, `lint`. The package carries everything these commands need. Never ask a project to install another tool for them.
 
 Scratch files go in a folder of your own for the task, `.wat-tmp/<short-task-name>/`: see "Scratch files" in the command map.

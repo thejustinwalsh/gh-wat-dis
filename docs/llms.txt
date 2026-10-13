@@ -4,6 +4,8 @@
 
 ## Install it
 
+If your harness runs commands in a sandbox (Codex does by default), `npx` cannot fetch a package there: it hangs, then dies with "heap out of memory". First run `npm install --save-dev gh-wat-dis` in the project, with the human's approval, because it needs the network once.
+
 Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
 
 Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.

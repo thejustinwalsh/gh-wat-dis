@@ -138,6 +138,7 @@ export async function install(argv: string[]): Promise<number> {
     const { offerMcpSetup } = await import('./mcp-apply.ts');
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
+  again = await (await import('./doctor.ts')).offerSandbox(checks) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks();
