@@ -1,0 +1,56 @@
+{
+  "name": "gh-wat-dis",
+  "version": "0.1.0",
+  "description": "gh-wat-dis: agent skills for system-design-rich GitHub issues, PRs and milestones. Installs skills into your harness, wires the GitHub MCP server, renders C4 diagrams to SVG, and grounds PRs in change-impact facts.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Justin Walsh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thejustinwalsh/gh-wat-dis.git"
+  },
+  "homepage": "https://thejustinwalsh.github.io/gh-wat-dis/",
+  "bugs": "https://github.com/thejustinwalsh/gh-wat-dis/issues",
+  "keywords": [
+    "agent-skills",
+    "github",
+    "mcp",
+    "project-management",
+    "c4",
+    "elk",
+    "diagrams",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "gh-wat-dis": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "scripts": {
+    "dev": "node src/bin.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js",
+    "typecheck": "tsc -p .",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "check": "npm run typecheck && npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@ast-grep/lang-rust": "^0.0.7",
+    "@ast-grep/napi": "^0.50.0",
+    "elkjs": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,155 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { UsageError, parseArgs, readInput, run } from '../cli/util.ts';
+import { analyzeLinks } from './links.ts';
+import type { Closure, Commit, Mention, Ref } from './links.ts';
+import { findRelated, toMarkdown } from './related.ts';
+import type { Row } from './related.ts';
+
+const exec = promisify(execFile);
+
+async function gh<T>(args: string[]): Promise<T> {
+  const { stdout } = await exec('gh', args, { maxBuffer: 32 * 1024 * 1024 });
+  return JSON.parse(stdout) as T;
+}
+
+function repoInfo(): { repo: string; defaultBranch?: string } {
+  const out = run('gh', ['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef']);
+  if (!out) throw new Error('no GitHub repository found for this directory. Run inside a clone with a GitHub remote, signed in with gh.');
+  const j = JSON.parse(out) as { nameWithOwner: string; defaultBranchRef?: { name?: string } };
+  return { repo: j.nameWithOwner, defaultBranch: j.defaultBranchRef?.name };
+}
+
+interface SearchItem {
+  number: number; title: string; body: string | null; state: string; state_reason: string | null;
+  html_url: string; updated_at: string; labels: { name: string }[]; milestone: { title: string } | null; pull_request?: unknown;
+}
+
+const RELATED_USAGE = 'Usage: npx gh-wat-dis related (--issue <n> | --title "<text>" [--body-file <file>]) [--paths a,b] [--state all|open|closed] [--limit 10] [--md]';
+
+export async function related(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, {
+    booleans: ['md', 'json', 'help'], strings: ['issue', 'title', 'body-file', 'paths', 'limit', 'state'],
+    aliases: { '-i': '--issue', '-t': '--title', '-b': '--body-file', '-n': '--limit', '-h': '--help' },
+  });
+  if (args.help) { console.log(RELATED_USAGE); return 0; }
+  let title = args.title;
+  let body = args['body-file'] ? readInput(args['body-file']) : '';
+  let self: number | undefined;
+  if (args.issue) {
+    const j = await gh<{ number: number; title: string; body: string }>(['issue', 'view', args.issue, '--json', 'number,title,body']);
+    ({ title, body } = j);
+    self = j.number;
+  }
+  title ||= body.split('\n').find((l) => l.trim() && !/^[#>!<|`-]/.test(l.trim()));
+  if (!title) throw new UsageError(RELATED_USAGE);
+
+  const { repo } = repoInfo();
+  const state = args.state ?? 'all';
+  const stateQ = state === 'all' ? '' : ` is:${state}`;
+  const search = async (query: string): Promise<Row[]> => {
+    const res = await gh<{ items: SearchItem[] }>(['api', '-X', 'GET', 'search/issues', '-f', `q=${query} repo:${repo}${stateQ}`, '-f', 'per_page=15']);
+    return res.items.map((i) => ({
+      number: i.number, title: i.title, body: i.body, state: i.state.toUpperCase(), stateReason: i.state_reason,
+      url: i.html_url, updatedAt: i.updated_at, labels: i.labels, milestone: i.milestone, isPullRequest: Boolean(i.pull_request),
+    }));
+  };
+  const res = await findRelated({
+    title, body, self, search, limit: Number(args.limit ?? 10),
+    paths: args.paths ? args.paths.split(',').map((s) => s.trim()).filter(Boolean) : [],
+  });
+  for (const f of res.failed) console.error(`query failed (${f.why}): ${f.error}`);
+  process.stdout.write(args.md ? toMarkdown(res) : JSON.stringify(res, null, 2) + '\n');
+  return 0;
+}
+
+interface PrView {
+  body: string | null;
+  baseRefName: string;
+  commits: { oid: string; messageHeadline: string; messageBody?: string }[];
+  closingIssuesReferences: { number: number; repository?: { name: string; owner: { login: string } } }[];
+}
+
+const LINKS_USAGE = 'Usage: npx gh-wat-dis links (--pr <n> | --body-file <file>) [--base <branch>] [--closes 12,15 | --closes none] [--no-commits] [--text]';
+
+export async function links(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, {
+    booleans: ['text', 'json', 'no-commits', 'help'], strings: ['pr', 'body-file', 'base', 'closes'],
+    aliases: { '-b': '--body-file', '-h': '--help' },
+  });
+  if (args.help) { console.log(LINKS_USAGE); return 0; }
+  if (!args.pr && !args['body-file']) throw new UsageError(LINKS_USAGE);
+
+  const { repo, defaultBranch } = repoInfo();
+  const here = repo.toLowerCase();
+  let body = args['body-file'] ? readInput(args['body-file']) : '';
+  let commits: Commit[] = [];
+  let base = args.base;
+  let github: Ref[] | undefined;
+
+  if (args.pr) {
+    const j = await gh<PrView>(['pr', 'view', args.pr, '--json', 'body,baseRefName,commits,closingIssuesReferences']);
+    if (!args['body-file']) body = j.body ?? '';
+    base ??= j.baseRefName;
+    commits = j.commits.map((c) => ({ sha: c.oid, message: `${c.messageHeadline}\n\n${c.messageBody ?? ''}` }));
+    github = j.closingIssuesReferences.map((r) => ({
+      repo: (r.repository ? `${r.repository.owner.login}/${r.repository.name}` : repo).toLowerCase(), number: r.number,
+    }));
+  } else {
+    base ??= defaultBranch;
+    const from = base ? (run('git', ['merge-base', 'HEAD', `origin/${base}`]) ?? run('git', ['merge-base', 'HEAD', base])) : null;
+    const log = from ? run('git', ['log', '--format=%H%x1f%B%x1e', `${from}..HEAD`]) : null;
+    commits = (log ?? '').split('\x1e').map((s) => s.trim()).filter(Boolean).map((s) => {
+      const [sha = '', message = ''] = s.split('\x1f');
+      return { sha, message };
+    });
+  }
+  if (args['no-commits']) commits = [];
+
+  const intended = args.closes === undefined ? undefined
+    : args.closes === 'none' ? []
+    : args.closes.split(',').map((s) => Number(s.replace(/^#/, '').trim())).filter(Boolean);
+
+  const res = analyzeLinks({ body, commits, repo, intended, base, defaultBranch, github });
+
+  const refs: (Closure | Mention)[] = [...res.willClose, ...res.mentions];
+  const local = [...new Set(refs.filter((r) => r.repo === here).map((r) => r.number))].slice(0, 30);
+  const info = new Map<number, { title: string; state: string; kind: 'issue' | 'pr' } | null>();
+  await Promise.all(local.map(async (n) => {
+    try {
+      const j = await gh<{ title: string; state: string; pull_request?: unknown }>(['api', `repos/${repo}/issues/${n}`]);
+      info.set(n, { title: j.title, state: j.state, kind: j.pull_request ? 'pr' : 'issue' });
+    } catch { info.set(n, null); }
+  }));
+  for (const r of refs) {
+    if (r.repo !== here || !info.has(r.number)) continue;
+    const t = info.get(r.number);
+    if (t) Object.assign(r, t);
+    else res.warnings.push({ number: r.number, code: 'not-found', msg: `#${r.number} does not exist in ${repo}.` });
+  }
+  for (const c of res.willClose) {
+    if (c.kind === 'pr') res.warnings.push({ number: c.number, code: 'closes-a-pr', msg: `#${c.number} is a pull request, not an issue. A closing keyword does not close it.` });
+    if (c.state === 'closed') res.warnings.push({ number: c.number, code: 'already-closed', msg: `#${c.number} is already closed.` });
+  }
+
+  const code = res.errors.length ? 1 : 0;
+  if (!args.text) {
+    console.log(JSON.stringify(res, null, 2));
+    return code;
+  }
+  const name = (r: Closure | Mention): string =>
+    `${r.repo === here ? '' : r.repo}#${r.number}${r.title ? `  ${r.title}` : ''}${r.state ? ` (${r.state})` : ''}`;
+  console.log(`Will close on merge${base ? ` into ${base}` : ''}: ${res.willClose.length || 'none'}`);
+  for (const c of res.willClose) {
+    console.log(`  ${name(c)}`);
+    for (const s of c.sources) console.log(`      from ${s.source}${s.line ? `:${s.line}` : ''}${s.text ? `  "${s.text}"` : ''}`);
+  }
+  console.log(`Mentioned, stays open: ${res.mentions.length || 'none'}`);
+  for (const m of res.mentions) console.log(`  ${name(m)}`);
+  for (const w of res.warnings) console.log(`warn   ${w.msg}`);
+  for (const e of res.errors) console.log(`error  ${e.msg}`);
+  if (intended === undefined && res.willClose.length) {
+    console.log(`\nConfirm the list with the user, then check it: --closes ${res.willClose.map((c) => c.number).join(',')}`);
+  }
+  return code;
+}

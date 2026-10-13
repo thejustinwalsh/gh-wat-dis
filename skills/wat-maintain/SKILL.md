@@ -1,0 +1,74 @@
+---
+name: wat-maintain
+description: Run GitHub project maintenance. Audits stale issues and PRs, label hygiene, milestones past due, issues missing fields, broken links between issues and PRs, and bodies that fail the gh-wat-dis format, then proposes a batch of fixes. Use when the user asks for a cleanup, hygiene pass, backlog audit, maintenance run, stale sweep, or a weekly or monthly project health report.
+license: MIT
+---
+
+# wat-maintain
+
+Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Commands: `../wat/references/tools.md`.
+
+Maintenance has two phases. **Audit** reads and reports. **Apply** changes GitHub, and runs only on the rows the user approves.
+
+## Audit
+
+Run the checks the user asks for. Default: all. Thresholds come from `.agents/gh-wat-dis/config.json` → `triage` and `maintain`; the defaults are below.
+
+| Check | Finds | Query |
+|---|---|---|
+| Stale issues | Open, no update in 60 days | `gh issue list --search "updated:<DATE sort:updated-asc" --json number,title,updatedAt,labels,milestone` |
+| Stale PRs | Open, no update in 14 days | `gh pr list --search "updated:<DATE" --json number,title,updatedAt,isDraft,reviewDecision,author` |
+| Awaiting author | Label `needs-info`, no reply in 14 days | `gh issue list --label needs-info --search "updated:<DATE"` |
+| Missing fields | Open issues with no type or no priority label | `gh issue list --search "no:label"` plus a pass over labels |
+| Milestones past due | Open milestone, `due_on` before today | `gh api "repos/{owner}/{repo}/milestones?state=open"` |
+| Empty milestones | Open, 0 open issues | same call: `open_issues == 0` |
+| Orphan PRs | Open PR that closes no issue | `gh pr list --json number,title,closingIssuesReferences` |
+| Done but open | Issue whose linked PR merged | `gh issue list --search "linked:pr is:open"` then check PR state |
+| Label hygiene | Unused labels, near-duplicate names, labels with no description, labels not in the config | `gh label list --json name,description,color` and issue counts |
+| Blocked chains | Issues blocked by a closed or stale issue | dependencies API |
+| Format drift | Open issues in the current milestone with no clear problem statement, no system statement, or a body GitHub renders wrong | read each body against `../wat/references/formats.md` |
+
+Compute dates in the shell (`date -v-60d +%Y-%m-%d` on macOS, `date -d '60 days ago' +%Y-%m-%d` on Linux). Do not guess today's date.
+
+## Report
+
+```markdown
+**<Repo> health**: <n> findings, <m> need a decision.
+
+| Check | Count | Worst case |
+|---|---|---|
+| Stale issues | 12 | #88, 214 days |
+| Milestones past due | 1 | v1.3, 9 days |
+
+**Proposed fixes**
+| # | Item | Action | Reason |
+|---|---|---|---|
+| 1 | #88 | Close as not planned | 214 days idle, element removed in #140 |
+| 2 | v1.3 | Move 2 open issues to v1.4, close | Past due, 14 of 16 closed |
+| 3 | label `bug ` / `Bug` | Merge into `type: bug` | Same meaning |
+```
+
+List 5 fixes per check at most, worst first. Give the full list in an Agent context block only if the user wants the report posted as an issue.
+
+## Apply
+
+1. Ask which rows to apply. Accept row numbers.
+2. Apply one row at a time. Leave a one-sentence comment on each issue you close or move: the reason and what reopens it.
+3. Report what changed, with links, and what failed.
+
+## Never without an explicit yes for that item
+
+- Close an issue or PR
+- Delete or rename a label (renaming rewrites it on every issue)
+- Close a milestone or move issues between milestones
+- Edit another person's issue body
+
+## Never at all
+
+- Delete issues, comments or branches
+- Lock conversations
+- Close an issue only because it is old: check that the element still exists and the problem still reproduces, or say you could not check
+
+## Recurring runs
+
+For a weekly report, tell the user to schedule their agent to run "wat-maintain, audit only, post nothing". The audit is read-only and safe to automate. Apply stays manual.
