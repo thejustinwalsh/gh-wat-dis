@@ -146,13 +146,15 @@ Turn impact facts into a diagram spec. Reads Facts JSON from a file or stdin, pr
 
   --title <t>   diagram title
   --level <l>   element (default): the architecture elements the change touches and reaches.
-                file: a code diagram. One card for each file whose symbols changed and for each file
-                that imports one, a row for each changed symbol, a line from each importer to the
-                symbol it names. For a hard change inside one or a few modules.
+                file: a code diagram. One card for each changed source file, a row for each symbol
+                the change added, changed or removed, and a line for each import the source proves.
+                A line ends on a symbol row only when the importer names that symbol.
+                For a hard change inside one or a few modules. Exit 1 when no source file changed.
   --max-files <n>
-                with --level file: cards to draw (default ${MAX_FILES}). Files with changed exported
-                symbols come first, then their importers. The rest are counted in the scope line
-                and listed on stderr.
+                with --level file: cards to draw (default ${MAX_FILES}). The most changed source
+                files come first. Two slots are kept for files outside the diff that import a
+                changed symbol or that a changed file starts to import. The largest files left
+                out are named in the scope line, and all of them on stderr.
   --all         every element and edge in the facts
                 (default: the changed, added, removed and affected elements, both ends of
                 each added or removed relationship, and their ancestors)
@@ -171,8 +173,12 @@ export const factsToSpec: Command = async (argv) => {
     if (a.all) throw new UsageError('--all draws the whole map: it does not go with --level file');
     const out = toCodeSpec(readFacts(a._[0]), { maxFiles, ...(a.title !== undefined ? { title: a.title } : {}) });
     const list = (files: string[]): string => `${files.slice(0, 6).join(', ')}${files.length > 6 ? `, and ${files.length - 6} more` : ''}`;
-    if (!out.drawn) console.error('gh-wat-dis graph from-facts: no changed symbol in the facts, so there is no code to draw; use the default level');
-    if (out.changedLeftOut.length) console.error(`gh-wat-dis graph from-facts: ${out.changedLeftOut.length} changed files not drawn (no changed symbol, or past --max-files): ${list(out.changedLeftOut)}`);
+    for (const f of out.notRead) console.error(`gh-wat-dis graph from-facts: ${f.path} was not read (${f.reason}): its symbols and imports are unknown, and its card says so`);
+    if (!out.drawn) {
+      console.error('gh-wat-dis graph from-facts: the change touches no source file in a language the tools parse (TypeScript, JavaScript, Rust), so there is no code diagram to draw. Use the default level.');
+      return 1;
+    }
+    if (out.changedLeftOut.length) console.error(`gh-wat-dis graph from-facts: ${out.changedLeftOut.length} changed source files not drawn (past --max-files, largest first): ${list(out.changedLeftOut)}`);
     if (out.dependentsLeftOut.length) console.error(`gh-wat-dis graph from-facts: ${out.dependentsLeftOut.length} importers not drawn (past --max-files): ${list(out.dependentsLeftOut)}`);
     json(out.spec);
     return 0;

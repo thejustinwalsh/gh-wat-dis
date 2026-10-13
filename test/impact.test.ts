@@ -298,7 +298,8 @@ test('ts: elements, edges, markdown and spec', async () => {
 
   const spec = toDiagramSpec(facts);
   assertSpecValid(spec);
-  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['acme-api', 'acme-shared', 'acme-web', 'tools']);
+  // `tools` is a folder with no package: next to a workspace it is not an element.
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['acme-api', 'acme-shared', 'acme-web']);
   assert.equal(spec.relationships.find((r) => r.from === 'acme-web')!.label, 'imports (3)');
   assert.equal(spec.elements.find((e) => e.id === 'acme-shared')!.description, '4 files · 2 changed');
   const all = toDiagramSpec(facts, { all: true, title: 'Everything' });
@@ -332,13 +333,13 @@ test('ts: file level spec has a card per file with changed symbols and per impor
   const groups = spec.elements.filter((e) => e.type === 'boundary');
   assert.ok(groups.length > 1 && groups.every((g) => g.parent === undefined));
   assert.ok(files.every((e) => e.parent === undefined || groups.some((g) => g.id === e.parent)));
-  // A changed file with no changed symbol is counted, not drawn.
-  assert.ok(changedLeftOut.includes('docs/pricing.md') || changedLeftOut.length > 0);
-  assert.ok(changedLeftOut.every((f) => !files.some((e) => e.id === f)));
-  assert.match(spec.scope!, new RegExp(`${drawn} files drawn, ${changedLeftOut.length} more changed files? not drawn`));
-  assert.deepEqual(dependentsLeftOut, []);
+  // A changed file that is not source (a page, a proto file) is counted in the scope line, not drawn.
+  assert.ok(!files.some((e) => e.id === 'docs/pricing.md'));
+  assert.deepEqual(changedLeftOut, []);
+  assert.match(spec.scope!, /\d of \d changed source files drawn\. .*other changed files? \(pages, config, assets\)/);
+  assert.equal(dependentsLeftOut.length + files.filter((e) => !e.status || e.status === 'affected').length, new Set(facts.dependents.direct.map((d) => d.file)).size);
 
-  // Past the budget, files with changed exported symbols stay and importers go first.
+  // Past the budget the file with the most change stays, and what is cut is named.
   const two = toCodeSpec(facts, { maxFiles: 2, title: 'Two' });
   assert.equal(two.spec.title, 'Two');
   assert.equal(two.drawn, 2);
@@ -633,8 +634,8 @@ test('config: architecture map drives elements, edges and labels', async () => {
 
   const spec = toDiagramSpec(facts);
   assertSpecValid(spec);
-  // `mail` is an unchanged neighbour the change does not reach, so only --all draws it.
-  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['client', 'db', 'lib', 'platform', 'server']);
+  // `mail` is an unchanged neighbour the change does not reach, so only --all draws it. `lib` is a folder the map does not name.
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['client', 'db', 'platform', 'server']);
   assert.ok(toDiagramSpec(facts, { all: true }).elements.some((e) => e.id === 'mail'));
   const rel = spec.relationships.find((x) => x.from === 'client' && x.to === 'server')!;
   assert.deepEqual([rel.label, rel.technology, rel.meta], ['calls API', 'HTTPS', { weight: 1, provenance: 'exact', source: 'config' }]);
@@ -700,4 +701,201 @@ test('cccc: the pinned manifest names an asset and a sha256 for each platform', 
     assert.ok(a.file.startsWith(`cccc-v${CCCC.version}-`), a.file);
     assert.match(a.sha256, /^[0-9a-f]{64}$/);
   }
+});
+
+test('symbols: a comment is not a change, one name of a re-export list is one change, private declarations that come or go are listed', async () => {
+  const { parseTs } = await import('../src/impact/ts-parse.ts');
+  const { diffSymbols, code } = await import('../src/impact/symbols.ts');
+  const diff = (before: string, after: string) => diffSymbols(parseTs('a.ts', before, true).syms, parseTs('a.ts', after, true).syms);
+  // Only the doc comment and the layout of the type differ.
+  assert.deepEqual(diff(
+    "/** Reads src/old/path. */\nexport interface Backend { play(id: string): void; // see old/path\n}\n",
+    "/** Reads src/new/path. */\nexport interface Backend {\n  play(id: string): void; // see new/path\n}\n"), []);
+  // A string that holds two slashes is code, not a comment.
+  assert.equal(diff("export const url = 'http://a';\n", "export const url = 'http://b';\n")[0]!.change, 'modified');
+  assert.equal(code("const a = 1; // one\n/* two */ const b = `//x`;"), 'const a = 1;\nconst b = `//x`;');
+  // Four names join a list of seventeen: four are added and none of the others is touched.
+  const names = Array.from({ length: 17 }, (_, i) => `T${i}`);
+  const list = (extra: string[]): string => `export type { ${[...names, ...extra].join(', ')} } from './protocol.js';\n`;
+  assert.deepEqual(diff(list([]), list(['N1', 'N2', 'N3', 'N4'])).map((c) => [c.name, c.change]), [['N1', 'added'], ['N2', 'added'], ['N3', 'added'], ['N4', 'added']]);
+  // A helper that moves out of a file and one that arrives are part of the change, exported or not.
+  const moved = diff('function handlePlay() { return 1; }\nfunction keep() { return 2; }\n', 'function keep() { return 2; }\nfunction enqueue() {\n  return 3;\n}\n');
+  assert.deepEqual(moved.map((c) => [c.name, c.change, c.exported]), [['handlePlay', 'removed', false], ['enqueue', 'added', false]]);
+  assert.ok(moved.every((c) => c.lines > 0));
+  // A signature whose comment changed is not a changed signature.
+  const sig = diff('export function f(a: number /* old */): number { return a; }\n', 'export function f(a: number /* new */): number { return a + 1; }\n');
+  assert.deepEqual([sig[0]!.change, sig[0]!.signatureChanged, sig[0]!.lines], ['modified', false, 2]);
+});
+
+/** Facts with only the parts a code diagram reads. */
+function codeFacts(part: Partial<Facts>): Facts {
+  return {
+    schema: 1, base: 'a'.repeat(40), head: 'b'.repeat(40), range: { baseRef: 'a', headRef: 'b', workingTree: false, depth: 3 },
+    tiers: { ran: ['git', 'ast-grep'], languages: ['typescript'], unavailable: [] },
+    summary: { filesChanged: 0, insertions: 0, deletions: 0, byKind: {}, elementsChanged: 0, directDependents: 0, exportedSignatureChanges: 0 },
+    files: [], symbols: [], dependents: { direct: [], transitive: [] }, imports: [], elements: [], edges: [], contracts: [],
+    tests: { changed: [], importingChanged: [] }, coChange: [], dependencies: [], complexity: [], owners: [], caveats: [], ...part,
+  };
+}
+const fileFact = (path: string, lines: number, more: Partial<Facts['files'][number]> = {}): Facts['files'][number] => ({
+  path, status: 'modified', insertions: lines, deletions: 0, kind: 'source', language: 'typescript', element: 'app', owners: [], churn90d: 0, hunkFunctions: [], provenance: 'exact', source: 'git', ...more,
+});
+const symbolFact = (file: string, name: string, more: Partial<Facts['symbols'][number]> = {}): Facts['symbols'][number] => ({
+  name, kind: 'function', file, element: 'app', exported: true, change: 'modified', signatureChanged: false, lines: 4, dependents: [], provenance: 'resolved', source: 'ast-grep', ...more,
+});
+
+test('code spec: only a named import ends on a symbol row, and a guessed one ends on the file', () => {
+  const facts = codeFacts({
+    files: [fileFact('src/sprite.ts', 40), fileFact('src/llm.ts', 30)],
+    symbols: [
+      symbolFact('src/sprite.ts', 'Sprite.addEffect', { kind: 'method', dependents: [
+        // These import the class, and nothing shows that they call the method.
+        { file: 'src/app.tsx', element: 'app', inDiff: false, provenance: 'heuristic' },
+        { file: 'src/game.tsx', element: 'app', inDiff: false, provenance: 'heuristic' },
+      ] }),
+      symbolFact('src/llm.ts', 'chat', { signatureChanged: true, dependents: [
+        { file: 'src/list.ts', element: 'app', inDiff: false, provenance: 'heuristic' },
+        { file: 'src/panel.ts', element: 'app', inDiff: false, provenance: 'resolved' },
+      ] }),
+    ],
+  });
+  const { spec } = toCodeSpec(facts);
+  assert.deepEqual(lintSpec(spec).errors, []);
+  const line = (from: string, to: string) => spec.relationships.filter((r) => r.from === from && r.to === to).map((r) => r.toSymbol ?? 'the file');
+  assert.deepEqual(line('src/app.tsx', 'src/sprite.ts'), ['the file']);
+  assert.deepEqual(line('src/game.tsx', 'src/sprite.ts'), ['the file']);
+  // `import * as llm` reaches the file. The file that names `chat` reaches its row.
+  assert.deepEqual(line('src/list.ts', 'src/llm.ts'), ['the file']);
+  assert.deepEqual(line('src/panel.ts', 'src/llm.ts'), ['chat']);
+  // Affected means a proven use of a signature that changed. A guess does not earn the mark.
+  const status = (id: string) => spec.elements.find((e) => e.id === id)!.status;
+  assert.deepEqual([status('src/panel.ts'), status('src/list.ts')], ['affected', undefined]);
+});
+
+test('code spec: a new import of an unchanged file is drawn, with the added mark, on a row for the name', () => {
+  const facts = codeFacts({
+    files: [fileFact('src/signon.ts', 12), fileFact('scripts/gen.ts', 37, { status: 'added' }), fileFact('src/main.ts', 5)],
+    symbols: [symbolFact('src/signon.ts', 'signOn'), symbolFact('scripts/gen.ts', 'withAll', { change: 'added' }), symbolFact('src/main.ts', 'helpText')],
+    imports: [
+      { from: 'src/signon.ts', to: 'src/llm.ts', toElement: 'app', toInDiff: false, names: ['probeWebGPU'], whole: false, change: 'added', provenance: 'resolved' },
+      { from: 'scripts/gen.ts', to: 'src/main.ts', toElement: 'app', toInDiff: true, names: ['TOOLS'], whole: false, change: 'added', provenance: 'resolved' },
+      { from: 'src/signon.ts', to: 'src/old.ts', toElement: 'app', toInDiff: false, names: ['legacy'], whole: false, change: 'removed', provenance: 'resolved' },
+    ],
+  });
+  const { spec } = toCodeSpec(facts);
+  assert.deepEqual(lintSpec(spec).errors, []);
+  const llm = spec.elements.find((e) => e.id === 'src/llm.ts')!;
+  assert.deepEqual([llm.status, llm.symbols], [undefined, [{ name: 'probeWebGPU' }]]);
+  assert.deepEqual(spec.relationships.find((r) => r.from === 'src/signon.ts' && r.to === 'src/llm.ts'), { from: 'src/signon.ts', to: 'src/llm.ts', label: '', toSymbol: 'probeWebGPU', status: 'added' });
+  // The generator imports TOOLS, which did not change: main.ts gains a row for it. In a new file every import is new, so the line has no mark.
+  const main = spec.elements.find((e) => e.id === 'src/main.ts')!;
+  assert.deepEqual(main.symbols!.map((s) => [s.name, s.status]), [['helpText', 'changed'], ['TOOLS', undefined]]);
+  assert.deepEqual(spec.relationships.find((r) => r.from === 'scripts/gen.ts'), { from: 'scripts/gen.ts', to: 'src/main.ts', label: '', toSymbol: 'TOOLS' });
+  // A file the change stopped importing gets no card of its own.
+  assert.ok(!spec.elements.some((e) => e.id === 'src/old.ts'));
+});
+
+test('code spec: slots go to the most changed files, a file that was not read says so, a move is named, and nothing to draw is an error', async () => {
+  const names = Array.from({ length: 21 }, (_, i) => `T${i}`);
+  const facts = codeFacts({
+    files: [
+      fileFact('src/generation.ts', 1012, { status: 'added' }), fileFact('src/collapse.ts', 880, { status: 'added' }), fileFact('src/register.ts', 182),
+      fileFact('src/index.ts', 4), fileFact('src/constants.ts', 9), fileFact('test/golden.ts', 300, { kind: 'test' }), fileFact('tools/shoot.mjs', 355, { status: 'added', language: 'javascript' }),
+      fileFact('native/backend.rs', 22, { language: 'rust', skipped: 'larger than 500 KB' }),
+      fileFact('src/moved/a.ts', 3, { status: 'renamed', oldPath: 'src/old/a.ts' }), fileFact('src/moved/b.ts', 0, { status: 'renamed', oldPath: 'src/old/b.ts' }),
+      fileFact('docs/index.html', 70, { kind: 'docs', language: null }),
+    ],
+    symbols: [
+      symbolFact('src/generation.ts', 'small', { change: 'added', lines: 3 }), symbolFact('src/generation.ts', 'generateChunk', { change: 'added', exported: false, lines: 240 }),
+      symbolFact('src/collapse.ts', 'tick', { change: 'added', lines: 90 }), symbolFact('src/register.ts', 'register', { lines: 60 }),
+      ...names.map((n) => symbolFact('src/index.ts', n, { kind: 'reexport', lines: 1 })),
+      symbolFact('src/constants.ts', 'A'), symbolFact('test/golden.ts', 'golden'), symbolFact('src/moved/a.ts', 'a'),
+    ],
+    tests: { changed: ['test/golden.ts'], importingChanged: [] },
+  });
+  const all = toCodeSpec(facts);
+  const card = (id: string) => all.spec.elements.find((e) => e.id === id);
+  // A new script with no named declaration still gets a card. The page does not.
+  assert.equal(card('tools/shoot.mjs')!.description, '+355 lines');
+  assert.equal(card('docs/index.html'), undefined);
+  assert.equal(card('native/backend.rs')!.description, 'not read: larger than 500 KB · +22');
+  assert.deepEqual(all.notRead, [{ path: 'native/backend.rs', reason: 'larger than 500 KB' }]);
+  assert.equal(card('src/moved/a.ts')!.description, 'moved from src/old/a.ts');
+  // A file that only moved has no card, and the scope line counts the moves.
+  assert.equal(card('src/moved/b.ts'), undefined);
+  assert.match(all.spec.scope!, /Not drawn: index\.ts \(\+4\)\. 2 files moved\. 1 other changed file \(pages, config, assets\)$/);
+  // Rows: the most changed symbol first, private or not.
+  assert.deepEqual(card('src/generation.ts')!.symbols!.map((s) => s.name), ['generateChunk', 'small']);
+  // The list of re-exports shows six of its names and says how many more.
+  assert.equal(card('src/index.ts'), undefined, 'eight slots, and the list of re-exports is the ninth file');
+  assert.equal(toCodeSpec(facts, { maxFiles: 9 }).spec.elements.find((e) => e.id === 'src/index.ts')!.description, 'and 15 more symbols');
+
+  const three = toCodeSpec(facts, { maxFiles: 3 });
+  assert.deepEqual(three.spec.elements.map((e) => e.id), ['src/generation.ts', 'src/collapse.ts', 'tools/shoot.mjs']);
+  // A fixture and a list of re-exports rank below real files with less change.
+  assert.ok(three.changedLeftOut.indexOf('src/register.ts') < three.changedLeftOut.indexOf('test/golden.ts'));
+  assert.ok(three.changedLeftOut.indexOf('src/constants.ts') < three.changedLeftOut.indexOf('src/index.ts'));
+  assert.match(three.spec.scope!, /3 of 9 changed source files drawn\. Not drawn: register\.ts \(\+182\), golden\.ts \(\+300\) and 4 more/);
+
+  // No source file at all: there is no code diagram, and the command says so with exit 1.
+  const none = toCodeSpec(codeFacts({ files: [fileFact('docs/index.html', 70, { kind: 'docs', language: null })] }));
+  assert.equal(none.drawn, 0);
+  const { spawnSync } = await import('node:child_process');
+  const run = spawnSync(process.execPath, [new URL('../src/bin.ts', import.meta.url).pathname, 'graph', 'from-facts', '-', '--level', 'file'],
+    { input: JSON.stringify(codeFacts({ files: [fileFact('docs/index.html', 70, { kind: 'docs', language: null })] })), encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.equal(run.stdout, '');
+  assert.match(run.stderr, /touches no source file in a language the tools parse/);
+  assert.match(lintSpec(none.spec).errors.join('\n'), /elements is empty/);
+});
+
+test('facts: a changed architecture map, new imports of a changed file, and a file over the parse cap', async () => {
+  const r = repo();
+  const config = (extra: object[], rels: object[], serverNote = 'Serves requests'): string => JSON.stringify({
+    version: 1,
+    architecture: {
+      system: { name: 'Demo', description: '' },
+      elements: [
+        { id: 'server', name: 'API server', type: 'container', technology: 'Node', description: serverNote, paths: ['src/server/**'] },
+        { id: 'client', name: 'Web client', type: 'container', technology: 'TS', paths: ['src/client/**'] },
+        ...extra,
+      ],
+      relationships: [{ from: 'client', to: 'server', label: 'Calls', technology: 'HTTPS' }, ...rels],
+    },
+  });
+  const big = `export function huge(): number { return 1; }\n${'// padding to pass the parse cap\n'.repeat(17000)}`;
+  r.commit({
+    '.agents/gh-wat-dis/config.json': config([], []),
+    'src/server/handler.ts': 'export function handle(id: string): string { return id; }\nexport const limit = 3;\n',
+    'src/server/big.ts': big,
+    'src/client/view.ts': "import { handle } from '../server/handler.ts';\nexport const view = handle('1');\n",
+  }, 3, 'init');
+  r.commit({
+    '.agents/gh-wat-dis/config.json': config(
+      [{ id: 'cache', name: 'Cache', type: 'datastore', technology: 'Redis', external: true }],
+      [{ from: 'server', to: 'cache', label: 'Reads sessions from', technology: 'RESP' }], 'Serves requests and sessions'),
+    'src/client/view.ts': "import { handle, limit } from '../server/handler.ts';\nexport const view = handle('1') + limit;\n",
+    'src/server/big.ts': big.replace('return 1', 'return 2'),
+  }, 1, 'cache');
+  const facts = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW });
+  assertFactsShape(facts);
+  // The map itself changed: a new element is added, an edited one is changed, a new relationship is added.
+  const status = new Map(facts.elements.map((e) => [e.id, e.status]));
+  assert.deepEqual([status.get('cache'), status.get('server'), status.get('client')], ['added', 'changed', 'changed']);
+  assert.equal(facts.edges.find((e) => e.from === 'server' && e.to === 'cache')!.status, 'added');
+  assert.equal(facts.edges.find((e) => e.from === 'client' && e.to === 'server')!.status, 'unchanged');
+  const spec = toDiagramSpec(facts);
+  assert.ok(spec.elements.some((e) => e.id === 'cache' && e.status === 'added'));
+  // The stand-in for unmapped files, here the folder that holds the config, is not an element of the picture.
+  assert.ok(spec.elements.every((e) => ['cache', 'server', 'client'].includes(e.id)), spec.elements.map((e) => e.id).join(','));
+  // The view starts to import `limit`, which did not change.
+  assert.deepEqual(facts.imports, [{ from: 'src/client/view.ts', to: 'src/server/handler.ts', toElement: 'server', toInDiff: false, names: ['limit'], whole: false, change: 'added', provenance: 'resolved' }]);
+  // The big file was not parsed, and the facts say so in three places.
+  const bigFact = facts.files.find((f) => f.path === 'src/server/big.ts')!;
+  assert.equal(bigFact.skipped, 'larger than 500 KB');
+  assert.match(facts.tiers.unavailable.map((u) => u.reason).join('\n'), /1 changed source file\(s\) larger than 500 KB were not parsed: src\/server\/big\.ts/);
+  assert.match(facts.caveats.join('\n'), /larger than 500 KB were not parsed/);
+  const code = toCodeSpec(facts);
+  assert.equal(code.spec.elements.find((e) => e.id === 'src/server/big.ts')!.description, 'not read: larger than 500 KB · +1 −1');
+  assert.ok(code.spec.relationships.some((x) => x.from === 'src/client/view.ts' && x.to === 'src/server/handler.ts' && x.toSymbol === 'limit' && x.status === 'added'));
 });

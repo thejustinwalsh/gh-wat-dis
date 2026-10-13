@@ -168,7 +168,8 @@ export class RustWorkspace {
       const local = u.glob ? '*' : `${prefix}${u.alias ?? u.path[u.path.length - 1]}`;
       if (t.to === file && (u.glob || t.name === local)) continue;
       const spec = u.path.join('::') + (u.glob ? '::*' : '');
-      out.push({ name: local, kind: 'reexport', exported: true, start: u.line, end: u.line, header: `pub use ${spec}`, text: u.text, reexport: { spec, name: t.name ?? '*', to: t.to } });
+      // The text is this one name, so a change to another name of the same `use` list leaves it alone.
+      out.push({ name: local, kind: 'reexport', exported: true, start: u.line, end: u.line, header: `pub use ${spec}`, text: u.text ? `pub use ${spec}${u.alias ? ` as ${u.alias}` : ''}` : '', reexport: { spec, name: t.name ?? '*', to: t.to } });
     }
     return out;
   }

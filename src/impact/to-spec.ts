@@ -11,6 +11,7 @@ function label(e: EdgeFact): string {
  * Facts as a diagram spec: the elements the change touched, the ones it reaches, and both ends of
  * every relationship it added or removed, with their ancestors. An unchanged neighbour that the
  * change does not reach is left out: next to a changed hub, that is most of the map.
+ * A top-level folder that only stands in for an element is not drawn.
  * `all` keeps the whole map, for the `graph` tool to reshape.
  */
 export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec {
@@ -23,6 +24,18 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
       if (e.status === 'unchanged' || !byId.has(e.from) || !byId.has(e.to)) continue;
       keep.add(e.from);
       keep.add(e.to);
+    }
+  }
+  // A folder that stands in for an element is not architecture. Next to a map or a workspace it is
+  // left out ((root), test, .agents). With neither, a folder is drawn only when it holds changed
+  // source or has a relationship: a folder of images is not a component.
+  if (!opts.all) {
+    const mapped = facts.elements.some((e) => e.source !== 'git');
+    const linked = new Set(facts.edges.flatMap((e) => [e.from, e.to]));
+    const coded = new Set(facts.files.filter((f) => f.language !== null && (f.kind === 'source' || f.kind === 'test')).map((f) => f.element));
+    for (const id of [...keep]) {
+      const e = byId.get(id)!;
+      if (e.source === 'git' && (mapped || !(linked.has(id) || coded.has(id)))) keep.delete(id);
     }
   }
   for (const id of [...keep]) {
@@ -38,7 +51,14 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
     status: e.status,
     meta: { files: e.files, filesChanged: e.filesChanged, dependentsAffected: e.dependentsAffected, provenance: e.provenance, source: e.source },
   }));
-  const relationships: SpecRelationship[] = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to)).map((e) => ({
+  // An element drawn as a group cannot have a line to a part of itself: the line would run from
+  // the border of the group to a box inside it. Imports between a container and its own components stay in the facts.
+  const inside = (id: string, group: string): boolean => {
+    const seen = new Set<string>();
+    for (let p = byId.get(id)?.parent; p && !seen.has(p); p = byId.get(p)?.parent) { if (p === group) return true; seen.add(p); }
+    return false;
+  };
+  const relationships: SpecRelationship[] = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to) && !inside(e.from, e.to) && !inside(e.to, e.from)).map((e) => ({
     from: e.from, to: e.to, label: label(e),
     ...(e.technology ? { technology: e.technology } : {}),
     status: e.status,

@@ -26,6 +26,8 @@ export interface NodeBox {
   lines: TextLine[];
   /** Where the status badge is drawn. It lies inside the box, where no relationship line runs. */
   badge?: Rect;
+  /** Where the name of a group is drawn: slid along the top of the group to a place no line runs through, when there is one. */
+  title?: Rect;
   /** Set on a `file`. Its status is a mark in the header, so it has no badge. */
   card?: FileCard;
   /** A group in a code diagram: a tinted band with a small name, no border. */
@@ -40,6 +42,13 @@ export interface Layout {
   wrapped: boolean;
   /** True when the groups of a code diagram are names above the cards. */
   flat: boolean;
+  /**
+   * Relationships the drawing does not show as the spec states them: ELK gave no route, or a route
+   * that does not start on its source and end on its target. A layout with any is not one to keep.
+   */
+  broken: number;
+  /** Top down, the lines of a code diagram that join the same two files are drawn once. This counts the ones folded in. */
+  folded: number;
 }
 export interface LayoutOptions {
   detail?: Detail;
@@ -49,6 +58,8 @@ export interface LayoutOptions {
   wrap?: number;
   /** In a code diagram, name the group above each file card in place of a band around the group's files. */
   flat?: boolean;
+  /** Widen a group whose name has a line through it, so the name has a clear place beside the lines. */
+  clearTitles?: boolean;
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -88,6 +99,8 @@ export const LANE_NAME_PX = 10.5;
 const CARD_MIN = 148;
 const CARD_MAX = 240;
 const CARD_ROWS_MAX = 8;
+/** Lines that end on one row or header sit this far apart, or closer when there are many. */
+const PORT_GAP = 6;
 /** Room above a card for the name of its group. */
 const LANE_CAP = 17;
 const LABEL_MAX = 170;
@@ -134,11 +147,14 @@ function leafText(el: SpecElement, compact: boolean, width: number): { h: number
   return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : compact ? 10 : 13)), lines };
 }
 
+/** Cut a name in the middle: names in one file often share a start and differ at the end. */
 const monoFit = (text: string, px: number, max: number): string => {
   const chars = [...text];
   if (monoWidth(text, px) <= max) return text;
-  while (chars.length > 1 && monoWidth(chars.join('') + '\u2026', px) > max) chars.pop();
-  return chars.join('') + '\u2026';
+  let keep = chars.length - 1;
+  const cut = (n: number): string => `${chars.slice(0, Math.ceil(n * 0.6)).join('')}\u2026${chars.slice(chars.length - Math.floor(n * 0.4)).join('')}`;
+  while (keep > 2 && monoWidth(cut(keep), px) > max) keep--;
+  return cut(keep);
 };
 
 /** True when the path of a file is too wide for one line of a card header. */
@@ -240,6 +256,27 @@ function groupBadge(b: NodeBox, edges: EdgePath[]): { rect: Rect; hits: number }
   return { rect: { x: best.x, y, w, h: BADGE_H }, hits: best.hits };
 }
 
+/**
+ * Lines cross the top of a group to reach its children, and the name of the group sits there.
+ * This slides the name right, as far as the badge or the corner, to the first place no line runs through.
+ * When every place is crossed it stays at the left, and the judge counts the lines through it.
+ */
+function groupTitle(b: NodeBox, edges: EdgePath[]): (Rect & { hits: number }) | undefined {
+  const lane = b.card?.lane;
+  if (!b.group && !lane) return undefined;
+  const w = b.light || lane ? laneLabelWidth(lane ? { ...b.el, name: lane } : b.el) : groupLabelWidth(b.el);
+  const left = b.x + (lane ? 2 : b.light ? 10 : GROUP_PAD_X);
+  const y = lane ? b.y - 16 : b.light ? b.y + 7 : b.y + 12, h = b.light || lane ? 13 : 20;
+  const right = Math.max(left, (b.badge ? b.badge.x - BADGE_GAP : b.x + b.w - (lane ? 2 : GROUP_PAD_X)) - w);
+  let best = { x: left, hits: Infinity };
+  for (let x = left; x <= right; x += 6) {
+    const hits = edges.filter((e) => crossesRect(e.points, { x, y, w, h }, 3)).length;
+    if (hits < best.hits) best = { x, hits };
+    if (hits === 0) break;
+  }
+  return { x: best.x, y, w, h, hits: best.hits };
+}
+
 type Side = 'N' | 'E' | 'S' | 'W';
 function sideOf(p: Pt, b: Rect): Side | undefined {
   if (Math.abs(p.y - b.y) < 0.5) return 'N';
@@ -303,13 +340,13 @@ export const pathLength = (points: Pt[]): number =>
 const turn = (p: Pt): Pt => ({ x: p.y, y: p.x });
 const turnRect = (r: Rect): Rect => ({ x: r.y, y: r.x, w: r.h, h: r.w });
 
-/** True when a segment of `a` runs along a segment of `b`, less than `gap` away. */
-function runsAlong(a: Pt[], b: Pt[], gap: number): boolean {
+/** True when a segment of `a` runs along a segment of `b`, less than `gap` away, for more than `over` pixels. */
+export function runsAlong(a: Pt[], b: Pt[], gap: number, over = 1): boolean {
   for (let i = 1; i < a.length; i++) for (let j = 1; j < b.length; j++) {
     const p = a[i - 1]!, q = a[i]!, r = b[j - 1]!, s = b[j]!;
     for (const [u, v] of [['x', 'y'], ['y', 'x']] as const) {
       if (Math.abs(p[u] - q[u]) > 0.5 || Math.abs(r[u] - s[u]) > 0.5 || Math.abs(p[u] - r[u]) >= gap) continue;
-      if (Math.min(Math.max(p[v], q[v]), Math.max(r[v], s[v])) - Math.max(Math.min(p[v], q[v]), Math.min(r[v], s[v])) > 1) return true;
+      if (Math.min(Math.max(p[v], q[v]), Math.max(r[v], s[v])) - Math.max(Math.min(p[v], q[v]), Math.min(r[v], s[v])) > over) return true;
     }
   }
   return false;
@@ -338,18 +375,6 @@ function shortenWrap(path: EdgePath, boxes: Map<string, NodeBox>, others: EdgePa
     channel = p.y;
   }
   if (channel === undefined) return;
-  // A group name sits above the left of a card, so the line comes in right of the middle.
-  const named = !t && to.card?.lane !== undefined;
-  const ax = a.x + a.w / 2, zx = z.x + z.w * (named ? 0.75 : 0.5);
-  const short: Pt[] = Math.abs(ax - zx) < 1
-    ? [{ x: ax, y: a.y + a.h }, { x: ax, y: z.y }]
-    : [{ x: ax, y: a.y + a.h }, { x: ax, y: channel }, { x: zx, y: channel }, { x: zx, y: z.y }];
-  if (pathLength(short) > pathLength(pts) * 0.7) return;
-  const label = path.label;
-  const mid = short.length === 2 ? { x: ax, y: (a.y + a.h + z.y) / 2 } : { x: (ax + zx) / 2, y: channel };
-  const lw = label ? (t ? label.h : label.w) : 0, lh = label ? (t ? label.w : label.h) : 0;
-  const spot: Rect = { x: mid.x - lw / 2, y: mid.y - lh / 2, w: lw, h: lh };
-  const inner = [{ x: ax, y: a.y + a.h + 1 }, ...short.slice(1, -1), { x: zx, y: z.y - 1 }];
   const holds = (g: NodeBox, b: NodeBox): boolean => {
     const seen = new Set<string>();
     for (let p: NodeBox | undefined = b; p && !seen.has(p.el.id); p = p.el.parent !== undefined ? boxes.get(p.el.parent) : undefined) {
@@ -358,18 +383,41 @@ function shortenWrap(path: EdgePath, boxes: Map<string, NodeBox>, others: EdgePa
     }
     return false;
   };
-  for (const b of boxes.values()) {
-    if (b === from || b === to || (b.group && (holds(b, from) || holds(b, to)))) continue;
-    const r = rect(b);
-    if (crossesRect(inner, r, b.group ? 0 : 8)) return;
-    if (label && !b.group && spot.x < r.x + r.w + 2 && spot.x + spot.w > r.x - 2 && spot.y < r.y + r.h + 2 && spot.y + spot.h > r.y - 2) return;
+  const label = path.label;
+  const lw = label ? (t ? label.h : label.w) : 0, lh = label ? (t ? label.w : label.h) : 0;
+  const old = pathLength(pts);
+  // The first route that is clear wins: the channel ELK kept, then one a step above or below it,
+  // from the middle of the source or a quarter in, to the middle of the target or a quarter in.
+  const attempt = (y: number, ax: number, zx: number): boolean => {
+    if (y <= a.y + a.h + 6 || y >= z.y - 6) return false;
+    const short: Pt[] = Math.abs(ax - zx) < 1
+      ? [{ x: ax, y: a.y + a.h }, { x: ax, y: z.y }]
+      : [{ x: ax, y: a.y + a.h }, { x: ax, y }, { x: zx, y }, { x: zx, y: z.y }];
+    if (pathLength(short) > old * 0.7) return false;
+    const mid = short.length === 2 ? { x: ax, y: (a.y + a.h + z.y) / 2 } : { x: (ax + zx) / 2, y };
+    const spot: Rect = { x: mid.x - lw / 2, y: mid.y - lh / 2, w: lw, h: lh };
+    const inner = [{ x: ax, y: a.y + a.h + 1 }, ...short.slice(1, -1), { x: zx, y: z.y - 1 }];
+    for (const b of boxes.values()) {
+      if (b === from || b === to || (b.group && (holds(b, from) || holds(b, to)))) continue;
+      const r = rect(b);
+      if (crossesRect(inner, r, b.group ? 0 : 8)) return false;
+      if (label && !b.group && spot.x < r.x + r.w + 2 && spot.x + spot.w > r.x - 2 && spot.y < r.y + r.h + 2 && spot.y + spot.h > r.y - 2) return false;
+    }
+    for (const other of others) {
+      const o = t ? other.points.map(turn) : other.points;
+      if (runsAlong(short, o, 8) || (label && crossesRect(o, spot, 2))) return false;
+    }
+    path.points = t ? short.map(turn) : short;
+    if (label) Object.assign(label, t ? { x: spot.y, y: spot.x } : { x: spot.x, y: spot.y });
+    return true;
+  };
+  // A group name sits above the left of a card, so the line comes in right of the middle.
+  const named = !t && to.card?.lane !== undefined;
+  for (const step of [0, -14, 14, -28, 28]) {
+    for (const zf of named ? [0.75] : [0.5, 0.75, 0.25]) {
+      for (const af of [0.5, 0.25, 0.75]) if (attempt(channel + step, a.x + a.w * af, z.x + z.w * zf)) return;
+    }
   }
-  for (const other of others) {
-    const o = t ? other.points.map(turn) : other.points;
-    if (runsAlong(short, o, 8) || (label && crossesRect(o, spot, 2))) return;
-  }
-  path.points = t ? short.map(turn) : short;
-  if (label) Object.assign(label, t ? { x: spot.y, y: spot.x } : { x: spot.x, y: spot.y });
 }
 
 /** Move an edge end from the bounding box onto the curved side of a cylinder or pipe. */
@@ -423,6 +471,8 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     'elk.layered.spacing.edgeEdgeBetweenLayers': '12',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
+    // A flow reads from its first step: when a reply closes a loop, the later step is the one drawn backwards.
+    ...(spec.type === 'dynamic' ? { 'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER' } : {}),
     ...(opts.wrap ? { 'elk.aspectRatio': String(opts.wrap), 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.layered.wrapping.additionalEdgeSpacing': '14' } : {}),
   };
   const boxes = new Map<string, NodeBox>();
@@ -438,10 +488,16 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
       boxes.set(el.id, { el, group, depth, x: 0, y: 0, w, h, lines: [], card });
       // Left to right, a line ends on the row it concerns: each row and the header has a port on both sides.
       if (direction !== 'RIGHT') return { id: el.id, width: w, height: h };
-      const port = (row: number, dy: number): unknown[] => (['w', 'e'] as const).map((side) => ({
-        id: portId(el.id, row, side), x: side === 'w' ? 0 : w, y: dy + cap, width: 0, height: 0,
-        layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
-      }));
+      // Each line gets a port of its own, a few pixels from the next, so two lines never merge into
+      // one and a reader can follow each from its file to its row.
+      const port = (row: number, dy: number): unknown[] => (['w', 'e'] as const).flatMap((side) => {
+        const n = Math.max(1, slots.get(slotKey(el.id, row, side))?.length ?? 0);
+        const gap = n > 1 ? Math.min(PORT_GAP, (CARD_ROW - 8) / (n - 1)) : 0;
+        return Array.from({ length: n }, (_, k) => ({
+          id: portId(el.id, row, side, k), x: side === 'w' ? 0 : w, y: dy + cap + (k - (n - 1) / 2) * gap, width: 0, height: 0,
+          layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
+        }));
+      });
       return {
         id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
         ports: [...port(-1, card.head / 2), ...card.rows.flatMap((r, i) => port(i, r.dy))],
@@ -465,25 +521,60 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
       children: children.map((c) => build(c, depth + 1, below, widen)),
     };
   };
-  const portId = (id: string, row: number, side: 'w' | 'e'): string => `${id}\u0000${row}\u0000${side}`;
   /** The node, or the port of the symbol row or the header, that one end of a line attaches to. */
-  const end = (id: string, symbol: string | undefined, side: 'w' | 'e'): string => {
+  const end = (i: number, id: string, symbol: string | undefined, side: 'w' | 'e'): string => {
     const b = boxes.get(id)!;
     if (!b.card || direction !== 'RIGHT') return id;
-    const row = symbol === undefined ? -1 : (b.el.symbols ?? []).findIndex((s) => s.name === symbol);
-    return portId(id, row < b.card.rows.length ? row : -1, side);
+    const row = rowOf(b.el, symbol);
+    return portId(id, row, side, Math.max(0, slots.get(slotKey(id, row, side))?.indexOf(i) ?? 0));
   };
+  // Top down there are no rows to end on, so several lines between the same two files would run side by side.
+  // The first one stands for them all. A line the change added or removed keeps its own.
+  const skip = new Set<number>();
+  if (code && direction === 'DOWN') {
+    const seen = new Set<string>();
+    spec.relationships.forEach((rel, i) => {
+      const key = `${rel.from}\0${rel.to}\0${rel.status ?? ''}\0${rel.label}`;
+      if (byId.get(rel.from)?.type === 'file' && byId.get(rel.to)?.type === 'file' && seen.has(key)) skip.add(i);
+      seen.add(key);
+    });
+  }
+  // Which lines end on each side of each row and header, in the order the other end appears in the spec.
+  const portId = (id: string, row: number, side: 'w' | 'e', k: number): string => `${id}\u0000${row}\u0000${side}\u0000${k}`;
+  const slotKey = (id: string, row: number, side: 'w' | 'e'): string => `${id}\u0000${row}\u0000${side}`;
+  const rowOf = (el: SpecElement, symbol: string | undefined): number => {
+    const row = symbol === undefined ? -1 : (el.symbols ?? []).findIndex((s) => s.name === symbol);
+    return row < CARD_ROWS_MAX ? row : -1;
+  };
+  const slots = new Map<string, number[]>();
+  const position = new Map(spec.elements.map((e, i) => [e.id, i]));
+  spec.relationships.forEach((rel, i) => {
+    if (skip.has(i)) return;
+    for (const [id, symbol, side] of [[rel.from, rel.fromSymbol, 'e'], [rel.to, rel.toSymbol, 'w']] as const) {
+      const el = byId.get(id);
+      if (el?.type !== 'file') continue;
+      const key = slotKey(id, rowOf(el, symbol), side);
+      slots.set(key, [...(slots.get(key) ?? []), i]);
+    }
+  });
+  for (const list of slots.values()) {
+    const other = (i: number): number => { const r = spec.relationships[i]!; return (position.get(r.from) ?? 0) + (position.get(r.to) ?? 0); };
+    list.sort((a, b) => other(a) - other(b) || a - b);
+  }
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
   const elk = new (ELK as any)();
   const run = async (widen: Map<string, number>): Promise<any> => {
     boxes.clear();
     const children = (kids.get(undefined) ?? []).map((el) => build(el, 0, new Set(), widen));
-    const edges = spec.relationships.flatMap((rel, i) => {
-      if (!boxes.has(rel.from) || !boxes.has(rel.to)) return [];
+    // In a flow the steps go to ELK in step order, which is the order it keeps.
+    const inOrder = spec.relationships.map((rel, i) => ({ rel, i }));
+    if (spec.type === 'dynamic') inOrder.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
+    const edges = inOrder.flatMap(({ rel, i }) => {
+      if (!boxes.has(rel.from) || !boxes.has(rel.to) || skip.has(i)) return [];
       const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
       labels.set(i, label);
       const pad = rel.from === rel.to ? LOOP_PAD : 0;
-      const ends = { sources: [end(rel.from, rel.fromSymbol, 'e')], targets: [end(rel.to, rel.toSymbol, 'w')] };
+      const ends = { sources: [end(i, rel.from, rel.fromSymbol, 'e')], targets: [end(i, rel.to, rel.toSymbol, 'w')] };
       if (!label.lines.length) return [{ id: `e${i}`, ...ends }];
       return [{ id: `e${i}`, ...ends, labels: [{ id: `l${i}`, text: rel.label, width: label.w + pad, height: label.h + pad, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
     });
@@ -515,6 +606,13 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     place(done);
     return done;
   };
+  /** True when the point lies on the border of the box, as ELK placed it. */
+  const touches = (p: Pt, b: NodeBox): boolean => {
+    const cap = b.card?.lane ? LANE_CAP : 0, top = b.y - cap, bottom = b.y + b.h, t = 2;
+    const inX = p.x >= b.x - t && p.x <= b.x + b.w + t, inY = p.y >= top - t && p.y <= bottom + t;
+    return (inY && (Math.abs(p.x - b.x) < t || Math.abs(p.x - (b.x + b.w)) < t)) || (inX && (Math.abs(p.y - top) < t || Math.abs(p.y - bottom) < t));
+  };
+  let broken = 0;
   const read = (done: any): EdgePath[] => {
     const paths: EdgePath[] = [];
     const loops: { path: EdgePath; placed?: Rect }[] = [];
@@ -535,8 +633,10 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     walk(done);
     for (const { path, placed } of loops) growLoop(path, boxes.get(path.rel.from)!, placed, paths.filter((p) => p !== path));
     if (opts.wrap) for (const path of paths) shortenWrap(path, boxes, paths.filter((p) => p !== path), direction);
+    broken = spec.relationships.filter((rel, i) => boxes.has(rel.from) && boxes.has(rel.to) && !skip.has(i)).length - paths.length;
     for (const path of paths) {
-      if (path.points.length < 2) continue;
+      if (path.points.length < 2) { broken++; continue; }
+      if (path.rel.from !== path.rel.to && !(touches(path.points[0]!, boxes.get(path.rel.from)!) && touches(path.points.at(-1)!, boxes.get(path.rel.to)!))) broken++;
       // ELK ends a line on the room kept for a group name above a card. It goes on to the card.
       const onto = boxes.get(path.rel.to)!, tip = path.points.at(-1)!;
       if (onto.card?.lane && Math.abs(tip.y - (onto.y - LANE_CAP)) < 0.5) tip.y = onto.y;
@@ -551,9 +651,9 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   // (`elk.nodeSize.minimum` would do the first in one pass, but elkjs 0.12 swaps its width and
   // height on a group with children in a top-down layout.)
   const widen = new Map<string, number>();
-  const roomed = new Set<string>();
+  const roomed = new Set<string>(), titled = new Set<string>();
   let done: any, paths: EdgePath[] = [];
-  for (let pass = 0; pass < 5; pass++) {
+  for (let pass = 0; pass < 7; pass++) {
     done = await run(widen);
     paths = read(done);
     let again = false;
@@ -575,6 +675,16 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
         again = true;
       }
     }
+    if (!again && opts.clearTitles) {
+      for (const b of groups) {
+        b.badge = groupBadge(b, paths)?.rect;
+        const title = groupTitle(b, paths);
+        if (!title || title.hits === 0 || titled.has(b.el.id)) continue;
+        titled.add(b.el.id);
+        widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + Math.ceil(title.w) + 12);
+        again = true;
+      }
+    }
     if (!again) break;
   }
   let width: number = done.width ?? 0, height: number = done.height ?? 0;
@@ -591,10 +701,11 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     }
   }
   for (const b of boxes.values()) b.badge = b.group ? groupBadge(b, paths)?.rect : leafBadge(b);
+  for (const b of boxes.values()) { const title = groupTitle(b, paths); if (title) b.title = { x: title.x, y: title.y, w: title.w, h: title.h }; }
   // A wrap that cut nothing gives the same drawing as no wrap.
   const wrapped = Boolean(opts.wrap) && paths.some((p) => {
     const a = boxes.get(p.rel.from)!, z = boxes.get(p.rel.to)!;
     return a !== z && (direction === 'RIGHT' ? z.y >= a.y + a.h && z.x < a.x : z.x >= a.x + a.w && z.y < a.y);
   });
-  return { width, height, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, flat };
+  return { width, height, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, flat, broken, folded: skip.size };
 }

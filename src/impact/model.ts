@@ -62,7 +62,7 @@ export interface Graph {
   languages: Language[];
   unavailable: Unavailable[];
   /** Resolve the imports of file content that is not on this side, such as the base version of a changed file. */
-  resolveOther(path: string, text: string): { syms: Sym[]; targets: string[] } | null;
+  resolveOther(path: string, text: string): { syms: Sym[]; targets: string[]; edges: Edge[] } | null;
 }
 
 export function mergeEdge(edges: Map<string, Edge>, e: Edge): void {

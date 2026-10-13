@@ -1,0 +1,45 @@
+{
+  "title": "Cycle of three",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Alpha",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Beta",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Delta",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Passes token to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "d",
+      "label": "Passes token to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "a",
+      "label": "Passes token to",
+      "technology": "HTTPS"
+    }
+  ]
+}

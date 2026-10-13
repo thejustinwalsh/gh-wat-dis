@@ -103,14 +103,18 @@ class Collector {
     const spec = unquote(st.field('source'));
     const clause = st.children().find((c) => c.kind() === 'export_clause');
     const specifiers = (clause?.children() ?? []).filter((c) => c.kind() === 'export_specifier')
-      .map((s) => ({ name: s.field('name')?.text() ?? '', alias: s.field('alias')?.text() }));
+      .map((s) => ({ name: s.field('name')?.text() ?? '', alias: s.field('alias')?.text(), node: s }));
     if (spec) {
       const ns = st.children().find((c) => c.kind() === 'namespace_export');
       const imp: RawImport = { spec, names: specifiers.map((s) => s.name), whole: !clause };
       this.imports.push(imp);
       if (ns) this.sym(ns.children().find((c) => c.isNamed())?.text() ?? '*', 'reexport', true, st, squash(st.text()), { reexport: { spec, name: '*' } });
       else if (!clause) this.sym('*', 'reexport', true, st, squash(st.text()), { reexport: { spec, name: '*' } });
-      for (const s of specifiers) this.sym(s.alias ?? s.name, 'reexport', true, st, `export { ${s.alias ? `${s.name} as ${s.alias}` : s.name} } from '${spec}'`, { reexport: { spec, name: s.name } });
+      // Each name is its own declaration: adding one name to the list changes that name alone.
+      for (const s of specifiers) {
+        const header = `export { ${s.alias ? `${s.name} as ${s.alias}` : s.name} } from '${spec}'`;
+        this.sym(s.alias ?? s.name, 'reexport', true, s.node, header, { reexport: { spec, name: s.name }, ...(this.detail ? { text: header } : {}) });
+      }
       return;
     }
     if (clause) {

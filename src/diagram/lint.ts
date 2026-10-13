@@ -4,6 +4,8 @@ import type { LintResult } from '../spec.ts';
 const WARN_ELEMENTS = 15;
 const MAX_ELEMENTS = 40;
 const MAX_DESCRIPTION = 120;
+const FULL_DETAIL_MAX = 5;
+const MAX_STEPS = 8;
 const VAGUE = new Set(['uses', 'calls', 'depends on']);
 const NEEDS_TECHNOLOGY = new Set(['container', 'component', 'datastore', 'queue']);
 const CONTAINER_LIKE = new Set(['container', 'datastore', 'queue']);
@@ -22,13 +24,21 @@ export function lintSpec(spec: unknown): LintResult {
   const warnings: string[] = [];
   if (!isBag(spec)) return { errors: ['spec must be a JSON object'], warnings };
 
-  if (!text(spec.title)) errors.push('title is missing');
+  if (spec.title !== undefined && typeof spec.title !== 'string') errors.push('title must be text');
+  else if (!text(spec.title)) errors.push('title is missing');
   if (!oneOf(DIAGRAM_TYPES, spec.type)) errors.push(`type must be one of ${DIAGRAM_TYPES.join(', ')}`);
   if (spec.direction !== undefined && spec.direction !== 'DOWN' && spec.direction !== 'RIGHT') {
     errors.push('direction must be DOWN or RIGHT');
   }
   if (!Array.isArray(spec.elements)) errors.push('elements must be an array');
+  else if (!spec.elements.length) errors.push('elements is empty: there is nothing to draw');
   if (!Array.isArray(spec.relationships)) errors.push('relationships must be an array');
+  // Without both lists the checks below would only report ids that "do not exist".
+  if (!Array.isArray(spec.elements) || !Array.isArray(spec.relationships)) return { errors, warnings };
+  // Descriptions are drawn up to 5 elements, or when asked for. Past that a missing one is not a fault.
+  const parentIds = new Set(spec.elements.map((e) => (isBag(e) ? e.parent : undefined)));
+  const leaves = spec.elements.filter((e) => isBag(e) && !parentIds.has(e.id) && e.type !== 'boundary' && e.type !== 'node').length;
+  const described = spec.detail === 'full' || (spec.detail !== 'compact' && leaves <= FULL_DETAIL_MAX);
   const elements = Array.isArray(spec.elements) ? spec.elements : [];
   const relationships = Array.isArray(spec.relationships) ? spec.relationships : [];
 
@@ -38,7 +48,8 @@ export function lintSpec(spec: unknown): LintResult {
     const id = el.id as string;
     if (byId.has(id)) errors.push(`element id "${id}" is used more than once`);
     byId.set(id, el);
-    if (!text(el.name)) errors.push(`element "${id}" has no name`);
+    if (el.name !== undefined && typeof el.name !== 'string') errors.push(`element "${id}": name must be text`);
+    else if (!text(el.name)) errors.push(`element "${id}" has no name`);
     if (!oneOf(ELEMENT_TYPES, el.type)) errors.push(`element "${id}" has unknown type "${String(el.type)}"`);
     if (el.status !== undefined && !oneOf(STATUSES, el.status)) {
       errors.push(`element "${id}" has unknown status "${String(el.status)}"`);
@@ -46,7 +57,7 @@ export function lintSpec(spec: unknown): LintResult {
     const type = String(el.type);
     if (NEEDS_TECHNOLOGY.has(type) && !text(el.technology)) warnings.push(`${type} "${id}" has no technology`);
     const description = text(el.description);
-    if (!description && type !== 'boundary' && type !== 'node' && type !== 'file') warnings.push(`element "${id}" has no description`);
+    if (!description && described && type !== 'boundary' && type !== 'node' && type !== 'file') warnings.push(`element "${id}" has no description`);
     if (description.length > MAX_DESCRIPTION) {
       warnings.push(`element "${id}" description is ${description.length} characters; keep it under ${MAX_DESCRIPTION}`);
     }
@@ -55,6 +66,9 @@ export function lintSpec(spec: unknown): LintResult {
     }
     if (spec.type === 'code' && oneOf(ELEMENT_TYPES, type) && !CODE_TYPES.has(type)) {
       warnings.push(`code diagrams show files, grouped by boundaries; "${id}" is a ${type}`);
+    }
+    if (type === 'file' && spec.type !== 'code' && oneOf(DIAGRAM_TYPES, spec.type)) {
+      warnings.push(`"${id}" is a file, which belongs in a code diagram; this is a ${String(spec.type)} diagram`);
     }
     if (el.symbols === undefined) return;
     if (!Array.isArray(el.symbols)) { errors.push(`element "${id}": symbols must be an array`); return; }
@@ -84,6 +98,10 @@ export function lintSpec(spec: unknown): LintResult {
     }
   }
 
+  const orders = new Set<number>();
+  if (spec.type === 'dynamic' && relationships.length > MAX_STEPS) {
+    warnings.push(`a flow of ${relationships.length} steps is more than ${MAX_STEPS}; write the steps as a numbered list, or draw two flows`);
+  }
   relationships.forEach((rel: unknown, i) => {
     if (!isBag(rel)) { errors.push(`relationships[${i}] is not an object`); return; }
     const where = `relationship ${String(rel.from)} -> ${String(rel.to)}`;
@@ -92,6 +110,13 @@ export function lintSpec(spec: unknown): LintResult {
       if (typeof rel[end] !== 'string' || !byId.has(rel[end])) {
         errors.push(`${where}: ${end} "${String(rel[end])}" does not exist`);
         dangling = true;
+      }
+    }
+    if (!dangling && rel.from !== rel.to) {
+      for (const [inner, outer] of [[rel.from, rel.to], [rel.to, rel.from]] as const) {
+        for (let p = byId.get(inner as string)!.parent, n = 0; typeof p === 'string' && byId.has(p) && n < 50; p = byId.get(p)!.parent, n++) {
+          if (p === outer) warnings.push(`${where} joins a group to an element inside it, which draws as a stub on the border of the group; relate the elements inside, or leave it out`);
+        }
       }
     }
     const label = text(rel.label);
@@ -110,7 +135,12 @@ export function lintSpec(spec: unknown): LintResult {
     if (rel.status !== undefined && !oneOf(STATUSES, rel.status)) {
       errors.push(`${where} has unknown status "${String(rel.status)}"`);
     }
-    if (rel.order !== undefined && typeof rel.order !== 'number') errors.push(`${where}: order must be a number`);
+    if (rel.order !== undefined && !(typeof rel.order === 'number' && Number.isInteger(rel.order) && rel.order >= 1 && rel.order <= 999)) {
+      errors.push(`${where}: order must be a whole number from 1 to 999, got ${JSON.stringify(rel.order)}`);
+    } else if (typeof rel.order === 'number') {
+      if (orders.has(rel.order)) errors.push(`${where}: order ${rel.order} is used more than once`);
+      orders.add(rel.order);
+    }
     if (!dangling && !text(rel.technology)
       && CONTAINER_LIKE.has(String(byId.get(rel.from as string)!.type))
       && CONTAINER_LIKE.has(String(byId.get(rel.to as string)!.type))) {

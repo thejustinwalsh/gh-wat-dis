@@ -47,18 +47,21 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    - The size: `681 x 766px, top down`.
    - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`. Row n of the table is the line that carries the number n.
    - `layout:` what it kept and what each other choice cost. "left to right is 1449px wide" means the direction in the spec did not fit, so the drawing was turned. Leave it turned, or pass `--direction` to force yours.
-   - `warning:` one for each fault that is left. A drawing with no warning needs no reshaping. Each warning names its fix:
+   - `warning:` one for each fault that is left: too wide, taller than 900px, a line that runs far out of its way, lines through a box or through the name of a group, three or more crossings, a label or a line on top of another. A drawing with no warning needs no reshaping.
+   - `fix:` a filter or an option that the tool applied to your spec and judged again, with the size it gives and the warnings it leaves. Only a fix that leaves fewer warnings is printed. Run the first one that keeps the elements your text is about, then render again:
+     ```text
+     warning: 902px is wider than GitHub's 860px body, so text will shrink
+     warning: 6 line crossings on 17 lines
+     fix: graph collapse --to-type container gives 742 x 372px with 5 elements and no warning
+     ```
+     ```bash
+     npx gh-wat-dis graph collapse .wat-tmp/<name>.json --to-type container > .wat-tmp/<name>-2.json
+     ```
+     A fix that starts with "no" names an option to leave off: `no --direction right`.
+   - `fix: none found` lists what was tried and judged no better. Then no filter mends the picture. Cut it by hand: keep the elements the text names, remove the rest from the JSON, or draw two diagrams with `graph split` (below).
 
-   | Warning | Do this, then render again |
-   |---|---|
-   | `wider than GitHub's 860px body` | Fold groups: `graph collapse --to-type container`. Or keep the change and one hop: `graph focus --on <ids> --hops 1`. Or split it (below). |
-   | `the line from "A" to "B" runs ...px where ...px would join them` | A line goes the long way round a group. Fold that group with `graph collapse --into <id>`, or split the diagram. |
-   | `line crossings` | Too many relationships for one picture. `graph focus --on <ids> --hops 1`, or `graph drop --status unchanged --orphans`. |
-   | `passes through a box that is not theirs` | The same as crossings: cut the diagram down. |
-   | `labels lie on a line or a box` | Draw numbers on the lines: `--labels numbered`, with the legend table. |
-
-   Taller than about 900px with no warning: split it or cut elements all the same.
-   To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `warnings`, and `candidates`, the metrics of every layout tried (`detour`, `bends`, `crossings`, `through`, `overlaps`, `score`, and `chosen`).
+   The renderer never keeps a layout that cannot draw every relationship from end to end. When the report says a relationship could not be drawn in any layout, cut the diagram down.
+   To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `warnings`, `fixes`, and `candidates`, the metrics of every layout tried (`detour`, `bends`, `crossings`, `through`, `overlaps`, `titles`, `broken`, `score`, and `chosen`).
 6. **Look at it.** Draw a PNG beside the SVG and open it with your image tool:
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg --png .wat-tmp/<name>.png
@@ -124,9 +127,9 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 - **Names match the architecture map**, letter for letter. The body and the diagram use the same words.
 - **Every relationship has a label** that says what moves or happens, in the direction of the arrow. Never "uses" or "calls". Container-to-container lines name the protocol in `technology`.
 - **Status carries the change.** One diagram shows before and after: `removed` for what goes, `added` for what comes. Do not draw a "before" and an "after" diagram.
-- **Descriptions stay under 60 characters.** The body holds the detail.
+- **Descriptions stay near 60 characters**, one short line. The linter warns past 120. The body holds the detail.
 - **Show one hop.** Changed elements plus their direct neighbours. Leave out the rest of the system.
-- **A flow has 8 steps at most.** Longer flows go in a numbered list.
+- **A flow has 8 steps at most.** Longer flows go in a numbered list, and the linter warns. Each `order` is a whole number from 1, used once.
 - The renderer adds the title, the subtitle and the key. Do not repeat them in the body.
 
 ## Inside one process or one repository
@@ -142,7 +145,7 @@ Not every system is services and databases. For a library, an app in one browser
 
 - **The mechanism is the point.** A reviewer needs to see where data is copied, transferred or shared, and where a call turns async. Put it on the edge.
 - **Draw a request and its reply as one edge** when they travel the same channel: "Posts LayoutRequest, gets glyph runs back".
-- **Leave out build-time edges** such as `import type` of a shared types package, unless the change is to that contract. Name the package in the body.
+- **Draw a build-time edge only when the change is about it.** An `import type` of a shared types package is left out, and the body names the package. When the change adds, removes or reshapes that contract, draw the edge and put the mechanism in `technology`.
 - **Nest by where code runs, not by folder.** A package that runs in two contexts appears in the one this change touches.
 
 ## Code level
@@ -164,7 +167,17 @@ npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/
 npx gh-wat-dis diagram .wat-tmp/code.json -o .wat-tmp/code.svg --png .wat-tmp/code.png
 ```
 
-It draws up to 8 files (`--max-files`): the files with changed exported symbols first, then the files that import them, then other files with changed symbols. A changed file with no changed symbol, such as a page or a manifest, is not drawn. The scope line under the title counts what was left out, and stderr lists it. Say in the body what the picture leaves out when it matters.
+It draws up to 8 files (`--max-files`). Changed source files come first, the ones with the most change at the top: lines changed and complexity gained. A list of re-exports, a fixture or a build config ranks below real code. Two slots are kept for files outside the diff: a file that imports a changed symbol by name, and a file that a changed file starts to import. A changed file that is not source in TypeScript, JavaScript or Rust, such as a page or a manifest, is not drawn.
+
+The picture shows only what the source proves:
+
+- A line ends on a symbol row when the importing file names that symbol in its import. An import of the whole module (a namespace import, a dynamic `import()`, a class whose method changed) ends on the file's header.
+- A green line with `+` is an import the change added. A row with no mark is a symbol that did not change and that a file starts to import.
+- Rows list the symbols the change added, changed or removed, private ones too, the most changed first. A comment or a reformat is not a change.
+- The blue dot on a file outside the diff means it imports, by name, a symbol whose signature changed or that was removed.
+- A card that says "not read" is a file over 500 KB: its symbols and imports are unknown. A card that says "moved from" is a rename.
+
+The scope line under the title says how many changed source files are drawn, names the largest ones left out, and counts moved files and other changed files. Stderr lists the rest. When the largest file left out matters to the change, raise `--max-files` or say so in the body. When no source file changed, the command exits 1 and there is no code diagram to draw.
 
 Then open the JSON and fix what the facts cannot know. Set the `title` to name the change. Drop a card that adds nothing with `graph drop --ids <path>`. Add a line the import graph does not see, such as a script that writes a page: give it a `label`, and it is drawn with its words. To end a line on a symbol that did not change, add that symbol to the file's `symbols` with no `status`.
 

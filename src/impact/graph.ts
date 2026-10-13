@@ -108,11 +108,13 @@ export function buildGraph(tree: Tree, detail: (path: string) => boolean = () =>
         if (language === 'rust') {
           if (rustReason) return null;
           const parsed = parseRust(text, true);
-          return { syms: [...parsed.syms, ...rust.reexports(path, parsed)], targets: rust.edges(path, parsed).map((e) => e.to) };
+          const edges = rust.edges(path, parsed);
+          return { syms: [...parsed.syms, ...rust.reexports(path, parsed)], targets: edges.map((e) => e.to), edges };
         }
         if (!language) return null;
         const parsed = parseTs(path, text, true);
-        return { syms: parsed.syms, targets: tsEdges(ts, path, parsed.imports, parsed.syms).map((e) => e.to) };
+        const edges = tsEdges(ts, path, parsed.imports, parsed.syms);
+        return { syms: parsed.syms, targets: edges.map((e) => e.to), edges };
       } catch { return null; }
     },
   };

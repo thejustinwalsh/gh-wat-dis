@@ -295,7 +295,7 @@ test('cli: exit codes, stdout and stderr', () => {
   assert.match(lintFail.stderr, /error: .*says nothing/);
   const warned = run(`${diagram} -`, JSON.stringify(big()));
   assert.equal(warned.status, 0);
-  assert.match(warned.stderr, /warning: element "user" has no description/);
+  assert.match(warned.stderr, /warning: container "web" has no technology/);
   assert.match(warned.stdout, /^<svg /);
   assert.match(run(`${diagram} --mermaid --no-lint "${file}"`).stdout, /^flowchart TB/);
   assert.equal(run(`${diagram} "${file}"`).stdout.trim(), join(dir, 'big.svg'));

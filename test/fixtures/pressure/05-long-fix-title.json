@@ -1,0 +1,58 @@
+{
+  "title": "Long text",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "The Extremely Long Named Order Intake And Validation Service For European Wholesale Customers",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "services/payments/src/internal/adapters/stripe/webhooks_v2rs",
+      "technology": "Rust"
+    },
+    {
+      "id": "c",
+      "type": "container",
+      "name": "Supercalifragilisticexpialidocious_Antidisestablishmentarianism_Service",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "datastore",
+      "name": "Short",
+      "technology": "PostgreSQL 16 with pgvector, TimescaleDB, PostGIS and logical replication to the warehouse",
+      "description": "A description that goes on for much longer than the sixty characters the rules allow, to see whether it is wrapped or clipped"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Synchronously forwards every single partially validated purchase order envelope together with its attachments onward tox",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "c",
+      "label": "tox onward attachments its with together envelope order purchase validated partially single every forwards Synchronously",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c",
+      "to": "d",
+      "label": "Writes",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "d",
+      "label": "services/payments/src/internal/adapters/stripe/webhooks_v2rs/services/payments/src/internal/adapters/stripe/webhooks_v2rs",
+      "technology": "HTTPS"
+    }
+  ]
+}

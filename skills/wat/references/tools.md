@@ -74,8 +74,8 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Reshape a spec | `npx gh-wat-dis graph focus\|collapse\|drop\|merge\|diff\|set\|rename` |
 | Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
 | Overview plus one spec per changed group | `npx gh-wat-dis graph split change.json --out-dir views` |
-| Render a diagram, fitted to GitHub's width. Stderr says what layout was kept and warns about each fault left | `npx gh-wat-dis diagram change.json -o change.svg` |
-| The same judgement as JSON, with the metrics of every layout tried | `npx gh-wat-dis diagram change.json -o change.svg --report` |
+| Render a diagram, fitted to GitHub's width. Stderr says what layout was kept, warns about each fault left, and prints each fix it tried that worked | `npx gh-wat-dis diagram change.json -o change.svg` |
+| The same judgement as JSON, with the fixes and the metrics of every layout tried | `npx gh-wat-dis diagram change.json -o change.svg --report` |
 | The same, plus a PNG to look at | `npx gh-wat-dis diagram change.json -o change.svg --png change.png` |
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |

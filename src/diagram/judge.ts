@@ -1,4 +1,4 @@
-import { crossesRect, pathLength } from './layout.ts';
+import { crossesRect, pathLength, runsAlong } from './layout.ts';
 import type { EdgePath, Layout, NodeBox, Pt, Rect } from './layout.ts';
 
 /** What a reader has to follow in one layout. Lengths are in pixels. */
@@ -18,8 +18,10 @@ export interface Metrics {
   crossings: number;
   /** Lines that pass through an element or a group that holds neither of their ends. */
   through: number;
-  /** Labels that lie on another label, on an element, or on another line. */
+  /** Labels that lie on another label, on an element, or on another line, and lines that run on top of one another. */
   overlaps: number;
+  /** Lines that run through the name of a group. */
+  titles: number;
   /** The line that goes furthest out of its way, when one does. */
   worst?: { from: string; to: string; length: number; direct: number };
 }
@@ -58,7 +60,7 @@ export function measure(l: Layout): Metrics {
     return false;
   };
   const edges = l.edges.filter((e) => e.points.length > 1);
-  const m: Metrics = { lines: edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, through: 0, overlaps: 0 };
+  const m: Metrics = { lines: edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, through: 0, overlaps: 0, titles: 0 };
   const diagonal = Math.hypot(l.width, l.height) || 1;
   let worst = 0;
   edges.forEach((e, i) => {
@@ -72,7 +74,8 @@ export function measure(l: Layout): Metrics {
       m.detour += Math.max(0, length - direct - STEP);
       m.bends += bends;
       m.maxBends = Math.max(m.maxBends, bends);
-      if (length - direct > Math.max(worst, DETOUR_PX) && length > direct * DETOUR_RATIO) {
+      // Three times the direct path, or a line longer than the drawing is wide and tall that goes well out of its way.
+      if (length - direct > Math.max(worst, DETOUR_PX) && (length > direct * DETOUR_RATIO || (length > diagonal * 1.2 && length > direct * 1.5))) {
         worst = length - direct;
         m.worst = { from: e.rel.from, to: e.rel.to, length: Math.round(length), direct: Math.round(direct) };
       }
@@ -88,6 +91,15 @@ export function measure(l: Layout): Metrics {
       || edges.some((o) => o !== e && crossesRect(o.points, e.label, -2));
     if (hit) m.overlaps++;
   });
+  // A line drawn on top of another reads as one line. Lines that share an end may share the stretch next to it.
+  edges.forEach((e, i) => {
+    for (const o of edges.slice(i + 1)) {
+      const loop = e.rel.from === e.rel.to || o.rel.from === o.rel.to;
+      const shared = e.rel.from === o.rel.from || e.rel.to === o.rel.to || e.rel.from === o.rel.to || e.rel.to === o.rel.from;
+      if ((loop || !shared) && runsAlong(e.points, o.points, 3, 14)) m.overlaps++;
+    }
+  });
+  for (const b of l.nodes) if (b.title) m.titles += edges.filter((e) => crossesRect(e.points, b.title!, 1)).length;
   m.length = Math.round(m.length);
   m.detour = Math.round(m.detour);
   m.longest = Math.round(m.longest * 100) / 100;
@@ -99,19 +111,19 @@ export function measure(l: Layout): Metrics {
  * A pixel of detour costs more than a pixel of height: a tall calm drawing beats a short tangled one.
  */
 export const lineCost = (m: Metrics): number =>
-  m.detour * 0.6 + Math.max(0, m.bends - 2 * m.lines) * 12 + m.crossings * 24 + m.through * 300 + m.overlaps * 200;
+  m.detour * 0.6 + Math.max(0, m.bends - 2 * m.lines) * 12 + m.crossings * 24 + m.through * 300 + m.overlaps * 200 + m.titles * 120;
 
-/** What is wrong with a layout, with the filter that mends it. Empty when the layout reads well. */
+/**
+ * What a reader would find wrong with a layout. Each line states the fault and no more:
+ * the fixes are tried by `advise`, and only one that works is printed.
+ */
 export function faults(m: Metrics, name: (id: string) => string): string[] {
   const out: string[] = [];
-  if (m.worst) {
-    out.push(`the line from "${name(m.worst.from)}" to "${name(m.worst.to)}" runs ${m.worst.length}px where ${m.worst.direct}px would join them. `
-      + 'Fold a group into one box with "graph collapse", or split the diagram in two.');
-  }
-  if (m.through > 0) out.push(`${m.through} ${m.through === 1 ? 'line passes' : 'lines pass'} through a box that is not theirs. Cut the diagram down with "graph focus".`);
-  if (m.crossings > Math.max(3, m.lines / 2)) {
-    out.push(`${m.crossings} line crossings on ${m.lines} lines. Keep what the change touches with "graph focus", or drop the lines that did not change with "graph diff".`);
-  }
-  if (m.overlaps > 0) out.push(`${m.overlaps} ${m.overlaps === 1 ? 'label lies' : 'labels lie'} on a line or a box. Draw numbers on the lines with --labels numbered.`);
+  const n = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+  if (m.worst) out.push(`the line from "${name(m.worst.from)}" to "${name(m.worst.to)}" runs ${m.worst.length}px where ${m.worst.direct}px would join them`);
+  if (m.through > 0) out.push(`${n(m.through, 'line passes', 'lines pass')} through a box that is not theirs`);
+  if (m.crossings >= 3) out.push(`${m.crossings} line crossings on ${m.lines} lines`);
+  if (m.overlaps > 0) out.push(`${n(m.overlaps, 'place', 'places')} where a label lies on a line or a box, or one line lies on another`);
+  if (m.titles > 0) out.push(`${n(m.titles, 'line runs', 'lines run')} through the name of a group`);
   return out;
 }

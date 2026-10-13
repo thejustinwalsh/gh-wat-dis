@@ -64,6 +64,8 @@ export interface FileFact {
   churn90d: number;
   /** Enclosing function text git printed in the hunk headers. */
   hunkFunctions: string[];
+  /** Set when the file is source in a known language and was not parsed, with the reason. It then has no symbol and no import facts. */
+  skipped?: string;
   provenance: Provenance;
   source: FactSource;
 }
@@ -79,11 +81,27 @@ export interface SymbolFact {
   exported: boolean;
   change: SymbolChangeKind;
   signatureChanged: boolean;
+  /** Lines of the declaration the change added or took away, comments and blank lines aside. */
+  lines: number;
   before?: string;
   after?: string;
   dependents: SymbolDependent[];
   provenance: Provenance;
   source: FactSource;
+}
+
+/** An import a changed file gained or lost. `names` are the names it now imports, or no longer imports, from `to`. */
+export interface ImportFact {
+  from: string;
+  to: string;
+  toElement: string;
+  /** True when `to` is itself in the diff. */
+  toInDiff: boolean;
+  names: string[];
+  /** Namespace, glob, require or dynamic import: the module as a whole. */
+  whole: boolean;
+  change: 'added' | 'removed';
+  provenance: 'resolved';
 }
 
 export interface DirectDependent {
@@ -156,6 +174,8 @@ export interface Facts {
   files: FileFact[];
   symbols: SymbolFact[];
   dependents: { direct: DirectDependent[]; transitive: TransitiveRollup[] };
+  /** Imports the changed files gained or lost, by file. Empty when no changed file was parsed on both sides. */
+  imports: ImportFact[];
   elements: ElementFact[];
   edges: EdgeFact[];
   contracts: ContractFact[];

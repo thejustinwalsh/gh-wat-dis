@@ -26,10 +26,16 @@ const WRAP_COST = 60;
 const NUMBERED_COST = 200;
 /** A code diagram that names each file's group above its card loses the band that holds a group together. */
 const FLAT_COST = 70;
+const FLAT_REPEAT_COST = 25;
 /** Top down, a line ends on the file, not on the symbol row it concerns. */
 const OFF_ROW_COST = 160;
 const COMPACT_COST = 250;
 const WIDE_COST = 5;
+/** A few pixels over shrink the text by a hair. Past that, a layout that fits is worth this much more. */
+const WIDE_SLACK = 20;
+const WIDE_AT_ALL = 80;
+/** Past this height a drawing does not fit a screen, and gets a warning. */
+export const TALL = 900;
 const WRAPS = [undefined, 2, 1.2] as const;
 
 /** One layout that was tried, with what a reader has to follow in it. */
@@ -43,6 +49,8 @@ export interface Candidate extends Metrics {
   /** Size of the drawing without the title and the key. `width` includes the side margins. */
   width: number;
   height: number;
+  /** Relationships this layout fails to draw as the spec states them. A layout with any is never kept while another has none. */
+  broken: number;
   /** Lower is better: height, plus what the lines and each shortcut cost. */
   score: number;
   chosen: boolean;
@@ -97,48 +105,57 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
         if (detail === 'compact' && compactAnyway) continue;
         for (const wrap of WRAPS) {
           for (const flat of spec.type === 'code' ? [false, true] : [false]) {
-            let l: Layout;
-            try { l = await layout(spec, { detail, direction, numbered, wrap, flat }); } catch { continue; }
-            // A wrap that cut nothing, or an option that changed nothing, repeats a layout already tried.
-            if ((wrap && !l.wrapped) || flat !== l.flat) continue;
-            if (detail === 'auto' && l.compact) compactAnyway = true;
-            const m = measure(l);
-            const width = Math.ceil(l.width + CHROME_W), height = Math.ceil(l.height);
-            const shortcuts = (numbered ? numberedCost : 0) + (l.flat ? FLAT_COST : 0) + (rows && direction === 'DOWN' ? OFF_ROW_COST : 0) + (l.wrapped ? WRAP_COST : 0)
-              + (detail === 'compact' && asked === 'auto' ? COMPACT_COST : 0) + (wish && !opts.direction && direction !== wish ? TURNED_COST : 0);
-            const score = Math.round(height + Math.max(0, width - maxWidth) * WIDE_COST + lineCost(m) + shortcuts);
-            tried.push({ layout: l, c: { direction, labels: numbered ? 'numbered' : 'text', compact: l.compact, wrapped: l.wrapped, flat: l.flat, width, height, score, chosen: false, ...m } });
+            // When a line runs through the name of a group, the same layout is tried again with the group widened to clear it.
+            for (const clearTitles of [false, true]) {
+              let l: Layout;
+              try { l = await layout(spec, { detail, direction, numbered, wrap, flat, clearTitles }); } catch { break; }
+              // A wrap that cut nothing, or an option that changed nothing, repeats a layout already tried.
+              if ((wrap && !l.wrapped) || flat !== l.flat) break;
+              if (detail === 'auto' && l.compact) compactAnyway = true;
+              const m = measure(l);
+              const width = Math.ceil(l.width + CHROME_W), height = Math.ceil(l.height);
+              // The flat form repeats the name of a group above each of its cards.
+              const repeats = l.flat ? l.nodes.filter((b) => b.card?.lane).length - new Set(l.nodes.map((b) => b.card?.lane).filter(Boolean)).size : 0;
+              const shortcuts = (numbered ? numberedCost : 0) + (l.flat ? FLAT_COST + repeats * FLAT_REPEAT_COST : 0) + (rows && direction === 'DOWN' ? OFF_ROW_COST : 0)
+                + (l.wrapped ? WRAP_COST : 0) + (detail === 'compact' && asked === 'auto' ? COMPACT_COST : 0) + (wish && !opts.direction && direction !== wish ? TURNED_COST : 0);
+              const over = Math.max(0, width - maxWidth);
+              const score = Math.round(height + over * WIDE_COST + (over > WIDE_SLACK ? WIDE_AT_ALL : 0) + lineCost(m) + shortcuts);
+              // Two option sets that give one drawing are one candidate.
+              const twin = tried.some((o) => o.c.width === width && o.c.height === height && o.c.direction === direction && o.layout.numbered === numbered && o.c.length === m.length && o.c.compact === l.compact && o.c.flat === l.flat);
+              if (!twin) tried.push({ layout: l, c: { direction, labels: numbered ? 'numbered' : 'text', compact: l.compact, wrapped: l.wrapped, flat: l.flat, width, height, broken: l.broken, score, chosen: false, ...m } });
+              if (m.titles === 0 || flat) break;
+            }
           }
         }
       }
     }
   }
-  const best = tried.reduce<(typeof tried)[number] | undefined>((a, b) => (!a || b.c.score < a.c.score ? b : a), undefined);
+  // A layout that drops a line or leaves one hanging is wrong, however small it is. It is kept only when every layout is.
+  const whole = tried.some((t) => t.c.broken === 0);
+  const best = tried.filter((t) => !whole || t.c.broken === 0).reduce<(typeof tried)[number] | undefined>((a, b) => (!a || b.c.score < a.c.score ? b : a), undefined);
   if (!best) throw new Error('could not lay out the diagram');
   best.c.chosen = true;
 
   const c = best.c;
   const kept = [way(c.direction), ...(c.labels === 'numbered' ? ['numbers on the lines'] : worded ? ['words on the lines'] : []),
-    ...(c.flat ? ['group names above the cards'] : []), ...(c.compact && asked === 'auto' && tried.some((t) => !t.c.compact) ? ['compact cards'] : []), ...(c.wrapped ? ['two rows'] : [])];
+    ...(c.flat ? ['group names above the cards'] : []), ...(c.compact && asked === 'auto' && tried.some((t) => !t.c.compact) ? ['compact cards'] : []), ...(c.wrapped ? [c.direction === 'RIGHT' ? 'wrapped onto rows' : 'wrapped onto columns'] : [])];
   // For each shortcut taken, the best layout without it says why it lost.
   const without = (test: (o: Candidate) => boolean): Candidate | undefined =>
-    tried.map((t) => t.c).filter(test).sort((a, b) => a.score - b.score)[0];
+    tried.map((t) => t.c).filter((o) => o.broken === 0).filter(test).sort((a, b) => a.score - b.score)[0];
   const lost: string[] = [];
   const say = (what: string, o: Candidate | undefined): void => { if (o) lost.push(`${what} ${flaw(o, c, maxWidth)}`); };
   if (wish && c.direction !== wish) say(way(wish), without((o) => o.direction === wish));
   if (c.labels === 'numbered' && numberings.length > 1 && spec.type !== 'dynamic') say('words on the lines', without((o) => o.labels === 'text' && o.direction === c.direction));
   if (c.flat) say('a band round each group', without((o) => !o.flat && o.direction === c.direction));
   if (kept.includes('compact cards')) say('full cards', without((o) => !o.compact && o.direction === c.direction && o.labels === c.labels));
-  if (c.wrapped) say('one row', without((o) => !o.wrapped && o.direction === c.direction && o.labels === c.labels));
+  if (c.wrapped) say(c.direction === 'RIGHT' ? 'one row' : 'one column', without((o) => !o.wrapped && o.direction === c.direction && o.labels === c.labels));
   const why = `kept ${kept.join(', ')}, the best of ${tried.length} layouts${lost.length ? `: ${lost.join('; ')}` : ''}`;
 
   const name = new Map(spec.elements.map((e) => [e.id, e.name]));
   const warnings = faults(c, (id) => name.get(id) ?? id);
-  if (c.width > maxWidth) {
-    warnings.unshift(spec.type === 'code'
-      ? `${c.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Draw fewer files: "graph from-facts --level file --max-files <n>", or drop cards with "graph drop --ids".`
-      : `${c.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Cut elements with "graph focus" or "graph collapse", or split into two diagrams.`);
-  }
+  if (c.broken > 0) warnings.unshift(`${c.broken} of the ${spec.relationships.length} relationships could not be drawn from end to end in any layout`);
+  if (c.height > TALL) warnings.unshift(`the drawing is ${c.height}px tall, so a reader scrolls to follow a line`);
+  if (c.width > maxWidth) warnings.unshift(`${c.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink`);
   return { layout: best.layout, report: { why, warnings, candidates: tried.map((t) => t.c) } };
 }
 

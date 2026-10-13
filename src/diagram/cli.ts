@@ -7,6 +7,8 @@ import { lintSpec } from './lint.ts';
 import { toMermaid } from './mermaid.ts';
 import { render, renderSvg } from './svg.ts';
 import { MAX_WIDTH } from './fit.ts';
+import { advise } from './advise.ts';
+import type { Fix } from './advise.ts';
 import { toLegend } from './legend.ts';
 import { DETAILS, LABEL_MODES } from '../spec.ts';
 import type { Detail, LabelMode } from '../spec.ts';
@@ -35,8 +37,10 @@ With no -o, a spec read from a file is drawn to <spec>.svg beside it and the pat
 A spec read from stdin is drawn to stdout. Written paths go to stdout, lint messages to stderr.
 
 The spec is laid out several ways and the one that reads best is kept: short lines, few corners and
-crossings count as well as size. Stderr gets the size, then a "layout:" line with what was kept and why,
-then a warning for each fault that is left, with the "graph" filter that mends it.
+crossings count as well as size. A layout that cannot draw every relationship from end to end is never kept.
+Stderr gets the size, then a "layout:" line with what was kept and why, then a "warning:" for each fault
+that is left. After the warnings, each "fix:" line is a filter or option the tool applied and judged again,
+with the size and the warnings it leaves. Only a fix that leaves fewer warnings is printed.
 Exit 0 ok, 1 lint errors, 2 usage error.
 
 Shape the spec first with "npx gh-wat-dis graph --help".
@@ -59,7 +63,8 @@ export const main: Command = async (argv) => {
   if (labels && !LABEL_MODES.includes(labels)) throw new UsageError(`--labels must be one of ${LABEL_MODES.join(', ')}`);
   const direction = args.direction?.toUpperCase() as 'DOWN' | 'RIGHT' | undefined;
   if (direction && direction !== 'DOWN' && direction !== 'RIGHT') throw new UsageError('--direction must be down or right');
-  const maxWidth = args['max-width'] ? Number(args['max-width']) : MAX_WIDTH;
+  const maxWidth = args['max-width'] === undefined ? MAX_WIDTH : Number(args['max-width']);
+  if (!Number.isInteger(maxWidth) || maxWidth < 300) throw new UsageError(`--max-width must be a whole number of pixels, 300 or more, got "${args['max-width']}"`);
   const opts = { detail, labels, direction, maxWidth };
   const theme = (args.theme ?? 'auto') as Theme;
   if (!THEMES.includes(theme)) throw new UsageError(`--theme must be one of ${THEMES.join(', ')}`);
@@ -70,6 +75,8 @@ export const main: Command = async (argv) => {
   let spec: DiagramSpec;
   try { spec = JSON.parse(readPiped(args._[0])) as DiagramSpec; } catch (err) {
     if (err instanceof SyntaxError) throw new UsageError(`spec is not valid JSON: ${err.message}`);
+    // A file that is not there is a mistake in the command, like any other bad argument.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT' || (err as NodeJS.ErrnoException).code === 'EISDIR') throw new UsageError(`cannot read the spec file "${args._[0]}"`);
     throw err;
   }
 
@@ -103,16 +110,27 @@ export const main: Command = async (argv) => {
   }
   console.error(`layout: ${out.report.why}`);
   const { warnings } = out.report;
-  // The title can make the image wider than the drawing the report judged.
-  if (out.width > maxWidth && !warnings.some((w) => w.includes('is wider than'))) {
-    warnings.unshift(`${out.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Shorten the title.`);
-  }
   for (const w of warnings) console.error(`warning: ${w}`);
+  // A fix is printed only after the tool applied it and judged the result.
+  let fixes: Fix[] = [];
+  if (warnings.length) {
+    const advice = await advise(spec, opts, out.report);
+    fixes = advice.fixes;
+    for (const f of fixes) {
+      console.error(`fix: ${f.command} gives ${f.width} x ${f.height}px with ${f.elements} elements and ${f.warnings.length ? `${f.warnings.length} of these ${warnings.length} warnings left` : 'no warning'}`);
+    }
+    if (!fixes.length) {
+      console.error(advice.tried.length
+        ? `fix: none found. Tried and judged no better: ${advice.tried.join('; ')}. Cut elements by hand, or draw two diagrams.`
+        : 'fix: none to try on this spec. Cut elements by hand, or draw two diagrams.');
+    }
+  }
   if (args.png) {
     // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
     const { toPng } = await import('../tools/raster.ts');
     const image = toPng(theme === 'auto' ? await renderSvg(spec, { ...opts, theme: 'light' }) : out.svg);
     writeFileSync(args.png, image.png);
+    if (image.emoji) console.error(`note: the PNG draws a small box for each of the ${image.emoji} emoji in the text. The SVG holds the emoji and GitHub draws them.`);
     if (target !== '-') say(args.png); else console.error(args.png);
   }
   if (args.report) {
@@ -120,7 +138,7 @@ export const main: Command = async (argv) => {
     console.log(JSON.stringify({
       svg: target, ...(args.png ? { png: args.png } : {}), width, height, maxWidth,
       direction: out.direction, labels: out.numbered ? 'numbered' : 'text', compact: out.compact,
-      why: out.report.why, warnings, candidates: out.report.candidates,
+      why: out.report.why, warnings, fixes, candidates: out.report.candidates,
     }, null, 2));
   }
   return 0;

@@ -1,0 +1,75 @@
+{
+  "title": "Ünïcödé & <escapes> \"q\" 'a' 漢字 🚀",
+  "type": "container",
+  "scope": "<S> & \"co\"",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Café Zürich — naïve façade",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "注文サービス (订单服务)",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Rocket 🚀 launcher 👩‍👩‍👧",
+      "technology": "Rust"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "<script>alert(\"x\")</script> & 'quotes' > <b>",
+      "technology": "Rust"
+    },
+    {
+      "id": "f",
+      "type": "container",
+      "name": "مرحبا بالعالم שלום",
+      "technology": "Rust"
+    },
+    {
+      "id": "g",
+      "type": "container",
+      "name": "Tab\there\nnewline ]]> &amp; &#60;",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Envía «pedidos» a",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "d",
+      "label": "注文を送信 → <b>&amp;</b>",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "e",
+      "label": "🚀 launches & \"lands\" on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "f",
+      "label": "</text></svg><script>",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "f",
+      "to": "g",
+      "label": "يرسل إلى",
+      "technology": "HTTPS"
+    }
+  ]
+}

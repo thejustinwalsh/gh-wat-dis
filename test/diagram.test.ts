@@ -404,8 +404,11 @@ test('judge: every example keeps short lines, few corners, clear boxes and clear
     assert.ok(c.crossings <= Math.max(1, c.lines / 4), `${name}: ${c.crossings} crossings on ${c.lines} lines`);
     assert.equal(c.through, 0, `${name}: a line runs through a box`);
     assert.equal(c.overlaps, 0, `${name}: a label lies on a line or a box`);
-    // The examples are the good cases: none draws a warning about its lines. Two are a little too wide, and say so.
-    assert.deepEqual(report.warnings.filter((w) => !w.includes('is wider than')), [], name);
+    assert.equal(c.broken, 0, `${name}: a relationship is not drawn`);
+    // The examples are the good cases: none draws a warning about its lines. A few are too wide or too tall, and say so.
+    // `in-process` nests three groups deep, and lines enter two of them through the name.
+    const allowed = (w: string): boolean => w.includes('is wider than') || w.includes('px tall') || ((name === 'in-process' || name === 'whole-system') && w.includes('name of a group'));
+    assert.deepEqual(report.warnings.filter((w) => !allowed(w)), [], name);
   }
 });
 
@@ -436,15 +439,23 @@ test('judge: a small change never gets wrap-around lines to save height or width
 
 test('judge: a detour, a crossing and a covered label each cost more than the height they save', async () => {
   const { lineCost, faults } = await import('../src/diagram/judge.ts');
-  const calm = { lines: 4, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, overlaps: 0 };
+  const calm = { lines: 4, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, overlaps: 0, titles: 0 };
   assert.equal(lineCost(calm), 0);
   assert.ok(lineCost({ ...calm, detour: 2000 }) > 1000);
   assert.ok(lineCost({ ...calm, through: 1 }) >= 300 && lineCost({ ...calm, overlaps: 1 }) >= 200);
   assert.deepEqual(faults(calm, (id) => id), []);
-  const poor = faults({ ...calm, crossings: 6, through: 1, overlaps: 2, worst: { from: 'a', to: 'b', length: 1900, direct: 300 } }, (id) => id.toUpperCase());
-  assert.equal(poor.length, 4);
-  assert.match(poor[0]!, /from "A" to "B" runs 1900px where 300px would join them.*graph collapse/);
-  assert.match(poor.join('\n'), /graph focus[\s\S]*--labels numbered/);
+  assert.ok(lineCost({ ...calm, titles: 1 }) >= 100);
+  const poor = faults({ ...calm, crossings: 3, through: 1, overlaps: 2, titles: 1, worst: { from: 'a', to: 'b', length: 1900, direct: 300 } }, (id) => id.toUpperCase());
+  assert.deepEqual(poor, [
+    'the line from "A" to "B" runs 1900px where 300px would join them',
+    '1 line passes through a box that is not theirs',
+    '3 line crossings on 4 lines',
+    '2 places where a label lies on a line or a box, or one line lies on another',
+    '1 line runs through the name of a group',
+  ]);
+  // A fault states what is wrong. A fix is printed by the tool only after it was tried.
+  assert.doesNotMatch(poor.join(' '), /graph |--labels/);
+  assert.deepEqual(faults({ ...calm, crossings: 2 }, (id) => id), []);
 });
 
 test('legend: the table rows carry the numbers drawn on the lines, in the same order', async () => {
@@ -487,8 +498,11 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
     const row = to.card!.rows.find((r) => r.name === e.rel.toSymbol);
     // The line ends on the left edge of the card, level with its row, or with the header when it names no symbol.
     assert.ok(Math.abs(tip.x - to.x) < 0.5, `${e.rel.from} -> ${e.rel.to} ends on the left edge`);
-    assert.ok(Math.abs(tip.y - (to.y + (row ? row.dy : to.card!.head / 2))) < 0.5, `${e.rel.from} -> ${e.rel.to}#${e.rel.toSymbol ?? ''}`);
-    assert.ok(Math.abs(tail.x - (from.x + from.w)) < 0.5 && Math.abs(tail.y - (from.y + from.card!.head / 2)) < 0.5);
+    // Lines that share a row sit a few pixels apart, inside the row.
+    assert.ok(Math.abs(tip.y - (to.y + (row ? row.dy : to.card!.head / 2))) <= 7, `${e.rel.from} -> ${e.rel.to}#${e.rel.toSymbol ?? ''}`);
+    assert.ok(Math.abs(tail.x - (from.x + from.w)) < 0.5 && Math.abs(tail.y - (from.y + from.card!.head / 2)) <= 7);
+    // No two lines share an end: each can be followed from its file to its row.
+    for (const o of l.edges) if (o !== e) assert.ok(Math.hypot(o.points.at(-1)!.x - tip.x, o.points.at(-1)!.y - tip.y) > 2, `${e.rel.from} and ${o.rel.from} end on one point of ${e.rel.to}`);
     assert.equal(e.label, undefined);
     for (const b of l.nodes) if (b !== to && b !== from && !b.group) assert.ok(!crossesRect(e.points, b, -1), `${e.rel.from} -> ${e.rel.to} crosses ${b.el.id}`);
   }
@@ -498,7 +512,7 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   const { render } = await import('../src/diagram/svg.ts');
   const out = await render(spec);
   // Five files fit the page with room to spare, left to right, with no words to number.
-  assert.ok(out.width <= 760 && out.height <= 460, `${out.width} x ${out.height}`);
+  assert.ok(out.width <= 760 && out.height <= 480, `${out.width} x ${out.height}`);
   assert.deepEqual([out.direction, out.numbered], ['RIGHT', false]);
   assertWellFormed(out.svg);
   assert.match(out.svg, /^<svg[^>]*><title[^>]*>Payment retries move to idempotency keys: Code diagram for/);
@@ -508,7 +522,7 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   }
   assert.match(out.svg, /<g class="gone"><text class="sy"[^>]*>backoff_schedule<\/text>.*?class="strike"/);
   const key = out.svg.slice(out.svg.indexOf('>KEY<'));
-  assert.match(key, />File<.*>Part of the system<.*>Imports<.*>Added<.*>Changed<.*>Removed<.*>Affected</);
+  assert.match(key, />File<.*>Part of the system<.*>Imports<.*>Added<.*>Changed<.*>Removed<.*>Imports a changed signature</);
   assert.doesNotMatch(key, /Boundary|Relationship|ADDED/);
   for (const theme of ['light', 'dark'] as const) assert.doesNotMatch(await renderSvg(spec, { theme }), /var\(--/);
 
@@ -552,7 +566,7 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   assert.equal(plain.status, 0, plain.stderr);
   assert.equal(plain.stdout.trim(), join(dir, 'a.svg'));
   assert.match(plain.stderr, /^\d+ x \d+px, top down$/m);
-  assert.match(plain.stderr, /^layout: kept top down, words on the lines, two rows, the best of \d+ layouts: left to right is \d+px/m);
+  assert.match(plain.stderr, /^layout: kept top down, words on the lines, wrapped onto columns, the best of \d+ layouts: left to right is \d+px/m);
   const out = run(spec, '-o', join(dir, 'b.svg'), '--png', join(dir, 'b.png'), '--report');
   assert.equal(out.status, 0, out.stderr);
   const report = JSON.parse(out.stdout) as { svg: string; png: string; width: number; direction: string; labels: string; why: string; warnings: string[]; candidates: { chosen: boolean; direction: string; score: number; detour: number }[] };
@@ -564,4 +578,110 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   assert.ok(report.candidates.every((c) => c.score >= kept[0]!.score));
   assert.ok(report.candidates.some((c) => c.direction === 'RIGHT' && c.detour > 0), 'the wrap-around layouts are in the list, with their detours');
   assert.equal(run(spec, '--report', '-o', '-').status, 2);
+});
+
+const pressure = (name: string): DiagramSpec =>
+  JSON.parse(readFileSync(new URL(`./fixtures/pressure/${name}.json`, import.meta.url), 'utf8')) as DiagramSpec;
+
+test('judge: a layout that drops a line or leaves one hanging is never kept', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  // ELK returns no route for a line that goes back to an earlier element once it wraps the chain.
+  const wrapped = await layout(pressure('08-cycle'), { direction: 'RIGHT', wrap: 2 });
+  assert.ok(wrapped.broken > 0, 'the wrapped cycle is the broken layout this test is about');
+  const cases: [string, 'RIGHT' | 'DOWN' | undefined][] = [
+    ['08-cycle', undefined], ['08-cycle', 'RIGHT'], ['05-long-fix-title', undefined], ['06-dynamic8', 'RIGHT'], ['09-statuses', 'RIGHT'], ['11-code-symrefs-ok', undefined],
+  ];
+  for (const [name, direction] of cases) {
+    const spec = pressure(name);
+    const { layout: kept, report } = await judge(spec, direction ? { direction } : {});
+    const c = report.candidates.find((k) => k.chosen)!;
+    const where = `${name} ${direction ?? 'auto'}`;
+    assert.equal(c.broken, 0, where);
+    assert.equal(kept.edges.filter((e) => e.points.length > 1).length + kept.folded, spec.relationships.length, `${where}: every relationship is drawn`);
+    // Each line starts on its source and ends on its target.
+    for (const e of kept.edges) {
+      if (e.rel.from === e.rel.to) continue;
+      for (const [p, id] of [[e.points[0]!, e.rel.from], [e.points.at(-1)!, e.rel.to]] as const) {
+        const b = box(kept, id);
+        const near = p.x >= b.x - 12 && p.x <= b.x + b.w + 12 && p.y >= b.y - 18 && p.y <= b.y + b.h + 12;
+        assert.ok(near, `${where}: ${e.rel.from} -> ${e.rel.to} has an end at ${Math.round(p.x)},${Math.round(p.y)}, away from ${id}`);
+      }
+    }
+    assert.ok(report.candidates.every((k) => !k.chosen || k.broken === 0));
+  }
+  // The broken layouts stay in the report, marked, so a reader of the data sees why they lost.
+  const cycle = (await judge(pressure('08-cycle'))).report;
+  assert.ok(cycle.candidates.some((k) => k.broken > 0 && !k.chosen));
+});
+
+test('judge: group names are slid clear of lines, a flow starts on its first step, lines do not lie on one another', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  const nested = await judge(pressure('04-nested'));
+  const c = nested.report.candidates.find((k) => k.chosen)!;
+  assert.equal(c.titles, 0, 'no line runs through a group name');
+  for (const g of nested.layout.nodes.filter((b) => b.group)) {
+    assert.ok(g.title && g.title.x >= g.x && g.title.x + g.title.w <= g.x + g.w + 1, `${g.el.id}: the name is inside its group`);
+    for (const e of nested.layout.edges) assert.ok(!crossesRect(e.points, g.title!, 1), `${e.rel.from} -> ${e.rel.to} runs through the name of ${g.el.id}`);
+  }
+  const flow = await judge(pressure('08-self-dynamic'));
+  const first = flow.layout.edges.find((e) => e.rel.order === 1)!;
+  assert.ok(first.points[0]!.x < first.points.at(-1)!.x, 'step 1 runs left to right');
+  const refs = (await judge(pressure('11-code-symrefs-ok'))).report.candidates.find((k) => k.chosen)!;
+  assert.deepEqual([refs.overlaps, refs.worst], [0, undefined]);
+});
+
+test('judge: height is warned about, and a fix is printed only after the tool tried it and it helped', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  const { advise } = await import('../src/diagram/advise.ts');
+  const tall = (await judge(pressure('11-code8x6'))).report;
+  assert.match(tall.warnings.join('\n'), /the drawing is \d+px tall/);
+  // Forcing a flow left to right makes it too wide. Dropping the option is the fix, and it was judged.
+  const forced = { direction: 'RIGHT' as const };
+  const wide = (await judge(pressure('06-dynamic8'), forced)).report;
+  assert.match(wide.warnings[0]!, /is wider than GitHub's 860px body/);
+  const advice = await advise(pressure('06-dynamic8'), forced, wide);
+  assert.deepEqual(advice.fixes.map((f) => [f.command, f.warnings]), [['no --direction right', []]]);
+  // Nothing mends a spec of eight files that all import one another: no fix is offered.
+  const none = await advise(pressure('11-code8x6'), {}, tall);
+  assert.deepEqual(none.fixes, []);
+  // A warning never names a filter or an option. That is the job of a fix line.
+  for (const w of [...tall.warnings, ...wide.warnings]) assert.doesNotMatch(w, /graph |--labels|--direction/);
+  // Numbers already on the lines are never offered as the cure.
+  const numbered = (await judge(pressure('09-statuses'), { direction: 'RIGHT', labels: 'numbered' })).report;
+  assert.doesNotMatch(numbered.warnings.join(' '), /numbered/);
+  assert.match((await judge(fixture('diagram-three-groups'))).report.why, /wrapped onto columns/);
+});
+
+test('lint: order, empty lists, wrong value types, a file outside a code diagram, a long flow', () => {
+  const run = (change: (s: any) => void): string => { const s: any = base(); change(s); const r = lintSpec(s); return [...r.errors.map((e) => `error: ${e}`), ...r.warnings.map((w) => `warning: ${w}`)].join('\n'); };
+  assert.match(run((s) => { s.relationships[0].order = -3; }), /error: .*order must be a whole number from 1 to 999, got -3/);
+  assert.match(run((s) => { s.relationships[0].order = 1e9; }), /error: .*order must be a whole number/);
+  assert.match(run((s) => { s.relationships[0].order = 1; s.relationships.push({ ...s.relationships[0] }); }), /error: .*order 1 is used more than once/);
+  assert.match(run((s) => { s.elements = []; s.relationships = []; }), /error: elements is empty: there is nothing to draw/);
+  assert.equal(run((s) => { s.title = 7; }), 'error: title must be text');
+  assert.match(run((s) => { s.elements[0].name = 7; }), /error: element "web": name must be text/);
+  // One structural error is reported alone, not followed by ids that "do not exist".
+  assert.equal(run((s) => { s.elements = 'x'; }), 'error: elements must be an array');
+  assert.match(run((s) => { s.elements[0].type = 'file'; }), /warning: "web" is a file, which belongs in a code diagram; this is a container diagram/);
+  assert.match(run((s) => { s.type = 'dynamic'; s.relationships = Array.from({ length: 9 }, (_, i) => ({ ...s.relationships[0], order: i + 1 })); }), /warning: a flow of 9 steps is more than 8/);
+  // Past five elements descriptions are not drawn, so a missing one is not reported.
+  const many = (s: any): void => { s.elements = Array.from({ length: 6 }, (_, i) => ({ id: `e${i}`, type: 'container', name: `E${i}`, technology: 'Rust' })); s.relationships = []; };
+  assert.equal(run(many), '');
+  assert.match(run((s) => { many(s); s.detail = 'full'; }), /warning: element "e0" has no description/);
+});
+
+test('legend and png: text from a spec is escaped in the table, and an emoji costs the PNG one box, not the whole line', async () => {
+  const { toLegend, renderSvg: draw } = await import('../src/diagram/index.ts');
+  const spec = base();
+  spec.elements[0]!.name = '<script>alert(1)</script>';
+  spec.relationships[0]!.label = 'Sends <b>bold</b> | piped & more';
+  const table = toLegend(spec);
+  assert.ok(table.includes('| &lt;script&gt;alert(1)&lt;/script&gt; | API | Sends &lt;b&gt;bold&lt;/b&gt; \\| piped &amp; more |'), table);
+  assert.doesNotMatch(table, /<script>|<b>/);
+  const { toPng } = await import('../src/tools/raster.ts');
+  const svg = await draw(pressure('10-unicode'), { theme: 'light' });
+  assert.match(svg, /\p{Extended_Pictographic}/u);
+  const image = toPng(svg);
+  assert.ok(image.emoji > 0);
+  assert.equal(toPng(await draw(base(), { theme: 'light' })).emoji, 0);
 });

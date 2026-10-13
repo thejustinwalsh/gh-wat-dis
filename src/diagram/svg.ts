@@ -5,7 +5,7 @@ import {
   LANE_NAME_PX, PIPE_RX, groupLabelWidth,
 } from './layout.ts';
 import type { EdgePath, NodeBox, Pt, Rect } from './layout.ts';
-import { escapeXml, fit, monoWidth, textWidth } from './measure.ts';
+import { escapeXml, fit, monoWidth, textWidth, wrap } from './measure.ts';
 import { FONT, MONO, applyTheme } from './theme.ts';
 import { judge } from './fit.ts';
 import type { FitOptions, Report } from './fit.ts';
@@ -15,6 +15,8 @@ import { STATUS_BADGE, STATUS_MARK, STATUS_WORD, TYPE_LABEL, active, kindLine, r
 const MARGIN = 24;
 const HEADER = 62;
 const MIN_WIDTH = 440;
+/** The title and the scope line wrap at the width of the drawing, and no narrower than this. */
+const HEAD_WRAP = 700;
 const FILL: Record<string, string> = {
   person: 'person', system: 'system', container: 'container', component: 'component', datastore: 'store', queue: 'store',
 };
@@ -93,11 +95,12 @@ function drawGroup(b: NodeBox): string {
 
 /** Drawn above the edges, on a patch of the group's own fill, so a line that enters the group never strikes the text. */
 function drawGroupLabel(b: NodeBox): string {
-  if (b.light) return `<text class="ln" x="${n(b.x + 10)}" y="${n(b.y + 18)}">${escapeXml(fit(b.el.name, LANE_NAME_PX, (b.w - 20) / 1.06, true).toUpperCase())}</text>`;
+  if (b.light) return `<text class="ln" x="${n(b.title?.x ?? b.x + 10)}" y="${n(b.y + 18)}">${escapeXml(fit(b.el.name, LANE_NAME_PX, (b.w - 20) / 1.06, true).toUpperCase())}</text>`;
   const status = active(b.el.status);
   // `layout` makes a group wide enough for its label, so the two-line and cut forms are a last resort.
-  const x = b.x + GROUP_PAD_X, room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w + 10 : 0);
+  const room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w + 10 : 0);
   const oneLine = groupLabelWidth(b.el) <= room;
+  const x = oneLine ? b.title?.x ?? b.x + GROUP_PAD_X : b.x + GROUP_PAD_X;
   const name = fit(b.el.name, GROUP_NAME_PX, room, true), kind = fit(kindLine(b.el), GROUP_KIND_PX, room);
   const nameY = b.y + (oneLine ? 26 : 21);
   const w = oneLine ? groupLabelWidth(b.el) : Math.max(textWidth(name, GROUP_NAME_PX, true), textWidth(kind, GROUP_KIND_PX));
@@ -118,7 +121,7 @@ function drawFile(b: NodeBox): string {
   const status = active(b.el.status);
   const x = b.x + CARD_PAD + (status ? 15 : 0), headY = b.y + (card.stacked ? card.head - 11 : card.head / 2 + 4);
   let out = `<rect class="card f-bg" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="6"/>`;
-  if (card.lane) out += `<text class="ln" x="${n(b.x + 2)}" y="${n(b.y - 6)}">${escapeXml(fit(card.lane, LANE_NAME_PX, b.w / 1.06 - 4, true).toUpperCase())}</text>`;
+  if (card.lane) out += `<text class="ln" x="${n(b.title?.x ?? b.x + 2)}" y="${n(b.y - 6)}">${escapeXml(fit(card.lane, LANE_NAME_PX, b.w / 1.06 - 4, true).toUpperCase())}</text>`;
   if (status) out += mark(status, b.x + CARD_PAD + 4, headY + 0.5);
   out += card.stacked
     ? `<text class="fs" x="${n(x)}" y="${n(headY - 15)}">${escapeXml(card.dir)}</text><text class="fb" x="${n(x)}" y="${n(headY)}">${escapeXml(card.base)}</text>`
@@ -241,7 +244,8 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
     const onEdge = edges.some((e) => e.rel.status === status);
     // A file and its symbols carry the status as a mark, so the key shows the mark.
     if (!onNode && !onEdge && boxes.some((b) => b.card && (b.el.status === status || b.card.rows.some((r) => r.status === status)))) {
-      items.push({ w: 10, label: STATUS_WORD[status]!, draw: (x, y) => mark(status, x + 5, y + 12.5) });
+      // On a file outside the diff the dot has one meaning, and the key says it.
+      items.push({ w: 10, label: status === 'affected' ? 'Imports a changed signature' : STATUS_WORD[status]!, draw: (x, y) => mark(status, x + 5, y + 12.5) });
       continue;
     }
     if (!onNode && !onEdge) continue;
@@ -287,8 +291,13 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
   const { layout: g, report } = await judge(spec, opts);
   const kind = spec.type[0]!.toUpperCase() + spec.type.slice(1);
   const subtitle = `${kind} diagram${spec.scope ? ` for ${spec.scope}` : ''}`;
-  const width = Math.ceil(Math.max(g.width, textWidth(spec.title, 18, true), textWidth(subtitle, 12.5), MIN_WIDTH) + 2 * MARGIN);
-  const ox = Math.round((width - g.width) / 2), oy = HEADER + 22;
+  // A long title or scope line wraps, so it never makes the image wider than the page.
+  const room = Math.max(g.width, HEAD_WRAP);
+  const titleLines = wrap(spec.title, 18, room, true), subLines = wrap(subtitle, 12.5, room);
+  const headWidth = Math.max(...titleLines.map((l) => textWidth(l, 18, true)), ...subLines.map((l) => textWidth(l, 12.5)));
+  const width = Math.ceil(Math.max(g.width, headWidth, MIN_WIDTH) + 2 * MARGIN);
+  const subTop = (titleLines.length - 1) * 24, extra = subTop + (subLines.length - 1) * 17;
+  const ox = Math.round((width - g.width) / 2), oy = HEADER + 22 + extra;
 
   const groups = g.nodes.filter((b) => b.group).sort((a, b) => a.depth - b.depth);
   const body = [
@@ -314,8 +323,8 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
     + `<desc id="dg-desc">${escapeXml(describe(spec, subtitle))}</desc>`
     + `<style>${applyTheme(CSS, opts.theme ?? 'auto')}</style>`
     + `<rect class="bg" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="12"/>`
-    + `<text class="title" x="${MARGIN}" y="${MARGIN + 20}">${escapeXml(spec.title)}</text>`
-    + `<text class="sub" x="${MARGIN}" y="${MARGIN + 40}">${escapeXml(subtitle)}</text>`
+    + titleLines.map((l, i) => `<text class="title" x="${MARGIN}" y="${MARGIN + 20 + i * 24}">${escapeXml(l)}</text>`).join('')
+    + subLines.map((l, i) => `<text class="sub" x="${MARGIN}" y="${MARGIN + 40 + subTop + i * 17}">${escapeXml(l)}</text>`).join('')
     + `<g transform="translate(${ox} ${oy})">${body}</g>`
     + `<path class="rule" d="M${MARGIN} ${n(keyTop)}H${width - MARGIN}"/>`
     + `<text class="kh" x="${MARGIN}" y="${n(keyTop + 18)}">KEY</text>${key}`

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
-import { extOf, kindOf, languageOf, schemaKind } from './classify.ts';
+import { CONFIG_REL } from '../cli/util.ts';
+import { MAX_PARSE_BYTES, extOf, isSkipped, kindOf, languageOf, schemaKind } from './classify.ts';
 import { loadCodeowners, ownersOf } from './codeowners.ts';
 import type { ElementMap } from './elements.ts';
 import { buildElements } from './elements.ts';
@@ -16,7 +17,7 @@ import { diffSymbols } from './symbols.ts';
 import { commitTree, repoTop, workingTree } from './tree.ts';
 import type { Tree } from './tree.ts';
 import type {
-  AnalyzeOptions, ComplexityFact, CoChangeFact, ContractFact, DependencyFact, DirectDependent, EdgeFact, ElementFact, Facts, FileFact, FileKind,
+  AnalyzeOptions, ComplexityFact, CoChangeFact, ContractFact, DependencyFact, DirectDependent, EdgeFact, ElementFact, Facts, FileFact, FileKind, ImportFact,
   OwnerFact, Provenance, SymbolDependent, SymbolFact, TransitiveRollup,
 } from './types.ts';
 
@@ -83,6 +84,19 @@ function symbolDependents(graph: Graph, els: ElementMap, file: string, c: Symbol
   return [...found].map(([f, provenance]) => ({ file: f, element: els.of(f), inDiff: inDiff(f), provenance })).sort((a, b) => a.file.localeCompare(b.file));
 }
 
+/** The elements and relationships of an architecture map, each as text that changes when its entry does. */
+function mapOf(text: string | null): { elements: Map<string, string>; relationships: Set<string> } | null {
+  // No map on that side: the map is new, and a new map describes the architecture, it does not add to it.
+  if (text === null) return null;
+  try {
+    const arch = (JSON.parse(text) as { architecture?: { elements?: { id?: string }[]; relationships?: { from?: string; to?: string }[] } }).architecture;
+    return {
+      elements: new Map((arch?.elements ?? []).filter((e) => e?.id).map((e) => [e.id!, JSON.stringify(e)])),
+      relationships: new Set((arch?.relationships ?? []).map((r) => `${r.from}\0${r.to}`)),
+    };
+  } catch { return null; }
+}
+
 function pairCounts(els: ElementMap, rows: Iterable<[string, string[]]>): Map<string, number> {
   const out = new Map<string, number>();
   for (const [from, targets] of rows) {
@@ -125,6 +139,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
 
   // Symbols, and the element pairs the changed files contributed on each side.
   const symbols: SymbolFact[] = [];
+  const imports: ImportFact[] = [];
   const baseRows: [string, string[]][] = [];
   const headRows: [string, string[]][] = [];
   const changedNames = new Map<string, Set<string>>();
@@ -138,6 +153,19 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     if (base) baseRows.push([basePath(e), base.targets]);
     else if (e.status !== 'added' && baseLang) baseGraphGaps++;
     if ((e.status === 'added' ? !head : e.status === 'deleted' ? !base : !head || !base)) continue;
+    // Imports this file gained or lost: a name it did not import before, or a file it no longer reaches.
+    const was = new Map((base?.edges ?? []).filter((x) => !x.traced).map((x) => [x.to, x]));
+    const is = new Map((head?.edges ?? []).filter((x) => !x.traced).map((x) => [x.to, x]));
+    for (const to of new Set([...was.keys(), ...is.keys()])) {
+      const a = was.get(to), b = is.get(to);
+      for (const [change, mine, other] of [['added', b, a], ['removed', a, b]] as const) {
+        if (!mine) continue;
+        const names = mine.names.filter((n) => !other?.names.includes(n)).sort();
+        const whole = mine.whole && !other?.whole;
+        if (!names.length && !whole && other) continue;
+        imports.push({ from: e.path, to, toElement: els.of(to), toInDiff: changed.has(to), names, whole: whole || (!other && mine.whole), change, provenance: 'resolved' });
+      }
+    }
     const element = els.of(e.path);
     for (const c of diffSymbols(base?.syms ?? null, head?.syms ?? null)) {
       const { container: _container, ...fact } = c;
@@ -186,14 +214,26 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const transitive = [...rollup.values()].sort((a, b) => a.minDepth - b.minDepth || b.count - a.count || a.element.localeCompare(b.element));
 
   // Files.
+  const skippedFor = (path: string): string | undefined => {
+    const lang = languageOf(path);
+    if (!lang || isSkipped(path) || graph.nodes.has(path) || !tree.has(path)) return undefined;
+    return tree.size(path) > MAX_PARSE_BYTES ? `larger than ${MAX_PARSE_BYTES / 1024} KB` : undefined;
+  };
   const files: FileFact[] = entries.map((e) => ({
     path: e.path, status: e.status, ...(e.oldPath ? { oldPath: e.oldPath } : {}),
     insertions: e.insertions, deletions: e.deletions, ...(e.binary ? { binary: true } : {}),
     kind: graph.nodes.get(e.path)?.isTest ? 'test' : kindOf(e.path), language: languageOf(e.path), element: els.of(e.path),
     owners: ownersOf(co, e.path).owners, churn90d: hist.churn.get(e.path) ?? 0, // git names the enclosing function from the hunk header. Outside the languages it knows, that line is a CSS rule or a paragraph.
     hunkFunctions: languageOf(e.path) ? e.hunkFunctions : [],
+    ...(skippedFor(e.path) ? { skipped: skippedFor(e.path)! } : {}),
     provenance: 'exact', source: 'git',
   }));
+  const skipped = files.filter((f) => f.skipped);
+  if (skipped.length) {
+    const names = `${skipped.slice(0, 3).map((f) => f.path).join(', ')}${skipped.length > 3 ? `, and ${skipped.length - 3} more` : ''}`;
+    graph.unavailable.push({ tool: 'ast-grep', reason: `${skipped.length} changed source file(s) larger than ${MAX_PARSE_BYTES / 1024} KB were not parsed: ${names}` });
+    caveats.push(`${skipped.length} changed source file(s) larger than ${MAX_PARSE_BYTES / 1024} KB were not parsed, so their symbols, imports and complexity are missing: ${names}`);
+  }
 
   const owners = new Map<string, OwnerFact>();
   const ownerRow = (o: string): OwnerFact => owners.get(o) ?? owners.set(o, { owner: o, files: [], dependentFiles: [] }).get(o)!;
@@ -254,10 +294,24 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     bump(f.element, f.status === 'added' || f.status === 'renamed' && els.of(f.oldPath!) !== f.element);
     if (f.oldPath && f.status === 'renamed' && els.of(f.oldPath) !== f.element) bump(els.of(f.oldPath), false);
   }
+  // A change to the architecture map is a change to the architecture: an element or a relationship
+  // the map did not have on base is added, and an element whose entry differs is changed.
+  const mapWas = els.mapping === 'config' && changed.has(CONFIG_REL) ? mapOf(await tryGit(root, ['show', `${range.base}:${CONFIG_REL}`])) : null;
+  const mapIs = mapWas ? mapOf(range.head ? await tryGit(root, ['show', `${range.head}:${CONFIG_REL}`]) : tree.read(CONFIG_REL) ?? null) : null;
+  const mapStatus = (id: string): 'added' | 'changed' | undefined => {
+    if (!mapWas || !mapIs || !mapIs.elements.has(id)) return undefined;
+    return !mapWas.elements.has(id) ? 'added' : mapWas.elements.get(id) !== mapIs.elements.get(id) ? 'changed' : undefined;
+  };
+  if (mapWas && mapIs) {
+    for (const key of new Set([...mapWas.relationships, ...mapIs.relationships])) {
+      const edge = edges.get(key);
+      if (edge && edge.status === 'unchanged' && mapWas.relationships.has(key) !== mapIs.relationships.has(key)) edge.status = mapIs.relationships.has(key) ? 'added' : 'removed';
+    }
+  }
   const elements: ElementFact[] = els.defs.map((d) => {
     const row = perElement.get(d.id) ?? { changed: 0, added: 0 };
     const dependentsAffected = dependentsByElement.get(d.id) ?? 0;
-    const status = !row.changed ? (dependentsAffected ? 'affected' : 'unchanged')
+    const status = mapStatus(d.id) === 'added' ? 'added' : !row.changed ? (mapStatus(d.id) ?? (dependentsAffected ? 'affected' : 'unchanged'))
       : d.files === 0 ? 'removed' : row.added === d.files ? 'added' : 'changed';
     const { found: _found, globs: _globs, ...rest } = d;
     void _found; void _globs;
@@ -300,7 +354,8 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   let complexity: ComplexityFact[] = [];
   let measured = false;
   if (opts.cccc) {
-    const sides: Side[] = files.filter((f) => f.kind === 'source' && f.language && !f.binary).map((f) => {
+    // A file that was not read on head has no head side: scoring it would count every function as removed.
+    const sides: Side[] = files.filter((f) => f.kind === 'source' && f.language && !f.binary && !f.skipped).map((f) => {
       const e = changed.get(f.path)!;
       const head = e.status === 'deleted' ? undefined : tree.read(f.path);
       const base = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
@@ -346,6 +401,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     files,
     symbols,
     dependents: { direct: directList, transitive },
+    imports: imports.sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.change.localeCompare(b.change)),
     elements,
     edges: [...edges.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to)),
     contracts,
