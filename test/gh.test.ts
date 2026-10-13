@@ -274,5 +274,61 @@ test('issues: reads type and surfaces from the config, and says what is missing'
   assert.deepEqual(by.get(3)!.missing, ['one type']);
   assert.deepEqual([by.get(4)!.missing, by.get(4)!.otherLabels], [['type', 'surface'], ['wontfix']]);
   const org = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Bug'] });
-  assert.equal(issueRows(org, [raw(9, [], { type: { name: 'Bug' } })])[0]!.type, 'Bug');
+  const typed = issueRows(org, [raw(9, ['bug', 'wontfix'], { type: { name: 'Bug' } })])[0]!;
+  assert.deepEqual([typed.type, typed.otherLabels], ['Bug', ['bug', 'wontfix']], 'with issue types, a label named "bug" is one more label');
+});
+
+test('survey: counts what open issues lack and describes bodies without rating them', async () => {
+  const { bodyFacts, issueNumbers, survey, surveyRows } = await import('../src/gh/survey.ts');
+  const { defaultConfig } = await import('../src/cli/config.ts');
+
+  const facts = bodyFacts('## Summary\r\nText.\n\n```md\n## Do\n- [x] in code\n```\n## evidence\n- [x] done by someone\n* [ ] open\n1. [X] also done\n<details><summary>Agent context</summary>x</details>');
+  assert.deepEqual(facts, { chars: facts.chars, opensWithHeading: true, sections: ['Evidence'], otherHeadings: 1, checkedTasks: 2, openTasks: 1, agentContext: true });
+  assert.deepEqual(bodyFacts(null), { chars: 0, opensWithHeading: false, sections: [], otherHeadings: 0, checkedTasks: 0, openTasks: 0, agentContext: false });
+  assert.equal(bodyFacts('Plain opening.\n\n## Do\n- [ ] x').opensWithHeading, false);
+  assert.deepEqual(issueNumbers('253 rewritten\n#236 kept: waits on #12\n\n  250 skip, a workflow writes it\nnote with 99 in it\n'), [253, 236, 250]);
+
+  const cfg = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Task', 'Bug', 'Feature'] });
+  cfg.labels.surfaces = [{ name: 'site', description: 's' }];
+  const raw = (number: number, labels: string[], extra: object = {}) => ({
+    number, title: `t${number}`, state: 'open', comments: 0, updated_at: `2026-10-${String(number).padStart(2, '0')}T00:00:00Z`,
+    labels: labels.map((name) => ({ name })), milestone: null, body: 'Text.', user: { login: 'Me' }, ...extra,
+  });
+  const input = {
+    repo: 'o/r', organization: true, viewer: { login: 'me', permission: 'WRITE' }, cfg,
+    issues: [
+      raw(1, ['site'], { type: { name: 'Bug' }, milestone: { title: 'v0.10.0' } }),
+      raw(2, ['bug', 'needs-repro'], { user: { login: 'other' }, body: '' }),
+      raw(3, ['enhancement', 'site'], { type: { name: 'Feature' }, milestone: { title: 'v0.2.0' }, body: '# Title\n- [x] kept' }),
+      raw(4, [], { sub_issues_summary: { total: 2, completed: 0 }, type: { name: 'Task' } }),
+      raw(5, [], { pull_request: {} }),
+    ],
+    labels: [
+      { name: 'site', description: 's', color: 'ffffff' }, { name: 'bug', description: 'b', color: 'd73a4a' },
+      { name: 'enhancement', description: 'e', color: 'a2eeef' }, { name: 'needs-repro', description: '', color: '000000' },
+    ],
+    milestones: [
+      { title: 'v0.10.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- a\n\n**Tracking:** #4', due_on: null, open_issues: 1, closed_issues: 0 },
+      { title: 'v0.2.0', number: 1, state: 'open', description: '', due_on: '2026-12-01T08:00:00Z', open_issues: 1, closed_issues: 3 },
+    ],
+  };
+
+  const rows = surveyRows(input);
+  assert.deepEqual(rows.map((r) => r.number), [3, 1, 4, 2], 'the current milestone first, then later ones, then the backlog by newest update');
+  assert.deepEqual(rows.map((r) => r.mine), [true, true, true, false], 'the author match ignores case');
+  assert.deepEqual(rows.find((r) => r.number === 2)!.otherLabels, ['bug', 'needs-repro']);
+
+  const s = survey(input);
+  assert.deepEqual(s.counts, { openIssues: 4, openPrs: 1, byViewer: 3, byOthers: 1, noType: 1, severalTypes: 0, noSurface: 1, noMilestone: 1, tracking: 1 });
+  assert.deepEqual(s.bodies, { empty: 1, opensWithHeading: 1, noFormatSection: 3, withCheckedTasks: 1 });
+  assert.deepEqual(s.labels.create, ['agents']);
+  assert.deepEqual(s.labels.other.map((l) => [l.name, l.openIssues, l.type, l.untyped]), [['bug', 1, 'Bug', 1], ['enhancement', 1, 'Feature', 0], ['needs-repro', 1, null, 0]]);
+  assert.deepEqual(s.milestones.map((m) => [m.title, m.current, m.dueOn, m.description, m.doneWhen, m.tracking]), [
+    ['v0.2.0', true, '2026-12-01T08:00:00Z', false, 0, null], ['v0.10.0', false, null, true, 1, 4],
+  ]);
+  assert.ok(!/score|verdict|grade|quality/i.test(JSON.stringify(s)), 'a survey states facts and rates nothing');
+
+  const user = survey({ ...input, cfg: defaultConfig({ owner: 'o', name: 'r' }), organization: false });
+  assert.deepEqual([user.owner, user.types.source, user.labels.surfaces], ['user', 'label', 0]);
+  assert.equal(user.counts.noType, 3, 'on a user repository the type is a label, and "bug" is one');
 });

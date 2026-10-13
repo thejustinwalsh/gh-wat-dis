@@ -4,7 +4,7 @@
 
 gh-wat-dis is a set of skills for the coding agent that writes your GitHub issues, pull requests and milestones. Each issue opens with the problem and the solution, shows what changes in the system, and keeps the long data for agents in a collapsed block at the end, so an engineer can read it in two minutes and know what to do.
 
-It ships as one npm package: nine skills, plus small tools the skills call through `npx`. A project installs nothing.
+It ships as one npm package: ten skills, plus small tools the skills call through `npx`. A project installs nothing.
 
 ## Install
 
@@ -48,6 +48,7 @@ Ask in plain words. The skills trigger on the task.
 | "What does this change affect?" / "Map the architecture" | `wat-architecture` |
 | "Draw the container diagram for checkout" | `wat-diagram` |
 | "Set up gh-wat-dis" | `wat-setup` |
+| "Migrate this repo and its open issues to gh-wat-dis" | `wat-migrate` |
 
 Every issue and PR:
 

@@ -30,7 +30,8 @@ export interface IssueRow {
 
 export function issueRows(cfg: Config, raw: RawListIssue[]): IssueRow[] {
   const byLabel = cfg.issues?.typeSource === 'label';
-  const typeNames = new Map((cfg.issues?.types ?? []).map((t) => [typeLabel(t), t]));
+  // Where GitHub has issue types, a label named "bug" is one more label outside the plan.
+  const typeNames = new Map(byLabel ? (cfg.issues?.types ?? []).map((t) => [typeLabel(t), t]) : []);
   const surfaceNames = new Set((cfg.labels?.surfaces ?? []).map((l) => l.name.toLowerCase()));
   const agentsName = (cfg.labels?.agents || 'agents').toLowerCase();
   return raw.filter((i) => !i.pull_request).map((i) => {

@@ -26,6 +26,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 | Task | Skill |
 |---|---|
 | Install or repair the GitHub MCP server, `gh`, or the repo config | `wat-setup` |
+| Migrate a repository that already has issues, labels and milestones onto gh-wat-dis | `wat-migrate` |
 | Create or edit an issue | `wat-issue` |
 | Open or edit a pull request | `wat-pr` |
 | Create, plan or report on a milestone | `wat-milestone` |
