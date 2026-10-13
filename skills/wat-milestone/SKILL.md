@@ -59,11 +59,12 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 2. **Check each done-when condition.** Run the check it names. Mark it met or not met, with the evidence.
    - **You cannot run the check here** (a clean machine, a production system): mark it "not checked", say why, and give the nearest fact you can measure, labeled as indirect. An open issue that delivers the condition is such a fact.
    - **The condition names no check:** say what you looked at, and propose wording that names one.
+   - **The condition has several parts** (a command, a place to run it, a source for the package): check each part you can, and report each one. The condition is met only when every part is checked and met. One part you could not check makes the whole condition "not checked", with the parts you did check listed as facts.
    - Never mark a condition met from an indirect fact.
 3. **Find what changed.** Read the comments on the tracking issue (`issue_read` with `get_comments`, or `gh issue view <tracking> --comments`). The last status comment is the baseline. No earlier status: write "First status."
 4. **Name the 1 to 3 issues that decide the outcome**: the ones that block others, or that a done-when condition needs. They go in the format's "Decides the outcome" list.
 5. **Write** the Status comment format from `../wat/references/formats.md`. If `status` is `blocked` or `stalled`, propose what to do: which issue to unblock, or which issues move to the next milestone and what this one still delivers.
-6. **Show it in chat.** Post it as a comment on the tracking issue only when the user asks. Check a comment you post with `npx gh-wat-dis lint <file> --kind comment`.
+6. **Show it in chat.** A status the user only asked to see needs no file: write it in the reply. When the user asks to post it, save it to your task folder, check it with `npx gh-wat-dis lint <file> --kind comment`, and post it as a comment on the tracking issue.
 
 ### Status has no dates
 
