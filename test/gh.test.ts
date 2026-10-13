@@ -140,6 +140,13 @@ test('related: product names and plain words in backticks are not identifiers', 
   assert.ok(s.idents.includes('OrderPlacedEvent'));
 });
 
+test('related: a package runner and common flags are not identifiers', () => {
+  const s = extractSignals({ title: 'Site: no page lists every command', body: 'Run `npx gh-wat-dis` with `--help`, or `npx gh-wat-dis <command> --help`. See `npx -y gh-wat-dis impact --working-tree`.' });
+  assert.deepEqual(s.spans, ['<command> --help', 'impact --working-tree']);
+  const other = { title: 'Fix the triage skill', body: 'Run `npx gh-wat-dis --help` first.' };
+  assert.equal(score(s, other).signals.some((x) => x.kind === 'identifier'), false);
+});
+
 test('labels: agents plus one per surface; other labels are extra and never dropped by default', async () => {
   const { planLabels } = await import('../src/gh/labels.ts');
   const { defaultConfig } = await import('../src/cli/config.ts');

@@ -16,6 +16,10 @@ const ERROR_RE = /\b(?:[A-Za-z]*(?:Error|Exception)|panic(?:ked)?|failed to|cann
 const CODE_LIKE = /[._:/()#<>=-]|[a-z][A-Z]|\d/;
 const COMMON = new Set(`github gitlab javascript typescript postgresql mysql sqlite mongodb graphql webassembly oauth openai
 nodejs node.js next.js vue.js react.js macos ios iphone youtube linkedin wordpress devops`.split(/\s+/));
+// A package runner and the package it runs name a product, and a common flag names nothing:
+// every issue that shows a command would match every other one.
+const RUNNER_RE = /^(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)\s+(?:-\S+\s+)*\S+\s*/;
+const COMMON_FLAGS = new Set(['--help', '-h', '--version', '-v', '--verbose', '--json', '--force', '--dry-run', '--yes', '-y']);
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm;
 
 export interface Draft { title?: string; body?: string; paths?: string[] }
@@ -74,8 +78,8 @@ export function extractSignals({ title = '', body = '', paths = [] }: Draft): Si
   const filePaths = uniq([...paths, ...[...noFence.matchAll(PATH_RE)].map((m) => m[1]!)]).filter((p) => !/^https?:/.test(p));
   // A span or a word counts as an identifier only when it looks like code. Product names and
   // plain words in backticks ("GitHub", `diagram`) would match half the tracker.
-  const spans = uniq([...text.matchAll(SPAN_RE)].map((m) => m[1]!.trim()))
-    .filter((s) => !filePaths.includes(s.replace(/:\d+$/, '')) && CODE_LIKE.test(s) && !COMMON.has(s.toLowerCase()));
+  const spans = uniq([...text.matchAll(SPAN_RE)].map((m) => m[1]!.trim().replace(RUNNER_RE, '')))
+    .filter((s) => s.length >= 4 && !COMMON_FLAGS.has(s) && !filePaths.includes(s.replace(/:\d+$/, '')) && CODE_LIKE.test(s) && !COMMON.has(s.toLowerCase()));
   const idents = uniq([...noFence.replace(PATH_RE, ' ').matchAll(IDENT_RE)].map((m) => m[1]!))
     .filter((s) => s.length > 5 && !COMMON.has(s.toLowerCase()) && (/[._:]/.test(s) || /^[a-z]/.test(s) || (s.match(/[A-Z]/g) ?? []).length >= 3));
   const errors = uniq([...noFence.matchAll(ERROR_RE)].map((m) => m[0].trim().replace(/[.,;:]+$/, '').slice(0, 100)))

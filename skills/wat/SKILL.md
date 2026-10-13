@@ -37,7 +37,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 ## 3. Rules for every artifact
 
 1. **Problem, then solution.** Know both before you write. Open every issue and PR with a sentence or two of plain prose: what the problem is and how we solved it or intend to. No label, no heading. If nobody knows the solution yet, say so, and make the problem clear at once. Never write a body whose problem you cannot state.
-2. **Design first.** State how the work changes the system: which elements, which relationships, which contracts. A body with no system statement is not done.
+2. **Design first.** State how the work changes the system: which elements, which relationships, which contracts. A body with no system statement is not done. When no element, relationship or contract changes, the statement is one sentence that names the element the work sits in and says nothing changes. It can sit in the opening: do not add a `System` section for it.
 3. **Facts only.** Take paths, symbols, counts and dependents from `npx gh-wat-dis impact`, the diff, or a file you read. Never invent a version, line number, flag or metric. Mark what you did not check as an unknown.
 4. **Consistent shape, no filler.** Use the section names and order in [references/formats.md](references/formats.md), and only the sections that have something to say. Structure without substance is noise: a short body in plain sentences beats a full template of thin sections.
 5. **Plain language.** Follow [references/style.md](references/style.md).

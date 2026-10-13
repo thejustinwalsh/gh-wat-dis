@@ -63,7 +63,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 
 Pick the type by what is wrong: **Bug** when the system does something other than what it should. **Feature** when it cannot do something yet. **Task** for everything else, including missing or wrong documentation, cleanup, releases and checks.
 
-"Usually omit" means: leave the section out unless it holds a fact the reader needs. When the facts are the whole case, keep it.
+"Usually omit" means: leave the section out unless it holds a fact the reader needs. When the facts are the whole case, keep it. A section the row does not name follows the general rule: use it when it has something true to say.
 
 | Type | The opening states | Must have | Usually omit |
 |---|---|---|---|
