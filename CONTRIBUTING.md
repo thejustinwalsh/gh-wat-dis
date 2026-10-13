@@ -22,3 +22,7 @@ Each command does one thing and composes with the others.
 ## Lane
 
 gh-wat-dis decides how to communicate in issues, pull requests and milestones. It does not review code or set a team's engineering practice. Analysis exists to make the words accurate.
+
+## Words
+
+Every word this project shows a person follows `skills/wat/references/style.md`: the site, the README, CLI output and error messages, as well as the issues and pull requests the skills write. Lead with what the reader can do, use one word for one thing, keep sentences short and complete, and name the actor.

@@ -41,7 +41,7 @@ export interface ConfigSeed {
 export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', use = 'always', labels = [], milestones = [] }: ConfigSeed = {}): Config {
   const pick = (re: RegExp): string[] => labels.filter((l) => re.test(l));
   return {
-    $schema: 'https://thejustinwalsh.github.io/gh-wat-dis/config.schema.json',
+    $schema: 'https://tjw.dev/gh-wat-dis/config.schema.json',
     version: 1,
     policy: { use, confirmBeforeWrite: true },
     repo: { owner, name, defaultBranch },

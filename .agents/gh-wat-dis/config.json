@@ -1,5 +1,5 @@
 {
-  "$schema": "https://thejustinwalsh.github.io/gh-wat-dis/config.schema.json",
+  "$schema": "https://tjw.dev/gh-wat-dis/config.schema.json",
   "version": 1,
   "policy": {
     "use": "always",
@@ -157,9 +157,19 @@
         "type": "container",
         "name": "Site",
         "technology": "Static HTML, GitHub Pages",
-        "description": "Explains the project and serves llms.txt",
+        "description": "Shows what the skills produce and serves llms.txt",
         "paths": [
           "docs/**"
+        ]
+      },
+      {
+        "id": "ci",
+        "type": "container",
+        "name": "CI and Pages workflows",
+        "technology": "GitHub Actions",
+        "description": "Checks each change and publishes the site",
+        "paths": [
+          ".github/**"
         ]
       }
     ],
@@ -219,6 +229,30 @@
         "from": "engineer",
         "to": "github",
         "label": "Reads the result on"
+      },
+      {
+        "from": "ci",
+        "to": "site",
+        "label": "Publishes docs/ to GitHub Pages as",
+        "technology": "actions/deploy-pages"
+      },
+      {
+        "from": "ci",
+        "to": "diagram",
+        "label": "Renders the example diagrams with",
+        "technology": "node src/bin.ts diagram"
+      },
+      {
+        "from": "engineer",
+        "to": "site",
+        "label": "Reads what the skills produce on",
+        "technology": "HTTPS"
+      },
+      {
+        "from": "agent",
+        "to": "site",
+        "label": "Finds the install steps in llms.txt on",
+        "technology": "HTTPS"
       }
     ]
   }
