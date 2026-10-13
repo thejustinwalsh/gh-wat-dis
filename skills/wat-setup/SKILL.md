@@ -79,18 +79,33 @@ npx gh-wat-dis init
 
 `init` reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: owner, name, default branch, the labels and milestones that exist, and `policy.use`. It adds `.wat-tmp/` to `.gitignore`. It never overwrites an existing config.
 
-Then walk the user through the choices. Ask only what the repo does not answer.
+### Setup interview
 
-| Key | Question | Default |
+`init` writes defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
+
+Run the interview after `init` writes a new config. For a config that already exists, ask only the rows the user wants to change.
+
+**Ask each of these.**
+
+| Key | Question | `init` wrote |
 |---|---|---|
-| `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo? | `always` |
-| `policy.confirmBeforeWrite` | Show each draft before posting? | `true` |
-| `issues.types` | None to ask. `init` reads the GitHub issue types of an organization repository (`typeSource: issue-type`). A repository under a user account has none, so `init` sets `typeSource: label` with Task, Bug, Feature, and `labels apply` creates those labels. | From GitHub, else Task, Bug, Feature |
-| `labels.surfaces` | Which parts of the product should issues be labeled with? Run `npx gh-wat-dis labels --text` for a proposal from the architecture map, agree the list, save it, then `npx gh-wat-dis labels apply`. | One per mapped element |
-| `milestones.naming` | How are milestones named? | Pattern of existing titles |
-| `milestones.capacity` | How many issues fit one milestone? | Unset |
-| `pulls.draft` | Open PRs as drafts? | `false` |
-| `architecture` | Map the system now? | Offer the `wat-architecture` skill |
+| `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo, ask once per session, or never? | `always` |
+| `policy.confirmBeforeWrite` | Show each draft and wait for a yes before posting? | `true` |
+| `architecture` | Map the system now? The map gives the surface labels and the element names. | Empty. On a yes, use the `wat-architecture` skill, then come back. |
+| `labels.surfaces` | Which parts of the product should issues be labeled with? Agree the list by "Labels" in the `wat-triage` skill, which also sorts the labels the repository has already. Save it, show `npx gh-wat-dis labels apply --dry-run`, and apply after a yes. | Empty |
+| `labels.agents` | Ask only when `npx gh-wat-dis labels --text` lists this label under `update`: the repository has a label with this name and another description. Use it and take the new description, or pick another name? | `agents` |
+| `issues.types` | Ask only on a repository under a user account, where `typeSource` is `label`: create the type labels `task`, `bug` and `feature`? An organization repository uses its GitHub issue types and has nothing to ask. | From GitHub, else Task, Bug, Feature |
+
+**Then confirm the rest in one question.** Show these values as a table and ask: keep them all, or change one?
+
+| Key | Meaning | `init` wrote |
+|---|---|---|
+| `milestones.naming` | How milestone titles are written | A guess from one existing title, or empty |
+| `milestones.capacity` | How many issues fit one milestone | Unset |
+| `pulls.draft` | Open PRs as drafts | `false` |
+| `pulls.closingKeyword` | The word that closes an issue from a PR | `Closes` |
+| `triage.staleIssueDays`, `triage.stalePrDays` | Days with no update before maintenance lists an issue or a PR as stale | 60 and 14 |
+| `repo.defaultBranch` | The branch PRs target | Read from GitHub |
 
 Commit the config. It is the team's shared policy: with it in the repo, no agent asks whether to use gh-wat-dis.
 
