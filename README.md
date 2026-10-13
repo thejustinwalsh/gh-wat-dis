@@ -29,7 +29,7 @@ You were pointed here by that prompt. Do these, in order:
 
 Do not edit the installed skill directories. `install` owns them and will not overwrite your edits without `--force`.
 
-If a command hangs or runs out of memory, your harness is running it in a sandbox that blocks npm. Read your harness's sandbox documentation (for Codex: https://developers.openai.com/codex/security) and tell the human what it needs. `npx gh-wat-dis doctor --fix`, run in their own terminal, covers the Codex case.
+If a command hangs or runs out of memory, your harness is running it in a sandbox that blocks npm. Read your harness's sandbox documentation (for Codex: https://developers.openai.com/codex/security) and tell the human what it needs.
 
 ## What you need
 
@@ -129,7 +129,7 @@ Run `npx gh-wat-dis doctor`.
 | `FAIL gh auth` | Not signed in, or the saved token expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
 | `FAIL skills` | Not installed, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
 | Skills do not trigger | Harness not restarted | Restart it |
-| A command hangs, then "heap out of memory" | The harness's sandbox blocks npm | See your harness's sandbox docs ([Codex](https://developers.openai.com/codex/security)), or run `npx gh-wat-dis doctor --fix` in your own terminal |
+| A command hangs, then "heap out of memory" | The harness's sandbox blocks npm | See your harness's sandbox docs ([Codex](https://developers.openai.com/codex/security)) |
 | Image shows as a broken link | The file was not attached | Post with `gh ... --attach <file>` and check the body has an `https://` image URL |
 
 ## Update and remove
