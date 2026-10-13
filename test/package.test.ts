@@ -72,6 +72,9 @@ test('cli: help lists every tool, and every tool prints its usage for --help', a
   assert.deepEqual([...new Set(TOOLS.map((t) => t.name.split(' ')[0]!))].sort(), commands);
 
   const text = helpText();
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  const tools = readme.slice(readme.indexOf('## Tools'), readme.indexOf('## Scope'));
+  for (const c of commands) assert.ok(tools.includes(`\`${c}`), `README lists ${c}`);
   for (const t of TOOLS) {
     assert.ok(text.includes(`  ${t.name} `), `help lists ${t.name}`);
     assert.ok(t.description.length > 20 && t.description.endsWith('.'), `${t.name} has a description`);
