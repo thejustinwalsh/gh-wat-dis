@@ -223,6 +223,7 @@ function checkConfig(cwd: string): Check {
 async function checkTools(): Promise<Check[]> {
   const probes: [name: string, load: () => Promise<void>][] = [
     ['diagram layout', async () => { await import('elkjs/lib/elk.bundled.js'); }],
+    ['diagram png', async () => { (await import('../tools/raster.ts')).toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'); }],
     ['facts typescript', async () => {
       const { parse, Lang } = await import('@ast-grep/napi');
       parse(Lang.TypeScript, 'export const a = 1');

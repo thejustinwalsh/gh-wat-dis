@@ -73,6 +73,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
 | Overview plus one spec per changed group | `npx gh-wat-dis graph split change.json --out-dir views` |
 | Render a diagram, fitted to GitHub's width | `npx gh-wat-dis diagram change.json -o change.svg` |
+| The same, plus a PNG to look at | `npx gh-wat-dis diagram change.json -o change.svg --png change.png` |
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |

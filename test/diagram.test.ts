@@ -343,3 +343,17 @@ test('layout: a self-relationship draws a loop large enough to read, with its la
   assert.equal(await renderSvg(stress(), { labels: 'text' }), text);
   assert.match(await renderSvg(spec, { labels: 'numbered' }), /class="en"[^>]*>6</);
 });
+
+test('png: a drawing comes out as a PNG at twice the size, with fixed colours', async () => {
+  const { toPng } = await import('../src/tools/raster.ts');
+  const { renderSvg } = await import('../src/diagram/svg.ts');
+  const spec = { title: 'T', type: 'container', elements: [
+    { id: 'a', type: 'container', name: 'A', technology: 'X' }, { id: 'b', type: 'container', name: 'B', technology: 'Y' },
+  ], relationships: [{ from: 'a', to: 'b', label: 'Sends to', technology: 'HTTPS' }] } as never;
+  const svg = await renderSvg(spec, { theme: 'light' });
+  assert.doesNotMatch(svg, /var\(--/);
+  const size = /viewBox="0 0 (\d+) (\d+)"/.exec(svg)!;
+  const image = toPng(svg);
+  assert.deepEqual([...image.png.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+  assert.deepEqual([image.width, image.height], [Number(size[1]) * 2, Number(size[2]) * 2]);
+});
