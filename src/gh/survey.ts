@@ -48,7 +48,7 @@ export interface Survey {
     other: { name: string; description: string; color: string; openIssues: number; type: string | null; untyped: number }[];
   };
   /** Open milestones, lowest version first: the order a migration works through them. */
-  milestones: { title: string; number: number; current: boolean; open: number; closed: number; dueOn: string | null; description: boolean; doneWhen: number; tracking: number | null }[];
+  milestones: { title: string; number: number; current: boolean; /** Open issues, without pull requests and the tracking issue. */ open: number; dueOn: string | null; description: boolean; doneWhen: number; tracking: number | null }[];
 }
 
 export interface SurveyInput {
@@ -140,7 +140,9 @@ export function survey(input: SurveyInput): Survey {
       }).sort((a, b) => b.openIssues - a.openIssues || a.name.localeCompare(b.name)),
     },
     milestones: open.map((m, i) => ({
-      title: m.title, number: m.number, current: i === 0, open: m.open_issues, closed: m.closed_issues, dueOn: m.due_on,
+      // Counted the way the milestone tool counts: issues only, without the tracking issue. GitHub's own
+      // open_issues also counts pull requests and the tracking issue, so the two tools would disagree.
+      title: m.title, number: m.number, current: i === 0, open: rows.filter((r) => r.milestone === m.title && !r.tracking).length, dueOn: m.due_on,
       description: Boolean(m.description?.trim()), doneWhen: doneWhen(m.description).length,
       tracking: Number(m.description?.match(/tracking:\*{0,2}\s*#(\d+)/i)?.[1]) || null,
     })),
