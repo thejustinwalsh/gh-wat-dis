@@ -68,7 +68,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Who depends on a file or symbol (no diff needed) | `npx gh-wat-dis reach src/price.ts#formatPrice` |
 | Owners of paths | `npx gh-wat-dis owners <path>...` |
 | Architecture elements and the files they map | `npx gh-wat-dis elements` |
-| Diagram spec from facts, scoped to what the change touches and reaches | `npx gh-wat-dis graph from-facts facts.json > change.json` · `--all` for the whole map |
+| Diagram spec from facts, scoped to what the change touches and reaches, 12 elements at most | `npx gh-wat-dis graph from-facts facts.json > change.json` · `--all` for the whole map |
 | Code diagram spec from facts: files as cards, changed symbols as rows | `npx gh-wat-dis graph from-facts facts.json --level file > code.json` |
 | Diagram spec from the architecture map | `npx gh-wat-dis graph from-config > system.json` |
 | Reshape a spec | `npx gh-wat-dis graph focus\|collapse\|drop\|merge\|diff\|set\|rename` |

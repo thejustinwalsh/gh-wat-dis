@@ -698,9 +698,89 @@ test('round 3: a flow with a group draws, and a layout failure carries the real 
   await assert.rejects(judge(bad), (err: Error) => /^could not lay out the diagram: .+/.test(err.message) && !/no layout was tried/.test(err.message));
 });
 
+test('round 3: sizes are the whole image everywhere, and a fix never cuts the change or hides what it removes', async () => {
+  const { render } = await import('../src/diagram/svg.ts');
+  const { advise } = await import('../src/diagram/advise.ts');
+  const { drop } = await import('../src/graph/ops.ts');
+  // The height in the warning is the height on the size line.
+  const tall = await render(pressure('11-code8x6'));
+  assert.ok(tall.report.warnings.includes(`the image is ${tall.height}px tall, so a reader scrolls to follow a line`), tall.report.warnings.join('|'));
+  const kept = tall.report.candidates.find((c) => c.chosen)!;
+  assert.deepEqual([kept.width, kept.height], [tall.width, tall.height]);
+  // An image between 900 and 1100px is warned about: the limit is on what the reader sees.
+  const mid = await render(pressure('04-nested'));
+  assert.ok(mid.height > 900 && mid.report.warnings.some((w) => w.includes('px tall')), `${mid.height}`);
+  // The size in a fix line is the size you get when you apply it.
+  const forced = { direction: 'RIGHT' as const };
+  const wide = await render(pressure('06-dynamic8'), forced);
+  const fix = (await advise(pressure('06-dynamic8'), forced, wide.report)).fixes[0]!;
+  const applied = await render(pressure('06-dynamic8'));
+  assert.deepEqual([fix.command, fix.width, fix.height], ['no --direction right', applied.width, applied.height]);
+  // The deployment spec: dropping what is unchanged would take two of the three added lines with it. That fix is not offered.
+  const spec = pressure('n15-deployment');
+  const advice = await advise(spec, {}, (await render(spec)).report);
+  assert.ok(advice.fixes.every((f) => !f.command.startsWith('graph drop --status')), advice.fixes.map((f) => f.command).join('|'));
+  assert.ok(!advice.tried.includes('graph drop --status unchanged --orphans'), 'a filter that cuts the change is not even tried');
+  // What a fix removes is said in words.
+  const marked = base();
+  marked.elements.push({ id: 'old', type: 'container', name: 'Old', technology: 'x', description: 'd' });
+  marked.elements[0]!.status = 'changed';
+  marked.elements[1]!.status = 'changed';
+  marked.relationships.push({ from: 'old', to: 'api', label: 'Reads from', technology: 'HTTPS' });
+  const crowded = { why: '', warnings: ['a', 'b', 'c'], candidates: [] };
+  const offered = (await advise(marked, {}, crowded)).fixes.find((f) => f.command.startsWith('graph drop'));
+  assert.match(offered!.removes, /^removes 1 unchanged element \("Old"\) and 1 unchanged line$/);
+  // `graph drop` leaves no empty group, and the scope line of a code diagram says cards were taken out.
+  const code = example('code');
+  const cut = drop(code, { ids: ['checkout'] });
+  assert.ok(!cut.elements.some((e) => e.id === 'orders'), 'the group that held only the dropped card is gone');
+  assert.match(cut.scope!, /\. 1 card removed by hand$/);
+  assert.match(drop(cut, { ids: ['lib'] }).scope!, /\. 2 cards removed by hand$/);
+});
+
 test('round 3: a container that holds elements is a group in the key, and a boundary is a boundary', async () => {
   const { render } = await import('../src/diagram/svg.ts');
   assert.match((await render(example('container'))).svg, />Group</);
   assert.match((await render(pressure('04-nested'))).svg, />Boundary</);
 });
 
+test('round 3: lint names the field that is wrong, refuses a person or a file as parent, and warns on a key it does not read', () => {
+  const run = (change: (s: any) => void): string => { const s: any = base(); change(s); const r = lintSpec(s); return [...r.errors.map((e) => `error: ${e}`), ...r.warnings.map((w) => `warning: ${w}`)].join('\n'); };
+  assert.equal(run((s) => { s.elements[0].kind = 12; }), 'error: element "web": kind must be text');
+  assert.match(run((s) => { s.elements[0].name = 'x'.repeat(10000); }), /error: element "web": name is 10000 characters; keep it under 120/);
+  assert.match(run((s) => { s.elements[0].type = 'person'; s.elements[1].parent = 'web'; }), /error: element "api" has parent "web", which is a person; only a boundary, node, system, container or component holds other elements/);
+  assert.equal(run((s) => { s.elements[1].parent = 'web'; s.relationships = []; }), '', 'a container may hold elements: collapse and the map rely on it');
+  assert.match(run((s) => { s.titel = 'x'; s.elements[0].parrent = 'api'; s.relationships[0].lable = 'x'; }), /the spec has the key "titel"[\s\S]*element "web" has the key "parrent"[\s\S]*relationships\[0\] has the key "lable"/);
+  assert.equal(run((s) => { s.detail = 'huge'; }), 'error: detail must be one of auto, full, compact');
+  assert.equal(run((s) => { s.elements[0].external = 'yes'; }), 'error: element "web": external must be true or false');
+  assert.equal(run((s) => { s.elements[0].technology = ['Rust']; }), 'error: element "web": technology must be text');
+  assert.equal(run((s) => { s.relationships[0].label = { text: 'x' }; }), 'error: relationship web -> api: label must be text');
+  assert.equal(run((s) => { delete s.relationships[0].from; }), 'error: relationships[0] has no from');
+  assert.equal(run((s) => { s.relationships[0].to = 7; }), 'error: relationships[0]: to must be text, the id of an element');
+  // One bad id is one error: the relationships that name it are not reported as well.
+  assert.equal(run((s) => { delete s.elements[1].id; }), 'error: elements[1] has no id');
+  assert.equal(run((s) => { s.elements[1].id = 'web'; }), 'error: element id "web" is used more than once');
+});
+
+test('round 3: the command refuses --mermaid with --png, says a write failure plainly, and reads a spec that starts with a byte order mark', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'wat-r3-'));
+  const run = (...args: string[]) => spawnSync(process.execPath, [fileURLToPath(new URL('./diagram-run.ts', import.meta.url)), ...args], { encoding: 'utf8' });
+  const spec = join(dir, 'bom.json');
+  writeFileSync(spec, `﻿${JSON.stringify(base())}`);
+  const ok = run(spec, '-o', join(dir, 'a.svg'));
+  assert.equal(ok.status, 0, ok.stderr);
+  // The first stderr line is the size of the image that was written.
+  assert.match(ok.stderr, /^\d+ x \d+px, /);
+  const mermaid = run(spec, '--mermaid', '--png', join(dir, 'a.png'));
+  assert.deepEqual([mermaid.status, mermaid.stdout], [2, '']);
+  assert.match(mermaid.stderr, /--mermaid prints text and draws nothing/);
+  const lost = run(spec, '-o', join(dir, 'no-such-folder', 'a.svg'));
+  assert.equal(lost.status, 2);
+  assert.match(lost.stderr, /cannot write ".*a\.svg": its folder does not exist/);
+  assert.doesNotMatch(lost.stderr, /ENOENT/);
+});

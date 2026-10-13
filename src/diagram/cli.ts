@@ -46,6 +46,8 @@ Exit 0 ok, 1 lint errors, 2 usage error.
 Shape the spec first with "npx gh-wat-dis graph --help".
 `;
 
+const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 const THEMES = ['auto', 'light', 'dark', 'split'] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -87,7 +89,14 @@ export const main: Command = async (argv) => {
     if (errors.length) return 1;
   }
   if (args['lint-only']) return 0;
+  if (args.mermaid && (args.png || args.report)) throw new UsageError('--mermaid prints text and draws nothing: do not combine it with --png or --report');
   if (args.mermaid) { process.stdout.write(toMermaid(spec)); return 0; }
+  /** A path that cannot be written is a mistake in the command, said in plain words. */
+  const write = (path: string, data: string | Uint8Array): void => {
+    try { writeFileSync(path, data); } catch (err) {
+      throw new UsageError(`cannot write "${path}": ${(err as NodeJS.ErrnoException).code === 'ENOENT' ? 'its folder does not exist' : (err as NodeJS.ErrnoException).code === 'EISDIR' ? 'it is a folder' : errorText(err)}`);
+    }
+  };
 
   const target = output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : '-');
   if (args.report && (target === '-' || theme === 'split')) throw new UsageError('--report prints JSON to stdout: give -o <file>, and do not combine it with --theme split');
@@ -95,7 +104,7 @@ export const main: Command = async (argv) => {
   if (theme === 'split') {
     const base = target.replace(/\.svg$/i, '');
     for (const t of ['light', 'dark'] as const) {
-      writeFileSync(`${base}.${t}.svg`, await renderSvg(spec, { ...opts, theme: t }));
+      write(`${base}.${t}.svg`, await renderSvg(spec, { ...opts, theme: t }));
       console.log(`${base}.${t}.svg`);
     }
     return 0;
@@ -103,8 +112,9 @@ export const main: Command = async (argv) => {
   const out = await render(spec, { ...opts, theme });
   const say = (path: string): void => { if (!args.report) console.log(path); };
   if (target === '-') process.stdout.write(out.svg);
-  else { writeFileSync(target, out.svg); say(target); }
+  else { write(target, out.svg); say(target); }
   console.error(`${out.width} x ${out.height}px, ${out.direction === 'RIGHT' ? 'left to right' : 'top down'}${out.compact ? ', compact' : ''}${out.numbered ? ', numbered lines' : ''}`);
+  if (labels === 'numbered' && !out.numbered) console.error('note: no line of this diagram has words, so there is nothing to number. The lines are drawn as they are.');
   if (out.numbered && spec.type !== 'dynamic') {
     console.error(`note: lines are numbered so the diagram fits. Put the table under the image: npx gh-wat-dis legend ${file ?? '<spec.json>'}`);
   }
@@ -117,7 +127,8 @@ export const main: Command = async (argv) => {
     const advice = await advise(spec, opts, out.report);
     fixes = advice.fixes;
     for (const f of fixes) {
-      console.error(`fix: ${f.command} gives ${f.width} x ${f.height}px with ${f.elements} elements and ${f.warnings.length ? `${f.warnings.length} of these ${warnings.length} warnings left` : 'no warning'}`);
+      const gives = f.command.endsWith('the largest') ? '' : ' gives';
+      console.error(`fix: ${f.command}${gives} ${f.width} x ${f.height}px with ${f.warnings.length ? `${f.warnings.length} of these ${warnings.length} warnings left` : 'no warning'}.${f.removes ? ` It ${f.removes}.` : ''}`);
     }
     if (!fixes.length) {
       console.error(advice.tried.length
@@ -129,7 +140,7 @@ export const main: Command = async (argv) => {
     // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
     const { toPng } = await import('../tools/raster.ts');
     const image = toPng(theme === 'auto' ? await renderSvg(spec, { ...opts, theme: 'light' }) : out.svg);
-    writeFileSync(args.png, image.png);
+    write(args.png, image.png);
     if (image.emoji) console.error(`note: the PNG draws a small box for each of the ${image.emoji} emoji in the text. The SVG holds the emoji and GitHub draws them.`);
     if (target !== '-') say(args.png); else console.error(args.png);
   }

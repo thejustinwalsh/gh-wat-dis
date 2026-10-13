@@ -102,7 +102,10 @@ export function collapse(spec: DiagramSpec, opts: CollapseOptions): DiagramSpec 
 
 export interface DropOptions { ids?: string[]; status?: string[]; type?: string[]; external?: boolean; orphans?: boolean }
 
-/** Remove elements and their relationships. `orphans` runs last, on what the other filters left. */
+/**
+ * Remove elements and their relationships. `orphans` runs last, on what the other filters left.
+ * An element of a group that goes leaves no empty group behind.
+ */
 export function drop(spec: DiagramSpec, opts: DropOptions): DiagramSpec {
   requireIds(spec, opts.ids ?? []);
   requireOneOf(opts.status ?? [], STATUSES, 'status');
@@ -117,6 +120,22 @@ export function drop(spec: DiagramSpec, opts: DropOptions): DiagramSpec {
     const rest = out.elements.filter((e) => busy.has(e.id));
     if (rest.length === out.elements.length) break;
     out = clean({ ...out, elements: rest });
+  }
+  // A group that held elements and holds none now is an empty frame: it goes with its last element.
+  const held = new Set(spec.elements.map((e) => e.parent));
+  for (;;) {
+    const holds = new Set(out.elements.map((e) => e.parent));
+    const rest = out.elements.filter((e) => !(held.has(e.id) && !holds.has(e.id) && (e.type === 'boundary' || e.type === 'node')));
+    if (rest.length === out.elements.length) break;
+    out = clean({ ...out, elements: rest });
+  }
+  // The scope line of a code diagram counts the files it draws. After a drop it would count cards that are gone.
+  const cards = (s: DiagramSpec): number => s.elements.filter((e) => e.type === 'file').length;
+  const removed = cards(spec) - cards(out);
+  if (removed > 0 && out.scope) {
+    const said = /\. (\d+) cards? removed by hand$/.exec(out.scope);
+    const total = removed + (said ? Number(said[1]) : 0);
+    out = { ...out, scope: `${said ? out.scope.slice(0, said.index) : out.scope}. ${total} ${total === 1 ? 'card' : 'cards'} removed by hand` };
   }
   return out;
 }

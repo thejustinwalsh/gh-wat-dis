@@ -88,10 +88,13 @@ function readStdin(): string {
 }
 
 /** Read a file argument, or stdin for "-" or for no argument when stdin is piped. */
+/** Some editors start a file with a byte order mark, which is not part of its text. */
+const noBom = (text: string): string => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+
 export function readInput(file: string | undefined): string {
-  if (file && file !== '-') return readFileSync(file, 'utf8');
+  if (file && file !== '-') return noBom(readFileSync(file, 'utf8'));
   if (!file && process.stdin.isTTY) throw new UsageError('no input: pass a file, or pipe data to stdin');
-  return readStdin();
+  return noBom(readStdin());
 }
 
 export function compareVersions(a: string, b: string): number {

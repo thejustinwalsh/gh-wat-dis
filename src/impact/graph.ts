@@ -98,12 +98,16 @@ export function buildGraph(tree: Tree, detail: (path: string) => boolean = () =>
     }
   }
 
+  let baseTs: TsResolver | undefined;
   return {
     nodes, rev, unavailable,
     languages: [...languages].sort(),
     packages: [...ts.packageInfos(), ...rust.packageInfos()],
-    resolveOther(path, text) {
+    resolveOther(path, text, base) {
       const language = languageOf(path);
+      // A resolver that also sees the paths of the base side, made once for a change that moved or deleted files.
+      if (base?.size && !baseTs) baseTs = new TsResolver({ ...tree, files: [...tree.files, ...base], has: (p) => tree.has(p) || base.has(p) });
+      const tsFor = base?.size ? baseTs! : ts;
       try {
         if (language === 'rust') {
           if (rustReason) return null;
@@ -113,7 +117,7 @@ export function buildGraph(tree: Tree, detail: (path: string) => boolean = () =>
         }
         if (!language) return null;
         const parsed = parseTs(path, text, true);
-        const edges = tsEdges(ts, path, parsed.imports, parsed.syms);
+        const edges = tsEdges(tsFor, path, parsed.imports, parsed.syms);
         return { syms: parsed.syms, targets: edges.map((e) => e.to), edges };
       } catch { return null; }
     },

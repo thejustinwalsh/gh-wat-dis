@@ -144,13 +144,13 @@ The measure is how hard the change is to follow, not how much it touches. A chan
 | The facts show | Then |
 |---|---|
 | An element or a relationship has status `added` or `removed` (`elements`, `edges`) | Draw one, whatever the complexity numbers say. A new part or a new connection is a change to the structure, and small functions can make it. Check this row first. |
-| The change adds a new tool, command, skill, endpoint or job inside an element that already exists | Treat it as an added element: draw one. The facts mark the element `changed`, because the map has no entry for the new part. Add the new part to the spec by hand with status `added`, and offer to add it to the map. |
-| No function moved (`functions` is 0) | The flow did not change. No diagram for the logic, however many files changed. |
+| The change adds or removes something a user or another program calls by name, inside an element that already exists: a command, a tool, a skill, an endpoint, a scheduled job | Treat it as an added or removed element: draw one. The facts mark the holding element `changed`, because the map has no entry for the part. Add the part to the spec by hand as a `component` whose `parent` is the element that holds it, with status `added` or `removed`, and one relationship from what calls it. Offer to add it to the map. A new option on a command that exists, or a new check inside one, is not a new part: go on to the next rows. |
+| No function moved (`functions` is 0) | No function gained or lost a branch. No diagram for the logic, however many files changed: a sentence says what the changed bodies now do. |
 | Every rise in cognitive complexity is under 5, and the first two rows do not apply | Small edits to existing flows. A sentence covers it. |
-| One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a component or dynamic diagram earns its place. |
+| One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a code diagram earns its place, or a dynamic diagram when the difficulty is the order of steps. |
 | Between those | Apply the test below. |
 
-A rise is `after.cognitive` minus `before.cognitive`. A function the change added has no `before`: its rise is its whole `after.cognitive`, so a new function that scores 15 counts as a rise of 15. A function the change removed counts as 0.
+A rise is `after.cognitive` minus `before.cognitive`. A function the change added has no `before`: its rise is its whole `after.cognitive`, so a new function that scores 15 counts as a rise of 15. A function the change removed counts as 0 in these rows. A removed file or a removed command is structure: the second row covers it.
 
 The numbers point at where to look. The test decides.
 
@@ -158,7 +158,7 @@ The numbers point at where to look. The test decides.
 
 Draw at the level where the difficulty sits. For a hard change inside one module or a few, that is a code diagram: the files as cards, each with the symbols the change added, changed or removed, and lines from the files that import them. One command writes it from the facts: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/code.json`. A container diagram with one changed box tells the reviewer nothing.
 
-Build-time relationships are relationships. An import that exists only for types, a generator that reads a list, or a test that checks a page all count for the rule above when the change adds or removes them, and `impact` reports them. In an element diagram, draw one only when the change is about it, and name the mechanism in `technology` ("import type", "npm script"). In a code diagram every import the source proves is drawn, type-only ones included.
+Build-time relationships are relationships. An import that exists only for types, a generator that reads a list, or a test that checks a page all count for the rule above when the change adds or removes them, and `impact` reports them. In an element diagram, draw one only when the change is about it, and name the mechanism in `technology` ("import type", "npm script"). In a code diagram every import the source proves between two drawn files is a line, type-only ones included.
 
 ## Choose what to show
 
@@ -171,7 +171,7 @@ Build-time relationships are relationships. An import that exists only for types
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
 | A hard change inside one module or a few, or a change whose point is which functions moved, split, appeared or went away | Code: `graph from-facts --level file`. Files as cards, changed symbols as rows |
-| Changes an exported signature that other files import | Code: the lines show who imports the symbol |
+| Removes or reorders a parameter of an exported symbol, or changes what it returns, and a file that is not a test imports it | Code: the lines show who imports the symbol. An added optional parameter needs no diagram. |
 | Reworks the order of steps or the state inside one component or file | Dynamic, with that component's own parts as the boxes |
 | Passes none of the tests above, whatever its size | None. Use a sentence, a `diff` block or a table. |
 

@@ -3,9 +3,14 @@ import type { EdgeFact, Facts, SpecOptions } from './types.ts';
 
 function label(e: EdgeFact): string {
   if (e.label) return e.label;
-  if (e.weight > 0) return `imports (${e.weight})`;
-  return e.source === 'manifest' ? 'declares dependency' : 'imported on base (0 on head)';
+  if (e.weight > 0) return 'Imports code from';
+  return e.source === 'manifest' ? 'Declares a dependency on' : 'Imported code from';
 }
+/** How many files import across the relationship, where the map names no technology. */
+const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : undefined);
+
+/** Past this many elements an element diagram is a hairball: the affected ones are cut to the most reached. */
+const MAX_ELEMENTS = 12;
 
 /**
  * Facts as a diagram spec: the elements the change touched, the ones it reaches, and both ends of
@@ -17,6 +22,7 @@ function label(e: EdgeFact): string {
 export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec {
   const byId = new Map(facts.elements.map((e) => [e.id, e]));
   const keep = new Set<string>();
+  let cut = 0;
   if (opts.all) for (const e of facts.elements) keep.add(e.id);
   else {
     for (const e of facts.elements) if (e.status !== 'unchanged') keep.add(e.id);
@@ -33,9 +39,23 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
     const mapped = facts.elements.some((e) => e.source !== 'git');
     const linked = new Set(facts.edges.flatMap((e) => [e.from, e.to]));
     const coded = new Set(facts.files.filter((f) => f.language !== null && (f.kind === 'source' || f.kind === 'test')).map((f) => f.element));
+    // An end of a relationship the change added or removed stays, mapped or not: it is why the picture is drawn.
+    const ends = new Set(facts.edges.filter((e) => e.status !== 'unchanged').flatMap((e) => [e.from, e.to]));
+    const before = new Set(keep);
     for (const id of [...keep]) {
       const e = byId.get(id)!;
-      if (e.source === 'git' && (mapped || !(linked.has(id) || coded.has(id)))) keep.delete(id);
+      if (e.source === 'git' && !ends.has(id) && (mapped || !(linked.has(id) || coded.has(id)))) keep.delete(id);
+    }
+    // With no map and no workspace, folders are all there is. A change that touches source is never "no changed elements".
+    if (!keep.size && coded.size) for (const id of before) if (coded.has(id)) keep.add(id);
+    // A change to a package that everything imports reaches every package. The picture keeps what changed and the
+    // most reached of the rest, and the scope line counts the others.
+    const reached = [...keep].filter((id) => byId.get(id)!.status === 'affected' && !ends.has(id));
+    const room = Math.max(0, MAX_ELEMENTS - (keep.size - reached.length));
+    if (keep.size > MAX_ELEMENTS && reached.length > room) {
+      reached.sort((a, b) => byId.get(b)!.dependentsAffected - byId.get(a)!.dependentsAffected || a.localeCompare(b));
+      for (const id of reached.slice(room)) keep.delete(id);
+      cut = reached.length - room;
     }
   }
   for (const id of [...keep]) {
@@ -60,7 +80,7 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
   };
   const relationships: SpecRelationship[] = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to) && !inside(e.from, e.to) && !inside(e.to, e.from)).map((e) => ({
     from: e.from, to: e.to, label: label(e),
-    ...(e.technology ? { technology: e.technology } : {}),
+    ...(technology(e) ? { technology: technology(e)! } : {}),
     status: e.status,
     meta: { weight: e.weight, provenance: e.provenance, source: e.source },
   }));
@@ -68,6 +88,7 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
   return {
     title: opts.title ?? `Change impact: ${short(facts.base)}..${short(facts.head)}`,
     type: elements.length && elements.every((e) => e.type === 'component') ? 'component' : 'container',
+    ...(cut ? { scope: `the change and the elements it reaches most; ${cut} more affected ${cut === 1 ? 'element is' : 'elements are'} not drawn` } : {}),
     elements,
     relationships,
   };

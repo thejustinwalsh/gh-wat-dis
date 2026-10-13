@@ -90,7 +90,10 @@ export interface SymbolFact {
   source: FactSource;
 }
 
-/** An import a changed file gained or lost. `names` are the names it now imports, or no longer imports, from `to`. */
+/**
+ * An import of a changed file: one it gained, one it lost, or one it kept.
+ * `names` are the names it now imports (`added`), no longer imports (`removed`), or imports as before (`unchanged`) from `to`.
+ */
 export interface ImportFact {
   from: string;
   to: string;
@@ -100,7 +103,9 @@ export interface ImportFact {
   names: string[];
   /** Namespace, glob, require or dynamic import: the module as a whole. */
   whole: boolean;
-  change: 'added' | 'removed';
+  /** The import sits in test-only code, such as a Rust `mod tests`. */
+  testOnly?: boolean;
+  change: 'added' | 'removed' | 'unchanged';
   provenance: 'resolved';
 }
 
@@ -174,7 +179,7 @@ export interface Facts {
   files: FileFact[];
   symbols: SymbolFact[];
   dependents: { direct: DirectDependent[]; transitive: TransitiveRollup[] };
-  /** Imports the changed files gained or lost, by file. Empty when no changed file was parsed on both sides. */
+  /** The imports of the changed files, by file: gained, lost and kept. Empty when no changed file was parsed. */
   imports: ImportFact[];
   elements: ElementFact[];
   edges: EdgeFact[];

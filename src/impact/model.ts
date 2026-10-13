@@ -62,7 +62,11 @@ export interface Graph {
   languages: Language[];
   unavailable: Unavailable[];
   /** Resolve the imports of file content that is not on this side, such as the base version of a changed file. */
-  resolveOther(path: string, text: string): { syms: Sym[]; targets: string[]; edges: Edge[] } | null;
+  /**
+   * `base` lists paths that exist on the base side only (old paths of moved files, deleted files), so that
+   * an import written at an old path resolves as it did then. A target that is an old path is returned as it is.
+   */
+  resolveOther(path: string, text: string, base?: ReadonlySet<string>): { syms: Sym[]; targets: string[]; edges: Edge[] } | null;
 }
 
 export function mergeEdge(edges: Map<string, Edge>, e: Edge): void {

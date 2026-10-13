@@ -44,21 +44,22 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`. When the fact is known and the architecture map lacks it (a relationship with no `technology`), set it in the spec, tell the user, and offer to save it in `.agents/gh-wat-dis/config.json`.
    The title names the change ("Checkout: payment retries move to a worker"). For a view of the system with no change in it, name the system and the view: "Storefront: containers".
 5. **Read what the renderer reports.** It lays the spec out several ways (top-down and left-to-right, words or numbers on the lines, one row or two) and judges each one: size, and also how far the lines run, how many corners and crossings they have, and whether a line or a label lies on a box. It keeps the one that reads best. Stderr has these lines:
-   - The size: `681 x 766px, top down`.
+   - The size of the whole image, title and key included: `681 x 766px, top down`. Every size the tool prints is this measure.
    - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`. Row n of the table is the line that carries the number n.
    - `layout:` what it kept and what each other choice cost. "left to right is 1449px wide" means the direction in the spec did not fit, so the drawing was turned. Leave it turned, or pass `--direction` to force yours.
-   - `warning:` one for each fault that is left: too wide, taller than 900px, a line that runs far out of its way, lines through a box or through the name of a group, three or more crossings, a label or a line on top of another. A drawing with no warning needs no reshaping.
-   - `fix:` a filter or an option that the tool applied to your spec and judged again, with the size it gives and the warnings it leaves. Only a fix that leaves fewer warnings is printed. Run the first one that keeps the elements your text is about, then render again:
+   - `warning:` one for each fault that is left: an image wider than 860px or taller than 900px, a line that runs far out of its way, lines through a box or through the name of a group, three or more crossings, a label or a line on top of another. A drawing with no warning needs no filter. Look at it all the same (step 6): the judge does not see everything a reader does.
+   - `fix:` a filter or an option that the tool applied to your spec, drew and judged again, with the size of the image it gives, the warnings it leaves, and what it takes out. Only a fix that leaves fewer warnings is printed. No fix removes an element or a line that the change added, changed or removed. Run the first one whose removals your text can do without, then render again:
      ```text
      warning: 902px is wider than GitHub's 860px body, so text will shrink
      warning: 6 line crossings on 17 lines
-     fix: graph collapse --to-type container gives 742 x 372px with 5 elements and no warning
+     fix: graph collapse --to-type container gives 790 x 548px with no warning. It folds 6 elements into their groups.
      ```
      ```bash
      npx gh-wat-dis graph collapse .wat-tmp/<name>.json --to-type container > .wat-tmp/<name>-2.json
      ```
      A fix that starts with "no" names an option to leave off: `no --direction right`.
-   - `fix: none found` lists what was tried and judged no better. Then no filter mends the picture. Cut it by hand: keep the elements the text names, remove the rest from the JSON, or draw two diagrams with `graph split` (below).
+   - A fix that reads "graph split gives 3 diagrams, the largest …" means the split views all read better than the one picture: run `graph split` (below). A fix that reads "shorten the group name …" is an edit to the spec: a line runs through a long group name.
+   - `fix: none found` lists what was tried and judged no better. Then no filter mends the picture. Cut it by hand: keep the elements the text names and delete the rest from the JSON. To remove one relationship, delete its entry from `relationships`: no filter does that.
 
    The renderer never keeps a layout that cannot draw every relationship from end to end. When the report says a relationship could not be drawn in any layout, cut the diagram down.
    To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `warnings`, `fixes`, and `candidates`, the metrics of every layout tried (`detour`, `bends`, `crossings`, `through`, `overlaps`, `titles`, `broken`, `score`, and `chosen`).
@@ -114,7 +115,7 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 | `direction` | `DOWN` or `RIGHT`. A wish: the renderer turns the drawing when the other way reads much better. Omit it to let the renderer choose. |
 | element `type` | `person`, `system`, `container`, `component`, `datastore`, `queue`, `boundary`, `node`, and `file` in a code diagram |
 | `kind` | Free text that replaces the type label: `Web Worker`, `WASM module`, `Thread`, `npm package`, `Rust crate`, `Shared memory` |
-| `parent` | id of a `boundary`, `node` or `system` element: nests the element inside it |
+| `parent` | id of a `boundary`, `node`, `system`, `container` or `component`: nests the element inside it. The key calls these "Group" when one is not a boundary. A person, a store, a queue or a file holds nothing. |
 | `detail` | `auto` (default), `full`, `compact`. Compact shows name and technology only. `auto` goes compact above 5 elements. |
 | `external` | `true` for anything the team does not own |
 | `status` | `added`, `changed`, `removed`, `affected` (reached, not modified). Omit for unchanged. |
@@ -167,19 +168,25 @@ npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/
 npx gh-wat-dis diagram .wat-tmp/code.json -o .wat-tmp/code.svg --png .wat-tmp/code.png
 ```
 
-It draws up to 8 files (`--max-files`). Changed source files come first, the ones with the most change at the top: lines changed and complexity gained. A list of re-exports, a fixture or a build config ranks below real code. Two slots are kept for files outside the diff: a file that imports a changed symbol by name, and a file that a changed file starts to import. A changed file that is not source in TypeScript, JavaScript or Rust, such as a page or a manifest, is not drawn.
+It draws up to 8 files (`--max-files`). Changed source files come first, the ones with the most change at the top: lines changed and complexity gained. A list of re-exports, a fixture, a test or a build config ranks below real code. At least two slots are kept for files outside the diff: a file that imports a changed symbol, and a file that a changed file starts to import. A file that imports the most changed file is kept before any other extra card. A changed file that is not source in TypeScript, JavaScript or Rust is not drawn.
 
-The picture shows only what the source proves:
+One rule decides the lines, so a reader can trust a line and the lack of one:
 
-- A line ends on a symbol row when the importing file names that symbol in its import. An import of the whole module (a namespace import, a dynamic `import()`, a class whose method changed) ends on the file's header.
-- A green line with `+` is an import the change added. A row with no mark is a symbol that did not change and that a file starts to import.
-- Rows list the symbols the change added, changed or removed, private ones too, the most changed first. A comment or a reformat is not a change.
-- The blue dot on a file outside the diff means it imports, by name, a symbol whose signature changed or that was removed.
-- A card that says "not read" is a file over 500 KB: its symbols and imports are unknown. A card that says "moved from" is a rename.
+- **Every import the source proves between two drawn files is a line.** It does not matter whether the importing file is in the diff. No line between two cards means neither imports the other.
+- **A line ends on a symbol row** when the import names a symbol that has a row. **It ends on the file's header** when it names nothing that has a row: the whole module (a namespace import, a dynamic `import()`), or names that did not change.
+- **Green with `+`** is an import that is not on the base side: one a file gained, and every import of a new file. **Red** is an import the change removed, to a deleted file too. Grey is an import that was there before and still is.
+- **Rows** are the symbols the change added, changed or removed, private ones too: new exports first, then the most changed. A row with no mark is a symbol that did not change and that a file starts to import. A comment or a reformat is not a change.
+- **A card lists six changed symbols**, then says "and N more symbols". A line to one of those ends on the header.
+- **The blue dot** on a file outside the diff means it imports, by name, a symbol whose signature changed or that was removed.
+- **"not read"** on a card is a file over 500 KB: its symbols and imports are unknown. **"moved from"** is a rename. A moved file keeps its imports: a move alone adds no green line.
 
-The scope line under the title says how many changed source files are drawn, names the largest ones left out, and counts moved files and other changed files. Stderr lists the rest. When the largest file left out matters to the change, raise `--max-files` or say so in the body. When no source file changed, the command exits 1 and there is no code diagram to draw.
+What the facts cannot prove is not drawn: a call through a re-exporting module is drawn to that module only when it is a card, and a Rust path written in full without `use` is not seen. When the change moves, adds or removes a Rust module, the Rust lines are all grey: the base side cannot be compared.
 
-Then open the JSON and fix what the facts cannot know. Set the `title` to name the change. Drop a card that adds nothing with `graph drop --ids <path>`. Add a line the import graph does not see, such as a script that writes a page: give it a `label`, and it is drawn with its words. To end a line on a symbol that did not change, add that symbol to the file's `symbols` with no `status`.
+The scope line under the title says how many changed source files are drawn, names the two largest left out, and counts moved files, source in a language the tools do not read, and other changed files. Stderr lists the first six of each kind left out. When the largest file left out matters to the change, raise `--max-files` or say so in the body. When no source file changed, the command exits 1 and there is no code diagram to draw.
+
+Left to right, lines end on rows. Top down, lines end on the card, lines between one pair of files with one status are drawn as one line, and the rows carry no lines. The spec asks for left to right, and the renderer turns it top down when left to right is too wide. To keep the rows whatever the width, pass `--direction right`, and expect the width warning.
+
+Then open the JSON and fix what the facts cannot know. Set the `title` to name the change. Drop a card that adds nothing with `graph drop --ids <path>`: the scope line then says a card was removed. Add a line the import graph does not see, such as a script that writes a page: give it a `label`, and it is drawn with its words. To end a line on a symbol that did not change, add that symbol to the file's `symbols` with no `status`.
 
 ```json
 {
@@ -203,9 +210,10 @@ Then open the JSON and fix what the facts cannot know. Set the `title` to name t
 ```
 
 - A line between two files may have an empty `label`: it means an import, and the key says so.
-- A card draws 8 rows at most. List the symbols the change is about.
-- Left to right is the form that ends lines on rows. Top down, lines end on the card.
-- About five files fit in 700 by 350 pixels. Past eight, make two diagrams.
+- A card draws 8 rows at most: six changed symbols and up to two unmarked ones.
+- When a band round each group does not fit, the group name is printed above each of its cards.
+- Do not pass `--labels numbered` for a code diagram: its lines have no words to look up.
+- About five files fit in 700 by 350 pixels. Past eight, make two diagrams: `graph split` writes one per group.
 
 ## Overview plus scoped views
 

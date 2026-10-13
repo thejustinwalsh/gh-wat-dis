@@ -138,6 +138,11 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const hist = coChange(commits, touched, (p) => tree.has(p));
 
   // Symbols, and the element pairs the changed files contributed on each side.
+  // Paths that exist on base only, and where the moved ones went.
+  const baseOnly = new Set(entries.flatMap((e) => (e.status === 'deleted' ? [e.path] : e.oldPath && e.oldPath !== e.path ? [e.oldPath] : [])));
+  const movedTo = new Map(entries.filter((e) => e.oldPath && e.oldPath !== e.path).map((e) => [e.oldPath!, e.path]));
+  const rustTreeMoved = entries.some((e) => languageOf(e.path) === 'rust' && e.status !== 'modified');
+  let rustBlind = 0;
   const symbols: SymbolFact[] = [];
   const imports: ImportFact[] = [];
   const baseRows: [string, string[]][] = [];
@@ -149,21 +154,40 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     if (head) headRows.push([e.path, head.edges.filter((x) => !x.traced).map((x) => x.to)]);
     const baseText = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
     const baseLang = languageOf(basePath(e));
-    const base = baseText !== undefined && baseLang ? graph.resolveOther(baseLang === 'rust' ? e.path : basePath(e), baseText) : null;
+    const base = baseText !== undefined && baseLang ? graph.resolveOther(baseLang === 'rust' ? e.path : basePath(e), baseText, baseLang === 'rust' ? undefined : baseOnly) : null;
     if (base) baseRows.push([basePath(e), base.targets]);
     else if (e.status !== 'added' && baseLang) baseGraphGaps++;
     if ((e.status === 'added' ? !head : e.status === 'deleted' ? !base : !head || !base)) continue;
-    // Imports this file gained or lost: a name it did not import before, or a file it no longer reaches.
-    const was = new Map((base?.edges ?? []).filter((x) => !x.traced).map((x) => [x.to, x]));
-    const is = new Map((head?.edges ?? []).filter((x) => !x.traced).map((x) => [x.to, x]));
-    for (const to of new Set([...was.keys(), ...is.keys()])) {
-      const a = was.get(to), b = is.get(to);
-      for (const [change, mine, other] of [['added', b, a], ['removed', a, b]] as const) {
-        if (!mine) continue;
-        const names = mine.names.filter((n) => !other?.names.includes(n)).sort();
-        const whole = mine.whole && !other?.whole;
-        if (!names.length && !whole && other) continue;
-        imports.push({ from: e.path, to, toElement: els.of(to), toInDiff: changed.has(to), names, whole: whole || (!other && mine.whole), change, provenance: 'resolved' });
+    // The imports of this file: gained, lost and kept. Both sides are resolved the same way, without the
+    // names that tracing through re-exports adds, so that a name counts as new only when the file gained it.
+    // A file that moved is compared at its old path, and a target that moved is the same target.
+    if (head) {
+      const headText = tree.read(e.path);
+      const fresh = headText === undefined ? null : graph.resolveOther(e.path, headText);
+      const was = new Map((base?.edges ?? []).map((x) => [movedTo.get(x.to) ?? x.to, x]));
+      const is = new Map((fresh?.edges ?? head.edges.filter((x) => !x.traced)).map((x) => [x.to, x]));
+      // Rust resolves `use` paths through the module tree. When the change moves, adds or removes a module, the base
+      // side cannot be resolved against it, so nothing is claimed as gained or lost: every import is listed as kept.
+      const blind = head.language === 'rust' && rustTreeMoved && e.status !== 'added';
+      if (blind) rustBlind++;
+      for (const to of new Set([...was.keys(), ...is.keys()])) {
+        const a = blind ? is.get(to) : was.get(to), b = is.get(to);
+        const fact = (change: ImportFact['change'], names: string[], whole: boolean, testOnly: boolean): void => {
+          imports.push({ from: e.path, to, toElement: els.of(to), toInDiff: changed.has(to), names: names.sort(), whole, ...(testOnly ? { testOnly } : {}), change, provenance: 'resolved' });
+        };
+        if (b) {
+          const gained = b.names.filter((n) => !a?.names.includes(n)), kept = b.names.filter((n) => a?.names.includes(n));
+          if (!a) fact('added', gained, b.whole, b.testOnly);
+          else {
+            if (gained.length || (b.whole && !a.whole)) fact('added', gained, b.whole && !a.whole, b.testOnly);
+            if (kept.length || (b.whole && a.whole) || (!b.names.length && !b.whole)) fact('unchanged', kept, b.whole && a.whole, b.testOnly);
+          }
+        }
+        if (a && !blind) {
+          const lost = a.names.filter((n) => !b?.names.includes(n));
+          if (!b) fact('removed', lost, a.whole, a.testOnly);
+          else if (lost.length || (a.whole && !b.whole)) fact('removed', lost, a.whole && !b.whole, a.testOnly);
+        }
       }
     }
     const element = els.of(e.path);
@@ -346,6 +370,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     caveats.push('dependents are files whose imports resolve to a changed file; calls through dependency injection, reflection, string paths or generated code are not seen');
     caveats.push('edge status (added/removed) compares only the imports of files in this diff against base, resolved against the head file list');
   }
+  if (rustBlind) caveats.push(`the change moves, adds or removes a Rust module, so the base imports of ${rustBlind} Rust file(s) cannot be resolved; their imports are listed as kept, and none as gained or lost`);
   if (baseGraphGaps) caveats.push(`${baseGraphGaps} changed file(s) had no readable base version; their base imports are not counted`);
   if (reach.size > entries.length) caveats.push(`transitive dependents are followed ${depth} import hops; a file that imports a re-exporting module counts even when it uses other names from it`);
   if (!co) caveats.push('no CODEOWNERS file; owners are empty');

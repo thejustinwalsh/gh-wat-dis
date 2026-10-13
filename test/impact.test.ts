@@ -300,7 +300,8 @@ test('ts: elements, edges, markdown and spec', async () => {
   assertSpecValid(spec);
   // `tools` is a folder with no package: next to a workspace it is not an element.
   assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['acme-api', 'acme-shared', 'acme-web']);
-  assert.equal(spec.relationships.find((r) => r.from === 'acme-web')!.label, 'imports (3)');
+  // A generated line says what moves, and how many files import across it.
+  assert.deepEqual([spec.relationships.find((r) => r.from === 'acme-web')!.label, spec.relationships.find((r) => r.from === 'acme-web')!.technology], ['Imports code from', '3 imports']);
   assert.equal(spec.elements.find((e) => e.id === 'acme-shared')!.description, '4 files · 2 changed');
   const all = toDiagramSpec(facts, { all: true, title: 'Everything' });
   assertSpecValid(all);
@@ -560,7 +561,7 @@ test('rust: signatures, trait impls, dependents through use paths, crate edges',
   assert.match(md, /ast-grep \(Rust\)/);
   const spec = toDiagramSpec(facts);
   assertSpecValid(spec);
-  assert.equal(spec.relationships.find((r) => r.from === 'cli' && r.to === 'core-crate')!.label, 'declares dependency');
+  assert.equal(spec.relationships.find((r) => r.from === 'cli' && r.to === 'core-crate')!.label, 'Declares a dependency on');
 
   const reach = await reachOf({ cwd: dir, targets: ['format_price', 'crates/core/src/shape.rs#Circle::area'] });
   assert.deepEqual(reach.targets[0]!.matches.map((m) => m.file), ['crates/core/src/pricing.rs']);
@@ -783,16 +784,36 @@ test('code spec: a new import of an unchanged file is drawn, with the added mark
     ],
   });
   const { spec } = toCodeSpec(facts);
-  assert.deepEqual(lintSpec(spec).errors, []);
+  assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] }, 'the spec passes the lint of the tool that wrote it');
   const llm = spec.elements.find((e) => e.id === 'src/llm.ts')!;
   assert.deepEqual([llm.status, llm.symbols], [undefined, [{ name: 'probeWebGPU' }]]);
   assert.deepEqual(spec.relationships.find((r) => r.from === 'src/signon.ts' && r.to === 'src/llm.ts'), { from: 'src/signon.ts', to: 'src/llm.ts', label: '', toSymbol: 'probeWebGPU', status: 'added' });
-  // The generator imports TOOLS, which did not change: main.ts gains a row for it. In a new file every import is new, so the line has no mark.
+  // The generator imports TOOLS, which did not change: main.ts gains a row for it. The import is not on base, so it is green, new file or not.
   const main = spec.elements.find((e) => e.id === 'src/main.ts')!;
   assert.deepEqual(main.symbols!.map((s) => [s.name, s.status]), [['helpText', 'changed'], ['TOOLS', undefined]]);
-  assert.deepEqual(spec.relationships.find((r) => r.from === 'scripts/gen.ts'), { from: 'scripts/gen.ts', to: 'src/main.ts', label: '', toSymbol: 'TOOLS' });
+  assert.deepEqual(spec.relationships.find((r) => r.from === 'scripts/gen.ts'), { from: 'scripts/gen.ts', to: 'src/main.ts', label: '', toSymbol: 'TOOLS', status: 'added' });
   // A file the change stopped importing gets no card of its own.
   assert.ok(!spec.elements.some((e) => e.id === 'src/old.ts'));
+  // An import that did not change is a line too, between two changed files as from a file outside the diff.
+  // It ends on the file when it names nothing that has a row.
+  const kept = toCodeSpec(codeFacts({
+    files: [fileFact('src/doctor.ts', 30), fileFact('src/install.ts', 10), fileFact('src/gone.ts', 20, { status: 'deleted' })],
+    symbols: [symbolFact('src/doctor.ts', 'run'), symbolFact('src/install.ts', 'install'), symbolFact('src/gone.ts', 'old', { change: 'removed' })],
+    imports: [
+      { from: 'src/doctor.ts', to: 'src/install.ts', toElement: 'app', toInDiff: true, names: ['skillNames'], whole: false, change: 'unchanged', provenance: 'resolved' },
+      { from: 'src/install.ts', to: 'src/doctor.ts', toElement: 'app', toInDiff: true, names: [], whole: true, change: 'unchanged', provenance: 'resolved' },
+      { from: 'src/doctor.ts', to: 'src/gone.ts', toElement: 'app', toInDiff: true, names: ['old'], whole: false, change: 'removed', provenance: 'resolved' },
+    ],
+    dependents: { direct: [
+      // Outside the diff: one names a changed symbol, one names only symbols that did not change.
+      { file: 'src/a.ts', element: 'app', imports: ['src/doctor.ts'], via: ['./doctor.ts'], symbols: ['run'], isTest: false, provenance: 'resolved' },
+      { file: 'src/b.ts', element: 'app', imports: ['src/doctor.ts'], via: ['./doctor.ts'], symbols: [], isTest: false, provenance: 'resolved' },
+    ], transitive: [] },
+  })).spec;
+  const lines = kept.relationships.map((r) => `${r.from} -> ${r.to}${r.toSymbol ? `#${r.toSymbol}` : ''}${r.status ? ` (${r.status})` : ''}`).sort();
+  assert.deepEqual(lines, ['src/a.ts -> src/doctor.ts#run', 'src/doctor.ts -> src/gone.ts#old (removed)', 'src/doctor.ts -> src/install.ts', 'src/install.ts -> src/doctor.ts']);
+  // The file that imports nothing that changed gets no card.
+  assert.ok(!kept.elements.some((e) => e.id === 'src/b.ts'));
 });
 
 test('code spec: slots go to the most changed files, a file that was not read says so, a move is named, and nothing to draw is an error', async () => {
@@ -803,7 +824,7 @@ test('code spec: slots go to the most changed files, a file that was not read sa
       fileFact('src/index.ts', 4), fileFact('src/constants.ts', 9), fileFact('test/golden.ts', 300, { kind: 'test' }), fileFact('tools/shoot.mjs', 355, { status: 'added', language: 'javascript' }),
       fileFact('native/backend.rs', 22, { language: 'rust', skipped: 'larger than 500 KB' }),
       fileFact('src/moved/a.ts', 3, { status: 'renamed', oldPath: 'src/old/a.ts' }), fileFact('src/moved/b.ts', 0, { status: 'renamed', oldPath: 'src/old/b.ts' }),
-      fileFact('docs/index.html', 70, { kind: 'docs', language: null }),
+      fileFact('docs/index.html', 70, { kind: 'docs', language: null }), fileFact('src/zig/run.zig', 215, { language: null }),
     ],
     symbols: [
       symbolFact('src/generation.ts', 'small', { change: 'added', lines: 3 }), symbolFact('src/generation.ts', 'generateChunk', { change: 'added', exported: false, lines: 240 }),
@@ -819,13 +840,17 @@ test('code spec: slots go to the most changed files, a file that was not read sa
   assert.equal(card('tools/shoot.mjs')!.description, '+355 lines');
   assert.equal(card('docs/index.html'), undefined);
   assert.equal(card('native/backend.rs')!.description, 'not read: larger than 500 KB · +22');
-  assert.deepEqual(all.notRead, [{ path: 'native/backend.rs', reason: 'larger than 500 KB' }]);
+  assert.deepEqual(all.notRead[0], { path: 'native/backend.rs', reason: 'larger than 500 KB' });
   assert.equal(card('src/moved/a.ts')!.description, 'moved from src/old/a.ts');
   // A file that only moved has no card, and the scope line counts the moves.
   assert.equal(card('src/moved/b.ts'), undefined);
-  assert.match(all.spec.scope!, /Not drawn: index\.ts \(\+4\)\. 2 files moved\. 1 other changed file \(pages, config, assets\)$/);
+  // Source in a language the tools do not read is named as that, not as a page.
+  assert.match(all.spec.scope!, /Not drawn: index\.ts \(\+4\)\. 2 files moved\. 1 changed source file in a language the tools do not read \(\.zig\)\. 1 other changed file \(pages, config, assets\)$/);
+  assert.ok(all.notRead.some((f) => f.path === 'src/zig/run.zig'));
   // Rows: the most changed symbol first, private or not.
-  assert.deepEqual(card('src/generation.ts')!.symbols!.map((s) => s.name), ['generateChunk', 'small']);
+  // Rows: a new export first, then the most changed.
+  assert.deepEqual(card('src/generation.ts')!.symbols!.map((s) => s.name), ['small', 'generateChunk']);
+  assert.equal(card('src/zig/run.zig'), undefined);
   // The list of re-exports shows six of its names and says how many more.
   assert.equal(card('src/index.ts'), undefined, 'eight slots, and the list of re-exports is the ninth file');
   assert.equal(toCodeSpec(facts, { maxFiles: 9 }).spec.elements.find((e) => e.id === 'src/index.ts')!.description, 'and 15 more symbols');
@@ -889,7 +914,8 @@ test('facts: a changed architecture map, new imports of a changed file, and a fi
   // The stand-in for unmapped files, here the folder that holds the config, is not an element of the picture.
   assert.ok(spec.elements.every((e) => ['cache', 'server', 'client'].includes(e.id)), spec.elements.map((e) => e.id).join(','));
   // The view starts to import `limit`, which did not change.
-  assert.deepEqual(facts.imports, [{ from: 'src/client/view.ts', to: 'src/server/handler.ts', toElement: 'server', toInDiff: false, names: ['limit'], whole: false, change: 'added', provenance: 'resolved' }]);
+  const imp = (change: string, names: string[]) => ({ from: 'src/client/view.ts', to: 'src/server/handler.ts', toElement: 'server', toInDiff: false, names, whole: false, change, provenance: 'resolved' });
+  assert.deepEqual(facts.imports, [imp('added', ['limit']), imp('unchanged', ['handle'])]);
   // The big file was not parsed, and the facts say so in three places.
   const bigFact = facts.files.find((f) => f.path === 'src/server/big.ts')!;
   assert.equal(bigFact.skipped, 'larger than 500 KB');
@@ -898,4 +924,64 @@ test('facts: a changed architecture map, new imports of a changed file, and a fi
   const code = toCodeSpec(facts);
   assert.equal(code.spec.elements.find((e) => e.id === 'src/server/big.ts')!.description, 'not read: larger than 500 KB · +1 −1');
   assert.ok(code.spec.relationships.some((x) => x.from === 'src/client/view.ts' && x.to === 'src/server/handler.ts' && x.toSymbol === 'limit' && x.status === 'added'));
+});
+
+test('facts: a moved file keeps its imports, and an import of a deleted file is one the change removed', async () => {
+  const r = repo();
+  const body = (n: number): string => Array.from({ length: 12 }, (_, i) => `export const v${n}_${i} = ${i};`).join('\n') + '\n';
+  r.commit({
+    'src/tools/zzfx/index.ts': `import { play } from './player.ts';\nimport { helper } from '../shared.ts';\n${body(1)}export const run = () => play() + helper;\n`,
+    'src/tools/zzfx/player.ts': `${body(2)}export function play(): number { return 1; }\n`,
+    'src/tools/shared.ts': 'export const helper = 1;\n',
+    'src/doctor.ts': "import { check } from './sandbox.ts';\nexport const doctor = () => check();\n",
+    'src/sandbox.ts': 'export function check(): number { return 1; }\n',
+  }, 3, 'init');
+  r.commit({
+    'src/tools/zzfx/index.ts': null, 'src/tools/zzfx/player.ts': null,
+    // The folder is renamed. The only edit is one more export in index.ts.
+    'src/tools/audio/index.ts': `import { play } from './player.ts';\nimport { helper } from '../shared.ts';\n${body(1)}export const run = () => play() + helper;\nexport const extra = 1;\n`,
+    'src/tools/audio/player.ts': `${body(2)}export function play(): number { return 1; }\n`,
+    'src/sandbox.ts': null,
+    'src/doctor.ts': 'export const doctor = () => 1;\n',
+  }, 1, 'move');
+  const facts = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW });
+  assert.deepEqual(facts.files.filter((f) => f.status === 'renamed').map((f) => [f.oldPath, f.path]), [
+    ['src/tools/zzfx/index.ts', 'src/tools/audio/index.ts'], ['src/tools/zzfx/player.ts', 'src/tools/audio/player.ts']]);
+  // No import of the moved file is new: it imported the same two files from its old place.
+  const moved = facts.imports.filter((i) => i.from === 'src/tools/audio/index.ts');
+  assert.deepEqual(moved.map((i) => [i.to, i.change, i.names]), [['src/tools/audio/player.ts', 'unchanged', ['play']], ['src/tools/shared.ts', 'unchanged', ['helper']]]);
+  // The doctor stopped importing a file that is gone.
+  assert.deepEqual(facts.imports.filter((i) => i.from === 'src/doctor.ts').map((i) => [i.to, i.change, i.names]), [['src/sandbox.ts', 'removed', ['check']]]);
+  const { spec } = toCodeSpec(facts);
+  assert.ok(!spec.relationships.some((x) => x.status === 'added'), 'a move adds no import');
+  assert.ok(spec.relationships.some((x) => x.from === 'src/doctor.ts' && x.to === 'src/sandbox.ts' && x.status === 'removed'), JSON.stringify(spec.relationships));
+});
+
+test('element spec: the end of an added relationship stays though the map does not name it, and a change that reaches everything is cut to what it reaches most', () => {
+  const el = (id: string, status: Facts['elements'][number]['status'], more: Partial<Facts['elements'][number]> = {}): Facts['elements'][number] => ({
+    id, name: id, type: 'container', status, files: 3, filesChanged: status === 'changed' ? 1 : 0, dependentsAffected: 0, provenance: 'exact', source: 'config', ...more,
+  });
+  const edge = (from: string, to: string, status: Facts['edges'][number]['status']): Facts['edges'][number] => ({ from, to, weight: 2, status, provenance: 'resolved', source: 'ast-grep' });
+  const facts = codeFacts({
+    elements: [el('site', 'changed'), el('cli', 'changed'), el('test', 'changed', { source: 'git', provenance: 'heuristic' }), el('root', 'changed', { source: 'git', provenance: 'heuristic' })],
+    edges: [edge('test', 'site', 'added'), edge('site', 'cli', 'unchanged'), edge('root', 'cli', 'unchanged')],
+  });
+  const spec = toDiagramSpec(facts);
+  // `test` is a folder, but the change added its relationship to the site, so both ends are drawn. `root` is not.
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['cli', 'site', 'test']);
+  const added = spec.relationships.find((r) => r.from === 'test')!;
+  assert.deepEqual([added.status, added.label, added.technology], ['added', 'Imports code from', '2 imports']);
+  // A core package changed and thirty others import it.
+  const many = codeFacts({
+    elements: [el('core', 'changed'), ...Array.from({ length: 30 }, (_, i) => el(`p${String(i).padStart(2, '0')}`, 'affected', { dependentsAffected: 30 - i }))],
+    edges: Array.from({ length: 30 }, (_, i) => edge(`p${String(i).padStart(2, '0')}`, 'core', 'unchanged')),
+  });
+  const capped = toDiagramSpec(many);
+  assert.equal(capped.elements.length, 12);
+  assert.ok(capped.elements.some((e) => e.id === 'core') && capped.elements.some((e) => e.id === 'p00') && !capped.elements.some((e) => e.id === 'p29'));
+  assert.equal(capped.scope, 'the change and the elements it reaches most; 19 more affected elements are not drawn');
+  assert.equal(toDiagramSpec(many, { all: true }).elements.length, 31);
+  // With no map, a folder that holds changed source is an element: the change is never "no changed elements".
+  const bare = codeFacts({ elements: [el('native', 'added', { source: 'git', provenance: 'heuristic', type: 'component' })], files: [fileFact('native/a.rs', 10, { element: 'native', language: 'rust' })] });
+  assert.deepEqual(toDiagramSpec(bare).elements.map((e) => e.id), ['native']);
 });
