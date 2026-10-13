@@ -234,3 +234,26 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   assert.deepEqual(doneWhen('no list here'), []);
   assert.ok(!('dueOn' in s.milestone) && !JSON.stringify(s).includes('due'), 'a status carries no date');
 });
+
+test('issues: reads type and surfaces from the config, and says what is missing', async () => {
+  const { issueRows } = await import('../src/gh/issues.ts');
+  const { defaultConfig } = await import('../src/cli/config.ts');
+  const cfg = defaultConfig({ owner: 'o', name: 'r' });
+  cfg.labels.surfaces = [{ name: 'site', description: 's' }, { name: 'ci', description: 'c' }];
+  const raw = (number: number, labels: string[], extra: object = {}) => ({ number, title: `t${number}`, state: 'open', comments: 0, updated_at: 'x', labels: labels.map((name) => ({ name })), milestone: null, ...extra });
+  const rows = issueRows(cfg, [
+    raw(1, ['task'], { sub_issues_summary: { total: 3, completed: 1 }, milestone: { title: 'v1' } }),
+    raw(2, ['bug', 'site', 'ci', 'agents']),
+    raw(3, ['bug', 'feature', 'site']),
+    raw(4, ['wontfix']),
+    raw(5, ['task', 'site'], { pull_request: {} }),
+  ]);
+  const by = new Map(rows.map((r) => [r.number, r]));
+  assert.equal(rows.length, 4, 'pull requests are left out');
+  assert.deepEqual([by.get(1)!.tracking, by.get(1)!.missing, by.get(1)!.type], [true, [], 'Task'], 'a tracking issue needs no surface');
+  assert.deepEqual([by.get(2)!.type, by.get(2)!.surfaces, by.get(2)!.agents, by.get(2)!.missing], ['Bug', ['site', 'ci'], true, []]);
+  assert.deepEqual(by.get(3)!.missing, ['one type']);
+  assert.deepEqual([by.get(4)!.missing, by.get(4)!.otherLabels], [['type', 'surface'], ['wontfix']]);
+  const org = defaultConfig({ owner: 'o', name: 'r', issueTypes: ['Bug'] });
+  assert.equal(issueRows(org, [raw(9, [], { type: { name: 'Bug' } })])[0]!.type, 'Bug');
+});

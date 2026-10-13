@@ -10,11 +10,11 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 
 ## Steps
 
-1. **Scan for related work.** Write a first title and the facts you have to `.wat-tmp/issue.md`, then:
+1. **Scan for related work before you write the body.** Put a working title and the few facts you have in `.wat-tmp/issue.md`. Do not draft sections yet: a duplicate makes them wasted work. Then:
    ```bash
    npx gh-wat-dis related --title "<title>" --body-file .wat-tmp/issue.md --md
    ```
-   The table lists open and closed issues and PRs with the signals they share with the draft. If it says **Incomplete** or **Could not search**, GitHub limited the searches: wait a minute and run it again. A failed search is not "no match". The tool reports signals. You judge. Read each candidate above 30 points, then sort it with "Related, duplicate or new" below. Show the user what you found before you draft further.
+   The table lists open and closed issues and PRs with the signals they share with the draft. If it says **Incomplete** or **Could not search**, GitHub limited the searches: wait a minute and run it again. A failed search is not "no match". The tool reports signals. You judge. Read each candidate at 30 points or more, then sort it with the test in [../wat/references/related.md](../wat/references/related.md). Show the user what you found before you draft further.
 2. **State the problem.** Write it in one or two sentences before anything else. If you cannot, you do not understand the request yet: read more code or ask the user one question. Then state the intended solution, or that it is not known.
 3. **Gather facts.** Read the code the issue names. For a bug, get expected vs actual and a reproduction. To learn what depends on the code an issue names, run `npx gh-wat-dis reach <path or symbol>`. For work already in the tree, run `npx gh-wat-dis impact --working-tree`. Record what you could not check.
 4. **Place it in the system.** Name the elements and relationships from the architecture map in `.agents/gh-wat-dis/config.json`. No map: use the `wat-architecture` skill to name them, and offer to save the map.
@@ -24,8 +24,9 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    - **Type:** one of `issues.types` (Task, Bug, Feature by default). It is the GitHub issue type when `issues.typeSource` is `issue-type` (organization repositories), and the type label when it is `label` (a repository under a user account has no issue types, so `task`, `bug` or `feature` is a label there). Set exactly one.
    - **Labels:** one or more surface labels from `labels.surfaces` for the parts of the product the work touches. Add the `agents` label only for agent memory, an agentic workflow, or work an autonomous agent manages. No other labels.
    - **Priority:** a person decides it. Do not set it.
-   - **Relations:** a parent when the issue is part of a larger one, blocked by when it must wait. See step 10.
-   - **Milestone:** propose one with a one-line reason, or leave it empty.
+   - **Relations:** a parent when the issue is part of a larger one, blocked by when it must wait. An issue that goes into a milestone becomes a sub-issue of that milestone's tracking issue (`npx gh-wat-dis milestone` prints it as `tracking`).
+   - **Milestone:** propose one only when a rule in the `wat-triage` skill, "Milestone match", holds, and name the rule. Otherwise leave it empty: backlog is a valid answer.
+   - **Size:** do not set one. Triage proposes sizes.
 8. **Read it as the assignee.** Can a person who was not in this conversation start the work from the body alone? If a term, a reason or a condition is missing, add it. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/issue.md --kind issue`.
 9. **Show the draft.** Print title, fields and body. Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
 10. **Post.**
@@ -50,17 +51,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 
 ## Related, duplicate or new
 
-| Finding | Test | Do |
-|---|---|---|
-| **Duplicate** | Same root cause in the same element. Fixing one fixes the other. | Do not file. Show the original. Offer a comment there with the new evidence. If it is closed and the problem is back, ask: reopen, or file new with `Refs #n`. |
-| **Same symptom, cause not known** | Same error or behaviour, and neither issue names a cause | Ask the user. Default: comment on the existing issue. |
-| **Related** | Same element or same feature, a different problem | File new. If one must wait for the other, set blocked by. If both are parts of one piece of work, give them the same parent. Otherwise add `Refs #n` in `Evidence`. |
-| **Already fixed** | A merged PR or a closed issue covers it | Tell the user which one and in which release, if known. File only if it still reproduces. |
-| **No match** | Nothing above 30 points, or the matches share only common words | File new. |
-
-State the test result in one sentence when you report: "#142 is a duplicate: both fail in `charge.ts` on a webhook retry."
-
-Shared words are weak evidence. The same error text, identifier or file path is strong. Two issues can share every word of a title and have different causes.
+Sort each candidate with the test in [../wat/references/related.md](../wat/references/related.md).
 
 ## Follow-up issues
 

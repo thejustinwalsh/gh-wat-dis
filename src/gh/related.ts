@@ -181,6 +181,9 @@ export async function findRelated({ title, body, paths, self, limit = 10, search
   return { signals: sig, queries, failed, complete: failed.length === 0, candidates };
 }
 
+/** What the Points column measures. Printed with every table, so the number is never a bare score. */
+export const POINTS_KEY = 'Points, 0 to 100, add up what a candidate shares with the draft: 40 for the same error text, 20 for each shared identifier and each shared file path (40 at most for each kind), up to 30 for shared title words, 10 for shared body words. Exact matches are labeled `exact` and shared words `heuristic`. 30 or more means at least one exact match or a near-identical title: read those.';
+
 export function toMarkdown(res: RelatedResult): string {
   const gap = res.failed.length
     ? `\n**Incomplete:** ${res.failed.length} of ${res.queries.length} searches failed (${res.failed[0]!.error.slice(0, 80)}). Run it again before you rely on this list.\n`
@@ -197,6 +200,8 @@ export function toMarkdown(res: RelatedResult): string {
   });
   return [
     `**${res.candidates.length} related** from ${res.queries.length} queries. Signals only: read each one before you call it a duplicate.`,
+    '',
+    POINTS_KEY,
     '',
     '| # | Kind | State | Points | Title | Shared with the draft |',
     '|---|---|---|---|---|---|',
