@@ -29,7 +29,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 | Create or edit an issue | `wat-issue` |
 | Open or edit a pull request | `wat-pr` |
 | Create, plan or report on a milestone | `wat-milestone` |
-| Sort new issues, set labels, propose milestones | `wat-triage` |
+| Sort new issues, set type and surface labels, define labels, propose milestones | `wat-triage` |
 | Stale issues, label hygiene, duplicates, milestone rollover | `wat-maintain` |
 | Understand or map the system, measure change impact | `wat-architecture` |
 | Make an SVG diagram and attach it | `wat-diagram` |

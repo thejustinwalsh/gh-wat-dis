@@ -54,12 +54,18 @@ Do not rely on: `C4Context`, `architecture-beta`, `block-beta`, `sankey-beta`, `
 
 | Fact | Where it goes |
 |---|---|
-| Kind of work | Issue type (org repos) or a `type:` label |
-| Priority, effort, dates | Issue fields, or labels from the repo config |
+| Kind of work: Task, Bug, Feature | The **issue type**. Never a label. A repository under a user account has no issue types: leave type unset there and say so once. |
+| Priority | A person decides it. Propose it in the triage table. Write it only to an issue field the organization defines, never to a label. |
+| Product surface the work touches | A **surface label**, from `labels.surfaces` in the repo config |
+| Agent memory, an agentic workflow, or work an autonomous agent manages | The **`agents` label** |
 | Release | Milestone |
-| Breakdown | Sub-issues (100 per parent, 8 levels) |
-| Order | Dependencies: blocked by / blocking |
+| Breakdown | **Sub-issue** of a parent (100 per parent, 8 levels) |
+| Order | **Blocked by / blocking** |
 | What a PR finishes | `Closes #n` in the PR body |
+
+Labels mean those two things and nothing else. Do not create a label for type, priority, status or size.
+
+A relation between two issues goes in GitHub's relations, not in prose. "Refs #12" in a body shows in no sidebar and no filter. Use a sub-issue for "part of", and blocked by for "must wait for". Keep `Refs #n` for a link that is neither: related reading, a PR that touches an issue without finishing it.
 
 ## Limits
 

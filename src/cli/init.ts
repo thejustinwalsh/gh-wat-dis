@@ -37,13 +37,15 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const repo = detectRepo(root);
-  const labels = repo.remote
-    ? ghList<{ name: string }>(root, ['label', 'list', '--limit', '200', '--json', 'name']).map((l) => l.name)
-    : [];
+  // Issue types belong to an organization. A repository under a user account has none.
+  const typesOut = repo.remote
+    ? run('gh', ['api', 'graphql', '-f', `query=query{repository(owner:"${repo.owner}",name:"${repo.name}"){issueTypes(first:25){nodes{name}}}}`, '--jq', '[.data.repository.issueTypes.nodes[].name] | join("\n")'], { cwd: root })
+    : null;
+  const issueTypes = (typesOut ?? '').split('\n').map((t) => t.trim()).filter(Boolean);
   const milestones = repo.remote
     ? ghList<{ title: string }>(root, ['api', 'repos/{owner}/{repo}/milestones?state=all&per_page=20&sort=due_on&direction=desc']).map((m) => m.title)
     : [];
-  const text = JSON.stringify(defaultConfig({ ...repo, use, labels, milestones }), null, 2) + '\n';
+  const text = JSON.stringify(defaultConfig({ ...repo, use, issueTypes, milestones }), null, 2) + '\n';
 
   if (args['dry-run']) {
     console.log(`would write ${path}\n`);
@@ -71,7 +73,10 @@ export async function main(argv: string[]): Promise<number> {
 
   console.log(`\nRepository: ${repo.owner || '?'}/${repo.name || '?'}, default branch ${repo.defaultBranch}`);
   if (!repo.remote) console.log('No GitHub remote found through gh. Fill in repo.owner and repo.name when the remote exists.');
-  console.log(`Found ${labels.length} labels, ${milestones.length} milestones.`);
+  console.log(issueTypes.length
+    ? `Issue types: ${issueTypes.join(', ')}. ${milestones.length} milestones.`
+    : `Issue types: none. GitHub offers them to organization repositories only, so type is left unset here. ${milestones.length} milestones.`);
+  console.log('Labels: after you map the architecture, run "npx gh-wat-dis labels" to see the agents label and one label for each product surface.');
   console.log(`policy.use is "${use}". Next: review the file, map the architecture (wat-architecture skill), commit it.`);
   return 0;
 }

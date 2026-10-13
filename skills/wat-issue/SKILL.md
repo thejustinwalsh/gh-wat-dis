@@ -14,21 +14,27 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    ```bash
    npx gh-wat-dis related --title "<title>" --body-file .wat-tmp/issue.md --md
    ```
-   The table lists open and closed issues and PRs with the signals they share with the draft. The tool reports signals. You judge. Read each candidate above 30 points, then sort it with "Related, duplicate or new" below. Show the user what you found before you draft further.
+   The table lists open and closed issues and PRs with the signals they share with the draft. If it says **Incomplete** or **Could not search**, GitHub limited the searches: wait a minute and run it again. A failed search is not "no match". The tool reports signals. You judge. Read each candidate above 30 points, then sort it with "Related, duplicate or new" below. Show the user what you found before you draft further.
 2. **State the problem.** Write it in one or two sentences before anything else. If you cannot, you do not understand the request yet: read more code or ask the user one question. Then state the intended solution, or that it is not known.
 3. **Gather facts.** Read the code the issue names. For a bug, get expected vs actual and a reproduction. To learn what depends on the code an issue names, run `npx gh-wat-dis reach <path or symbol>`. For work already in the tree, run `npx gh-wat-dis impact --working-tree`. Record what you could not check.
 4. **Place it in the system.** Name the elements and relationships from the architecture map in `.agents/gh-wat-dis/config.json`. No map: use the `wat-architecture` skill to name them, and offer to save the map.
 5. **Decide on a diagram.** Draw one when the issue adds, removes or rewires an element or relationship, or when a bug crosses 3 or more elements. Use the `wat-diagram` skill. Otherwise skip it.
 6. **Draft** `.wat-tmp/issue.md` in the Issue format. Pick the row in "By issue type" and follow it.
-7. **Set fields, not prose.** Choose type, labels, milestone and assignee from the repo config. If the config names no milestone rule, propose one with a one-line reason, or leave it empty.
+7. **Set fields, not prose.**
+   - **Type:** the GitHub issue type (Task, Bug, Feature, or the names in `issues.types`). When `issues.typeSource` is `none` the repository has no issue types: leave type unset. Never use a label for type.
+   - **Labels:** one or more surface labels from `labels.surfaces` for the parts of the product the work touches. Add the `agents` label only for agent memory, an agentic workflow, or work an autonomous agent manages. No other labels.
+   - **Priority:** a person decides it. Do not set it.
+   - **Relations:** a parent when the issue is part of a larger one, blocked by when it must wait. See step 10.
+   - **Milestone:** propose one with a one-line reason, or leave it empty.
 8. **Read it as the assignee.** Can a person who was not in this conversation start the work from the body alone? If a term, a reason or a condition is missing, add it. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/issue.md --kind issue`.
 9. **Show the draft.** Print title, fields and body. Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
 10. **Post.**
    ```bash
-   gh issue create --title "<title>" --body-file .wat-tmp/issue.md \
-     --label "<labels>" --milestone "<milestone>" --attach .wat-tmp/<diagram>.svg
+   gh issue create --title "<title>" --body-file .wat-tmp/issue.md --type "<type>" \
+     --label "<surface>" --milestone "<milestone>" --attach .wat-tmp/<diagram>.svg
+   npx gh-wat-dis relate <new> --parent <parent> --blocked-by <blocker>
    ```
-   Omit flags you have no value for. Then link sub-issues and dependencies (`../wat/references/tools.md`).
+   Omit flags you have no value for. Use `relate` for every true relation. Do not write "part of #12" or "blocked by #12" in the body in its place.
 11. **Report** the URL and the fields you set. Remove the scratch files.
 
 ## Title
@@ -47,7 +53,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 |---|---|---|
 | **Duplicate** | Same root cause in the same element. Fixing one fixes the other. | Do not file. Show the original. Offer a comment there with the new evidence. If it is closed and the problem is back, ask: reopen, or file new with `Refs #n`. |
 | **Same symptom, cause not known** | Same error or behaviour, and neither issue names a cause | Ask the user. Default: comment on the existing issue. |
-| **Related** | Same element or same feature, a different problem | File new. Add `Refs #n` in `Evidence`. Consider a dependency or a shared parent. |
+| **Related** | Same element or same feature, a different problem | File new. If one must wait for the other, set blocked by. If both are parts of one piece of work, give them the same parent. Otherwise add `Refs #n` in `Evidence`. |
 | **Already fixed** | A merged PR or a closed issue covers it | Tell the user which one and in which release, if known. File only if it still reproduces. |
 | **No match** | Nothing above 30 points, or the matches share only common words | File new. |
 
@@ -63,12 +69,12 @@ A follow-up is work that a PR leaves for later on purpose. The `wat-pr` skill ca
 2. **`Evidence`** links the PR: `Follow-up to #<pr>`. Never use a closing keyword here.
 3. **`System` and `Change`** carry over only the elements that the remaining work touches.
 4. **`Do`** lists the remaining steps. If the work must wait for something (a release, a migration to finish, a metric), say what, and how to check it.
-5. **Fields:** same type labels and element as the original issue. Milestone: the current one only if the milestone's done-when conditions need it. Else the next one, or none.
-6. **Link it:** add it to the PR's `Follow-ups` section, and as a sub-issue of the same parent when the original issue had one.
+5. **Fields:** the same surface labels as the original issue, and the type that fits the remaining work. Milestone: the current one only if the milestone's done-when conditions need it. Else the next one, or none.
+6. **Link it:** add it to the PR's `Follow-ups` section. Give it the same parent as the original issue when that had one (`relate <n> --parent <p>`). If it must wait for something, set blocked by.
 
 ## Split or keep
 
-- More than 5 `Do` items: make an Epic with sub-issues. Each sub-issue gets its own short body.
+- More than 5 `Do` items: make a parent issue with sub-issues. Each sub-issue gets its own short body.
 - Two problems: two issues, linked with a dependency.
 - An unknown blocks the design: file a Spike first, and make the feature blocked by it.
 

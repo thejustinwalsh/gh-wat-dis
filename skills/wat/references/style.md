@@ -41,7 +41,7 @@ Every number below is a default for ordinary cases. Break it when the content ne
 6. **One alert, as a rule.** Use `> [!WARNING]` or `> [!IMPORTANT]` for the thing that blocks or breaks. Each extra alert weakens the others.
 7. **State problems flat.** Location, cause, fix. `auth.spec.ts:42` fails: expected 200, got 401. Cause: the token expires in the fixture. Fix: freeze the clock.
 8. **Use concrete units.** "2 services, 14 importers, 1 migration" beats "several areas". Give sizes as S (under 1 day), M (1 to 3 days), L (over 3 days) only when the repo config asks for estimates.
-9. **Put state in GitHub fields.** Type, labels, milestone, assignee, sub-issues and dependencies go in the fields. Do not repeat them in prose.
+9. **Put state in GitHub fields.** Issue type, surface labels, milestone, assignee, parent and blocked-by relations go in the fields. Do not repeat them in prose.
 10. **No preamble, no recap, no closer.** Delete the sentence that announces the body and the sentence that sums it up.
 11. **One topic per artifact.** A second problem gets a second issue. Link it.
 

@@ -82,9 +82,17 @@ test('exact signals outrank shared words', async () => {
 
 test('a failed query does not sink the search', async () => {
   let n = 0;
-  const res = await findRelated({ title: 'Checkout API returns 500 on empty cart', search: async () => { if (n++ === 0) throw new Error('rate limited'); return []; } });
+  const res = await findRelated({ title: 'Checkout API returns 500 on empty cart', search: async () => { if (n++ === 0) throw new Error('boom'); return []; } });
   assert.equal(res.failed.length, 1);
+  assert.equal(res.complete, false);
   assert.deepEqual(res.candidates, []);
+  let calls = 0;
+  const retried = await findRelated({ title: 'Checkout API returns 500 on empty cart', retryMs: 1, search: async () => { if (calls++ === 0) throw new Error('HTTP 403: API rate limit exceeded'); return []; } });
+  assert.equal(retried.complete, true);
+  const { toMarkdown } = await import('../src/gh/related.ts');
+  const dead = await findRelated({ title: 'Checkout API returns 500 on empty cart', retryMs: 1, search: async () => { throw new Error('HTTP 403: API rate limit exceeded'); } });
+  assert.match(toMarkdown(dead), /^Could not search/);
+  assert.doesNotMatch(toMarkdown(dead), /No related/);
 });
 
 const GOOD = `The API gateway validates tokens once at the edge.
@@ -130,4 +138,46 @@ test('related: product names and plain words in backticks are not identifiers', 
   assert.ok(!s.spans.includes('diagram'));
   assert.ok(s.spans.includes('retryCharge') && s.spans.includes('event.id'));
   assert.ok(s.idents.includes('OrderPlacedEvent'));
+});
+
+test('labels: agents plus one per surface; other labels are extra and never dropped by default', async () => {
+  const { planLabels } = await import('../src/gh/labels.ts');
+  const { defaultConfig } = await import('../src/cli/config.ts');
+  const cfg = defaultConfig({ owner: 'o', name: 'r' });
+  cfg.architecture.elements = [
+    { id: 'site', name: 'Site', type: 'container', description: 'Shows the product', paths: ['docs/**'] },
+    { id: 'stripe', name: 'Stripe', type: 'system', external: true, paths: [] },
+    { id: 'user', name: 'User', type: 'person', paths: [] },
+  ];
+  const plan = planLabels(cfg, [{ name: 'bug', description: 'x', color: 'd73a4a' }, { name: 'Agents', description: 'old', color: 'ffffff' }]);
+  assert.equal(plan.surfacesFrom, 'architecture');
+  assert.deepEqual(plan.create.map((l) => l.name), ['site']);
+  assert.deepEqual(plan.update.map((l) => l.name), ['agents']);
+  assert.deepEqual(plan.extra.map((l) => l.name), ['bug']);
+  cfg.labels.surfaces = [{ name: 'checkout', description: 'The checkout flow' }];
+  assert.deepEqual(planLabels(cfg, []).create.map((l) => [l.name, l.role]), [['agents', 'agents'], ['checkout', 'surface']]);
+});
+
+test('relations: reads all four kinds and sends database ids when it writes', async () => {
+  const { readRelations, relate } = await import('../src/gh/relations.ts');
+  const calls: string[][] = [];
+  const issue = (n: number) => ({ number: n, title: `t${n}`, state: 'open', id: 1000 + n });
+  const api = async <T>(args: string[]): Promise<T> => {
+    calls.push(args);
+    const path = args[0]!;
+    if (args.includes('POST') || args.includes('DELETE')) return null as T;
+    if (path.endsWith('/parent')) return issue(1) as T;
+    if (path.endsWith('/sub_issues')) return [] as T;
+    if (path.endsWith('/blocked_by')) return [issue(3)] as T;
+    if (path.endsWith('/blocking')) return [] as T;
+    return issue(Number(path.split('/').pop())) as T;
+  };
+  const rel = await readRelations(api, 'o/r', 7);
+  assert.equal(rel.parent?.number, 1);
+  assert.deepEqual(rel.blockedBy.map((r) => r.number), [3]);
+  calls.length = 0;
+  const res = await relate(api, 'o/r', 7, { parent: 1, blockedBy: [3] });
+  assert.ok(res.every((r) => r.ok));
+  assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/1/sub_issues' && c.includes('sub_issue_id=1007')));
+  assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/7/dependencies/blocked_by' && c.includes('issue_id=1003')));
 });

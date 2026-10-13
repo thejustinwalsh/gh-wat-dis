@@ -83,8 +83,8 @@ Then walk the user through the choices. Ask only what the repo does not answer.
 |---|---|---|
 | `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo? | `always` |
 | `policy.confirmBeforeWrite` | Show each draft before posting? | `true` |
-| `issues.types` | Which issue types, and are they GitHub issue types or labels? | From the repo |
-| `issues.priorities` | Which priority labels? | From the repo, else none |
+| `issues.types` | None to ask. `init` reads the GitHub issue types. A repository under a user account has none (`typeSource: none`): tell the user that type stays unset unless the repository moves to an organization. | From GitHub |
+| `labels.surfaces` | Which parts of the product should issues be labeled with? Run `npx gh-wat-dis labels --text` for a proposal from the architecture map, agree the list, save it, then `npx gh-wat-dis labels apply`. | One per mapped element |
 | `milestones.naming` | How are milestones named? | Pattern of existing titles |
 | `milestones.capacity` | How many issues fit one milestone? | Unset |
 | `pulls.draft` | Open PRs as drafts? | `false` |

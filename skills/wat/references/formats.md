@@ -67,7 +67,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 | Feature | What users or the system cannot do today, and what that costs | `System`, `Change`, `Do` | — |
 | Task / chore | What is out of date, missing or in the way | `Do` | Diagram, `Evidence` |
 | Spike / research | The decision that is blocked, and what is not known | `Unknowns` as the main section, a time limit in `Do` | `Change` |
-| Epic / tracking | The gap between the system today and the goal | `System` with a diagram; work as **sub-issues**, not checkboxes | `Do` |
+| Tracking issue | The gap between the system today and the goal | `System` with a diagram; work as **sub-issues**, not checkboxes | `Do` |
 
 ## Pull request
 
@@ -120,7 +120,8 @@ Refs #<m>
 - Before / after images go in a 2-column table.
 - Link lines go last, after the agent block, one issue per line.
   - `Closes #n`: the issue closes when the PR merges. Use it only for an issue this PR finishes.
-  - `Refs #n`: a link with no effect on state. Use it for a parent epic, a related issue, or an issue this PR only partly covers.
+  - `Refs #n`: a link with no effect on state. Use it for a tracking issue, a related issue, or an issue this PR only partly covers.
+  - Between two issues, use GitHub's relations and not a `Refs` line: a parent for "part of", blocked by for "must wait for".
 - Never put `close`, `fix` or `resolve` in front of an issue number anywhere else in the body or in a commit message. GitHub ignores the words around the keyword: "does not fix #12" closes #12.
 - `Follow-ups` lists issues that already exist. File them first. Omit the section when there are none.
 - A PR that changes no element, relationship or contract (typo, dependency bump, formatting) keeps only: the opening, `Verify`, link lines.
@@ -141,7 +142,7 @@ GitHub renders only basic Markdown in milestone descriptions. Use plain text, bo
 **Tracking:** #<tracking issue>
 ```
 
-Rich content (diagram, risk table, status) lives in the **tracking issue**: an issue of type Epic with the milestone's issues as sub-issues. See the `wat-milestone` skill.
+Rich content (diagram, risk table, status) lives in the **tracking issue**: an issue with the milestone's issues as its sub-issues. See the `wat-milestone` skill.
 
 ## Status comment (milestone or epic)
 
