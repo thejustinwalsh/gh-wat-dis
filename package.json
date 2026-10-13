@@ -43,7 +43,7 @@
     "test": "node --test \"test/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
     "prepack": "npm run build",
-    "site:skills": "node scripts/site-skills.ts"
+    "site:commands": "node scripts/site-commands.ts"
   },
   "dependencies": {
     "@ast-grep/lang-rust": "^0.0.7",
