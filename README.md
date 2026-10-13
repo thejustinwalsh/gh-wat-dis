@@ -18,8 +18,7 @@ That is the whole thing.
 
 You were pointed here by that prompt. Do these, in order:
 
-1. Install the package: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. With the package in the project, `npx gh-wat-dis` runs that copy and needs no download, which matters when your harness runs commands in a sandbox (Codex does by default): there an `npx` that has to fetch a package hangs and then dies with "heap out of memory". This install needs the network once, so ask for approval if your sandbox blocks it.
-   - No `package.json` in this project: skip this step. `npx` will fetch the package. If your harness sandboxes commands, ask the human to run `npx gh-wat-dis doctor --fix` in their own terminal first.
+1. Install the package: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json` in this project: skip this step.
 2. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
 3. Read the check lines. Fix each `FAIL` it prints. `warn` lines are optional.
 4. If `gh auth` fails, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
@@ -29,6 +28,8 @@ You were pointed here by that prompt. Do these, in order:
 8. Then read "Use it" below and explain it to them in your own words. The prompt asked for it.
 
 Do not edit the installed skill directories. `install` owns them and will not overwrite your edits without `--force`.
+
+If a command hangs or runs out of memory, your harness is running it in a sandbox that blocks npm. Read your harness's sandbox documentation (for Codex: https://developers.openai.com/codex/security) and tell the human what it needs. `npx gh-wat-dis doctor --fix`, run in their own terminal, covers the Codex case.
 
 ## What you need
 
@@ -128,8 +129,7 @@ Run `npx gh-wat-dis doctor`.
 | `FAIL gh auth` | Not signed in, or the saved token expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
 | `FAIL skills` | Not installed, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
 | Skills do not trigger | Harness not restarted | Restart it |
-| `npx gh-wat-dis` hangs, then "heap out of memory", inside Codex | Codex's sandbox blocks npm's cache and the network | `npx gh-wat-dis doctor --fix` in your own terminal, or `npm install --save-dev gh-wat-dis` in the project |
-| `warn codex sandbox` | The same, found before it bites | The same |
+| A command hangs, then "heap out of memory" | The harness's sandbox blocks npm | See your harness's sandbox docs ([Codex](https://developers.openai.com/codex/security)), or run `npx gh-wat-dis doctor --fix` in your own terminal |
 | Image shows as a broken link | The file was not attached | Post with `gh ... --attach <file>` and check the body has an `https://` image URL |
 
 ## Update and remove

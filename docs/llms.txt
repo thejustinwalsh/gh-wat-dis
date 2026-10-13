@@ -4,10 +4,12 @@
 
 ## Install it
 
-1. Install the package in the project: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command: in a harness that sandboxes commands (Codex does by default), an `npx` that has to fetch a package hangs and then dies with "heap out of memory". No `package.json`: skip this step.
+1. Install the package in the project: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command. No `package.json`: skip this step.
 2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
 
 Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.
+
+If a command hangs or runs out of memory, the harness's sandbox is blocking npm: read the harness's sandbox documentation (Codex: https://developers.openai.com/codex/security).
 
 Needs: Node 24 or later (or Bun, or Deno), and the GitHub CLI 2.99 or later, signed in. The GitHub MCP server is optional.
 
