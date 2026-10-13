@@ -1,7 +1,7 @@
 import { UsageError } from '../cli/util.ts';
 import { DIAGRAM_TYPES, ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec, DiagramType, SpecElement, SpecRelationship, Status } from '../spec.ts';
-import { ancestors, byId, descendants, mergeStatus, requireIds, requireOneOf, statusOf } from './select.ts';
+import { ancestors, byId, descendants, mergeStatus, requireIds, requireOneOf, statusOf, list } from './select.ts';
 
 const withStatus = <T extends { status?: Status }>(item: T, status: Status): T => {
   const { status: _old, ...rest } = item;
@@ -211,7 +211,7 @@ const num = (v: string): number => {
 };
 const str = (v: string): string => v;
 
-/** Edit top-level fields, one element, or the relationships between two elements. */
+/** Edit top-level fields, elements (a comma list of ids), or relationships (a comma list of from:to patterns). */
 export function set(spec: DiagramSpec, opts: SetOptions): DiagramSpec {
   const out: DiagramSpec = { ...spec };
   if (opts.title !== undefined) out.title = opts.title;
@@ -223,23 +223,31 @@ export function set(spec: DiagramSpec, opts: SetOptions): DiagramSpec {
   }
   const fields = opts.fields ?? {};
   if (opts.element !== undefined) {
-    const id = opts.element;
-    requireIds(spec, [id]);
-    const parent = (v: string): string => {
-      requireIds(spec, [v]);
-      if (v === id || descendants(spec, id).includes(v)) throw new UsageError(`"${v}" cannot be the parent of "${id}": that is a cycle`);
-      return v;
-    };
-    const allowed = {
-      name: str, type: oneOf(ELEMENT_TYPES, 'element type'), technology: str, description: str,
-      parent, external: bool, status: oneOf(STATUSES, 'status'),
-    };
-    out.elements = spec.elements.map((e) => (e.id === id ? edit(e, fields, allowed, ['name', 'type']) : e));
+    const ids = list(opts.element);
+    requireIds(spec, ids);
+    const allowedFor = (id: string) => ({
+      name: str, type: oneOf(ELEMENT_TYPES, 'element type'), kind: str, technology: str, description: str,
+      parent: (v: string): string => {
+        requireIds(spec, [v]);
+        if (v === id || descendants(spec, id).includes(v)) throw new UsageError(`"${v}" cannot be the parent of "${id}": that is a cycle`);
+        return v;
+      },
+      external: bool, status: oneOf(STATUSES, 'status'),
+    });
+    out.elements = spec.elements.map((e) => (ids.includes(e.id) ? edit(e, fields, allowedFor(e.id), ['name', 'type']) : e));
   }
   if (opts.relationship !== undefined) {
-    const pair = opts.relationship;
-    const hit = (r: SpecRelationship): boolean => `${r.from}:${r.to}` === pair;
-    if (!spec.relationships.some(hit)) throw new UsageError(`no relationship ${pair} (write it as from:to)`);
+    // Each pattern is from:to. "*" stands for any element on that side.
+    const patterns = list(opts.relationship).map((p) => p.split(':'));
+    const bad = patterns.find((p) => p.length !== 2 || !p[0] || !p[1]);
+    if (bad) throw new UsageError(`write a relationship as from:to (got "${bad.join(':')}")`);
+    const hit = (r: SpecRelationship): boolean =>
+      patterns.some(([from, to]) => (from === '*' || from === r.from) && (to === '*' || to === r.to));
+    for (const [from, to] of patterns) {
+      if (!spec.relationships.some((r) => (from === '*' || from === r.from) && (to === '*' || to === r.to))) {
+        throw new UsageError(`no relationship ${from}:${to} (write it as from:to; "*" matches any element)`);
+      }
+    }
     const allowed = { label: str, technology: str, status: oneOf(STATUSES, 'status'), order: num };
     out.relationships = spec.relationships.map((r) => (hit(r) ? edit(r, fields, allowed, ['label']) : r));
   }

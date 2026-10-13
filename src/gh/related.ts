@@ -13,6 +13,9 @@ const PATH_RE = /(?<![\w/.-])((?:[\w@.-]+\/)+[\w.-]+\.[A-Za-z]{1,6})(?::\d+)?/g;
 const SPAN_RE = /`([^`\n]{4,120})`/g;
 const IDENT_RE = /\b([A-Za-z_][A-Za-z0-9_]*(?:(?:::|\.)[A-Za-z_][A-Za-z0-9_]*)+|[a-z]+(?:[A-Z][a-z0-9]+)+|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+|[a-z0-9]+(?:_[a-z0-9]+)+)\b/g;
 const ERROR_RE = /\b(?:[A-Za-z]*(?:Error|Exception)|panic(?:ked)?|failed to|cannot|could not|unexpected|error\[E\d{4}\]|TS\d{4,5})\b[^\n`]*/g;
+const CODE_LIKE = /[._:/()#<>=-]|[a-z][A-Z]|\d/;
+const COMMON = new Set(`github gitlab javascript typescript postgresql mysql sqlite mongodb graphql webassembly oauth openai
+nodejs node.js next.js vue.js react.js macos ios iphone youtube linkedin wordpress devops`.split(/\s+/));
 const FENCE_RE = /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm;
 
 export interface Draft { title?: string; body?: string; paths?: string[] }
@@ -62,8 +65,12 @@ export function extractSignals({ title = '', body = '', paths = [] }: Draft): Si
   const text = `${title}\n${body}`;
   const noFence = text.replace(FENCE_RE, (b) => b.split('\n').slice(1, -1).join('\n'));
   const filePaths = uniq([...paths, ...[...noFence.matchAll(PATH_RE)].map((m) => m[1]!)]).filter((p) => !/^https?:/.test(p));
-  const spans = uniq([...text.matchAll(SPAN_RE)].map((m) => m[1]!.trim())).filter((s) => !filePaths.includes(s.replace(/:\d+$/, '')));
-  const idents = uniq([...noFence.replace(PATH_RE, ' ').matchAll(IDENT_RE)].map((m) => m[1]!)).filter((s) => s.length > 5);
+  // A span or a word counts as an identifier only when it looks like code. Product names and
+  // plain words in backticks ("GitHub", `diagram`) would match half the tracker.
+  const spans = uniq([...text.matchAll(SPAN_RE)].map((m) => m[1]!.trim()))
+    .filter((s) => !filePaths.includes(s.replace(/:\d+$/, '')) && CODE_LIKE.test(s) && !COMMON.has(s.toLowerCase()));
+  const idents = uniq([...noFence.replace(PATH_RE, ' ').matchAll(IDENT_RE)].map((m) => m[1]!))
+    .filter((s) => s.length > 5 && !COMMON.has(s.toLowerCase()) && (/[._:]/.test(s) || /^[a-z]/.test(s) || (s.match(/[A-Z]/g) ?? []).length >= 3));
   const errors = uniq([...noFence.matchAll(ERROR_RE)].map((m) => m[0].trim().replace(/[.,;:]+$/, '').slice(0, 100)))
     .filter((e) => e.split(/\s+/).length >= 3).slice(0, 3);
   return { terms: tokens(title), bodyTerms: tokens(body), paths: filePaths, spans, idents, errors };

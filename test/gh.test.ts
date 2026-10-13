@@ -123,3 +123,11 @@ test('lint catches what GitHub would break', () => {
   assert.equal(ms.errors.length, 2);
   assert.equal(lintBody('', { kind: 'issue' }).errors[0]?.msg, 'body is empty');
 });
+
+test('related: product names and plain words in backticks are not identifiers', () => {
+  const s = extractSignals({ title: 'Site on GitHub Pages', body: 'Render with `diagram` and call `retryCharge` from `event.id`. Uses TypeScript and OrderPlacedEvent.' });
+  assert.ok(!s.idents.includes('GitHub') && !s.idents.includes('TypeScript'));
+  assert.ok(!s.spans.includes('diagram'));
+  assert.ok(s.spans.includes('retryCharge') && s.spans.includes('event.id'));
+  assert.ok(s.idents.includes('OrderPlacedEvent'));
+});

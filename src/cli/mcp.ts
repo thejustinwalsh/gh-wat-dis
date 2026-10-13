@@ -86,8 +86,15 @@ export async function main(argv: string[]): Promise<number> {
   console.log('');
   if (c.link) console.log(`One click: open this link and confirm in ${client === 'vscode' ? 'VS Code' : 'Cursor'}.\n  ${c.link}\n`);
   if (!c.noToken) {
-    console.log(`Token: the snippet reads ${ENV} from the environment. Set it in your shell profile, for example:`);
-    console.log(`  export ${ENV}="$(gh auth token)"`);
+    if (process.env[ENV]) {
+      console.log(`Token: ${ENV} is already set in this environment. Nothing to create.`);
+    } else {
+      const other = ['GITHUB_MCP_PAT', 'GITHUB_PAT', 'GITHUB_TOKEN', 'GH_TOKEN'].find((n) => process.env[n]);
+      console.log(`Token: the snippet reads ${ENV} from the environment, and it is not set.`);
+      console.log(other
+        ? `  ${other} is set. Reuse it in your shell profile: export ${ENV}="$${other}"`
+        : `  Set it in your shell profile: export ${ENV}="$(gh auth token)"`);
+    }
     console.log('Do not paste the token into a config file or a chat.');
   }
   console.log(readonly

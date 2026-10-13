@@ -31,7 +31,8 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    | `drop --ids` / `--status unchanged` / `--external` / `--orphans` | Remove noise |
    | `merge a.json b.json` | Join two specs |
    | `diff base.json head.json` | Mark added, removed and changed between two specs |
-   | `set --element <id> key=value` / `set --title` | Fix a name, label or technology |
+   | `set --element <id,id> key=value` / `set --title` | Fix a name, technology or status on one or more elements |
+   | `set --relationship <from>:<to>,<from>:* key=value` | The same for relationships. `*` matches any element. |
    | `rename <old> <new>` | Change an id everywhere |
 
    Then open the JSON and fix what filters cannot know: relationship labels that say what moves, and technology. Writing a spec by hand from the start is also fine.
@@ -158,7 +159,7 @@ Use a flow for behaviour over time: a request path, a retry, a migration sequenc
 | Force a direction | `--direction down` or `--direction right` |
 | Fit another width | `--max-width 700` |
 | Legend table for numbered lines | `npx gh-wat-dis legend spec.json` |
-| Force a palette | `--theme light` or `--theme dark` (default `auto` follows the reader's system) |
+| Force a palette | `--theme light` or `--theme dark` (default `auto` carries both palettes and follows the page it is shown on) |
 | Two files for a `<picture>` tag | `--theme split` writes `.light.svg` and `.dark.svg` |
 | Mermaid text, no file | `npx gh-wat-dis diagram spec.json --mermaid` |
 

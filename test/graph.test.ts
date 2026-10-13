@@ -318,3 +318,13 @@ test('split: an overview with groups folded, and a view per changed group', asyn
   assert.ok(!main.elements.some((e) => e.id === 'core'));
   for (const v of [views.overview, ...views.details.map((d) => d.spec)]) assert.deepEqual(lintSpec(v).errors, []);
 });
+
+test('set: several elements and relationship patterns in one call', () => {
+  const spec = JSON.parse(readFileSync(new URL('../examples/diagrams/in-process.json', import.meta.url), 'utf8')) as DiagramSpec;
+  const out = set(set(spec, { element: 'renderer,shaper', fields: { status: 'affected', kind: 'package' } }), { relationship: 'editor:*,host:core', fields: { status: 'changed' } });
+  assert.deepEqual(out.elements.filter((e) => e.id === 'renderer' || e.id === 'shaper').map((e) => [e.status, e.kind]), [['affected', 'package'], ['affected', 'package']]);
+  assert.ok(out.relationships.filter((r) => r.from === 'editor').every((r) => r.status === 'changed'));
+  assert.equal(out.relationships.find((r) => r.from === 'host' && r.to === 'core')?.status, 'changed');
+  assert.equal(out.relationships.find((r) => r.from === 'core' && r.to === 'shaper')?.status, undefined);
+  assert.throws(() => set(spec, { relationship: 'nope:*', fields: { status: 'added' } }), UsageError);
+});
