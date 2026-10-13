@@ -6,7 +6,7 @@ license: MIT
 
 # wat-triage
 
-Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Commands: `../wat/references/tools.md`.
+Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Style: `../wat/references/style.md`. Commands: `../wat/references/tools.md`.
 
 Triage proposes. The user decides. Apply nothing until the user approves the table.
 

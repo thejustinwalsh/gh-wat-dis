@@ -217,6 +217,8 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   };
   const s = milestoneStatus(base);
   assert.equal(s.tracking, 1);
+  assert.equal(s.trackingFrom, 'description');
+  assert.deepEqual(Object.keys(milestoneStatus({ ...base, blockedBy: new Map([[4, [{ number: 3, title: 't3', state: 'open', body: 'x'.repeat(5000), user: {} } as never]]]) }).open[1]!.blockedBy[0]!).sort(), ['inMilestone', 'number', 'state', 'title'], 'a blocker is four fields, not the raw API object');
   assert.deepEqual(s.counts, { total: 3, closed: 1, open: 2, inReview: 1, blocked: 1, blockedOutside: 0, closedLast7Days: 1 });
   assert.equal(s.status, 'moving');
   assert.equal(s.milestone.current, true, 'v0.2.0 comes before v0.10.0');

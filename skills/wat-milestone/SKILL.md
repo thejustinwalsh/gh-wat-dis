@@ -6,7 +6,7 @@ license: MIT
 
 # wat-milestone
 
-Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Commands: `../wat/references/tools.md`. Shapes: `../wat/references/formats.md`.
+Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Style: `../wat/references/style.md`. Commands: `../wat/references/tools.md`. Shapes: `../wat/references/formats.md`.
 
 A milestone has two parts. The **description** is 15 lines of plain Markdown: goal, done-when, scope. The **tracking issue** carries the rich view: diagram, risks, sub-issues, status comments.
 
@@ -14,7 +14,7 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
 1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, capacity). List open milestones to avoid a clash. Milestones run in sequence: the new one is the next version after the highest that exists. Do not set a due date.
 2. **Get the goal** in one sentence. If the user gives a list of features, ask what a user or the system can do when it ships.
-3. **Write done-when conditions.** 3 at most. Each one is observable: a command, a metric, a user action.
+3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
 4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements a milestone description cannot render.
 5. **Show the draft**, wait for a yes, then create:
    ```bash
@@ -43,16 +43,25 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
    | Field | Meaning |
    |---|---|
+   | `milestone.current` | True for the lowest open version: the one that is due now |
+   | `tracking`, `trackingFrom` | The tracking issue. `description`: the milestone names it on a `Tracking:` line. `sub-issues`: the tool guessed it as the issue with the most sub-issues. |
    | `counts.total`, `closed`, `open` | Issues only. Pull requests and the tracking issue are not counted. |
-   | `tracking` | The tracking issue: the one named on the description's `Tracking:` line, else the issue with the most sub-issues |
-   | `open[].inReview` | Open pull requests whose closing keyword names the issue |
-   | `open[].blockedBy` | Open blockers from GitHub's relations. `inMilestone: false` means the blocker is outside the milestone. |
+   | `counts.inReview` | Open issues with an open pull request that closes them. This is the format's "In review" row. |
+   | `counts.blocked`, `blockedOutside` | Open issues with an open blocker, and how many of those wait on something outside the milestone. `blocked` is the format's "Blocked" row. |
+   | `counts.closedLast7Days`, `daysSinceLastClose` | How recently work closed |
+   | `open[]` | Each open issue with `inReview` (pull request numbers) and `blockedBy` (number, title, `inMilestone`) |
+   | `closed[]` | Each closed issue with its close time, newest first |
    | `status`, `reason` | `done`, `blocked`, `stalled` or `moving`, and the one fact behind it |
    | `doneWhen` | The conditions from the milestone description |
 
-2. **Check each done-when condition.** Run the check it names, or read the issue that delivers it. Mark it met or not met, with the evidence. A condition you could not check is "not checked", never "met".
+   When `trackingFrom` is `sub-issues`, say so in one line and propose adding `**Tracking:** #<n>` to the milestone description.
+
+2. **Check each done-when condition.** Run the check it names. Mark it met or not met, with the evidence.
+   - **You cannot run the check here** (a clean machine, a production system): mark it "not checked", say why, and give the nearest fact you can measure, labeled as indirect. An open issue that delivers the condition is such a fact.
+   - **The condition names no check:** say what you looked at, and propose wording that names one.
+   - Never mark a condition met from an indirect fact.
 3. **Find what changed.** Read the comments on the tracking issue (`issue_read` with `get_comments`, or `gh issue view <tracking> --comments`). The last status comment is the baseline. No earlier status: write "First status."
-4. **Name the 1 to 3 issues that decide the outcome**: the ones that block others, or that a done-when condition needs.
+4. **Name the 1 to 3 issues that decide the outcome**: the ones that block others, or that a done-when condition needs. They go in the format's "Decides the outcome" list.
 5. **Write** the Status comment format from `../wat/references/formats.md`. If `status` is `blocked` or `stalled`, propose what to do: which issue to unblock, or which issues move to the next milestone and what this one still delivers.
 6. **Show it in chat.** Post it as a comment on the tracking issue only when the user asks. Check a comment you post with `npx gh-wat-dis lint <file> --kind comment`.
 

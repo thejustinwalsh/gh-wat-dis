@@ -143,7 +143,7 @@ GitHub renders only basic Markdown in milestone descriptions. Use plain text, bo
 <Goal: one sentence. What users or the system can do when this ships. No date.>
 
 **Done when**
-- <observable condition>
+- <condition that names its check: a command and its output, a URL and its status, or an issue number>
 - <3 at most>
 
 **In scope:** <elements or capabilities>
@@ -168,11 +168,14 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 - [x] <condition> (<evidence>)
 - [ ] <condition> (<what is missing, or "not checked">)
 
+**Decides the outcome**
+- #<n> <title>: <what it blocks, or which condition needs it>
+
 **Changed since last update**
 - <3 at most, or "First status.">
 
 **Needs a decision**
-- <question> → @<owner>
+- <question> → @<the issue's assignee, else the repository owner>
 ```
 
 The numbers come from `npx gh-wat-dis milestone`. Counts are issues only: pull requests and the tracking issue are not counted. There is no schedule rating, because milestones have no due dates. Omit `Needs a decision` when there is none.
