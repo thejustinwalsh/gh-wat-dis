@@ -59,10 +59,17 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
     const shown = xs.slice(0, ELEMENTS_SHOWN).map((e) => `${e.name}${detail(e)}`);
     return [...shown, ...(xs.length > ELEMENTS_SHOWN ? [`+${xs.length - ELEMENTS_SHOWN} more`] : [])].join(', ');
   };
-  const touched = els.filter((e) => e.status !== 'affected');
+  // Elements from the architecture map come first. A directory fallback (tests, root files) is named as what it is.
+  const mapped = (e: ElementFact): number => Number(e.source !== 'config');
+  const touched = els.filter((e) => e.status !== 'affected').sort((a, b) => mapped(a) - mapped(b));
   const reached = els.filter((e) => e.status === 'affected');
   const where: string[] = [];
-  if (touched.length) where.push(`Changes ${named(touched, (e) => (e.status === 'changed' ? '' : ` (${e.status})`))}.`);
+  // Only a repository with an architecture map has elements outside it. Without a map every element is a fallback.
+  const hasMap = facts.elements.some((e) => e.source === 'config');
+  const inMap = hasMap ? touched.filter((e) => e.source === 'config') : touched;
+  const unmapped = hasMap ? touched.filter((e) => e.source !== 'config') : [];
+  if (inMap.length) where.push(`Changes ${named(inMap, (e) => (e.status === 'changed' ? '' : ` (${e.status})`))}.`);
+  if (unmapped.length) where.push(`${inMap.length ? 'Also changes' : 'Changes'} ${named(unmapped, () => '')}, which the architecture map does not name.`);
   if (reached.length) { where.push(`Reaches ${named(reached, (e) => ` (${plural(e.dependentsAffected, 'file')})`)}.`); labels.add('measured'); }
   els.forEach((e) => labels.add(e.provenance));
   if (where.length) out.push('', where.join(' '));

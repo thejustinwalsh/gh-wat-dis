@@ -63,7 +63,7 @@ npx gh-wat-dis owners <path>...          # CODEOWNERS for paths
 
 ```bash
 gh pr list --state merged --limit 1 --json number,title,mergedAt,mergeCommit,commits   # 1. find it: this is "the last merged PR"
-git fetch origin && git cat-file -e <mergeCommit>                                      # 2. make sure the local clone holds the merge commit
+git cat-file -e <mergeCommit> || git fetch origin                                      # 2. make sure the local clone holds the merge commit; fetch only when it does not
 npx gh-wat-dis impact --base <mergeCommit>~1 --head <mergeCommit>                      # 3. measure it
 ```
 
@@ -98,7 +98,9 @@ When the user asks what a change affects and wants no issue or PR, answer in thi
 2. What it reaches outside the diff: dependents, changed exported signatures, contracts. "Nothing" is an answer.
 3. Unknowns: what the tools could not see, and any `coChange` pair you kept.
 
-Use prose and short lists. Do not borrow the sections of a PR body.
+Use prose and short lists. Do not borrow the sections of a PR body. State an added or removed relationship in a sentence. Draw a diagram for a chat answer only when the user asks for one, or when the test under "When a diagram is needed" says the change cannot be followed without it.
+
+Name the mapped elements first. Then name the ones that are not in the architecture map in one clause, such as "plus tests and root config, which the map does not name".
 
 ### Wording follows the label
 

@@ -166,7 +166,8 @@
         "technology": "Static HTML, GitHub Pages",
         "description": "Shows what the skills produce and serves llms.txt",
         "paths": [
-          "docs/**"
+          "docs/**",
+          "scripts/site-*.ts"
         ]
       },
       {
