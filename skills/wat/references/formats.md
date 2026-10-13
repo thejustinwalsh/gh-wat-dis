@@ -87,7 +87,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 | <name> | <what is different> | <reason> |
 
 ## Blast radius
-<Output of `npx gh-wat-dis impact --md`, trimmed. Dependents, changed exported signatures, contracts, owners.>
+<Output of `npx gh-wat-dis blast`, trimmed. Dependents, changed exported signatures, contracts, owners.>
 
 ## Verify
 - [x] <check you ran, with the command and the result>
@@ -164,6 +164,6 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 
 One block, last in the body, collapsed. Humans skip it. Agents read it first.
 
-Put here: full impact facts (`npx gh-wat-dis impact --json`), file and symbol lists, exact commands and their output, long logs, reproduction scripts, links you read, constraints for whoever picks the work up. Use fenced code blocks with a language tag. Keep the whole body under 60,000 characters.
+Put here: full impact facts (`npx gh-wat-dis impact`), file and symbol lists, exact commands and their output, long logs, reproduction scripts, links you read, constraints for whoever picks the work up. Use fenced code blocks with a language tag. Keep the whole body under 60,000 characters.
 
 Do not put here: anything a human reviewer must read to approve. That belongs above.

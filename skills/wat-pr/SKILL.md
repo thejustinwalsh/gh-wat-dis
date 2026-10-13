@@ -13,16 +13,16 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 1. **Check the branch.** `git status`, `git log --oneline <base>..HEAD`. Push the branch if it has no upstream. Never open a PR from the default branch.
 2. **Measure.** Facts come before words.
    ```bash
-   npx gh-wat-dis impact --json -o .wat-tmp/facts.json
-   npx gh-wat-dis impact --md > .wat-tmp/blast.md
+   npx gh-wat-dis impact > .wat-tmp/facts.json
+   npx gh-wat-dis blast .wat-tmp/facts.json > .wat-tmp/blast.md
    ```
    Read the facts. Each one carries a provenance label and a source tool. The label sets your wording: see the `wat-architecture` skill.
 3. **Read the diff and the linked issue** for what the tools cannot see: the problem this solves, the design decision, the rejected option, the behaviour change. State the problem and the solution in two sentences before you draft. If you cannot state the problem, ask the user. Do not infer it from the diff alone.
 4. **Decide on a diagram.** Draw one when the facts show an element or edge with status `added` or `removed`, a changed exported signature with dependents in another element, or a changed contract. Then:
    ```bash
-   npx gh-wat-dis impact --diagram .wat-tmp/change.json
+   npx gh-wat-dis graph from-facts .wat-tmp/facts.json > .wat-tmp/change.json
    ```
-   Edit the spec: replace generated labels with the real relationship ("publishes OrderPlaced", not "imports (3)"), add technology, drop noise. Render it with the `wat-diagram` skill. A PR inside one element with no contract change gets no diagram.
+   Shape the spec with `graph` filters, then edit it: replace generated labels with the real relationship ("publishes OrderPlaced", not "imports (3)") and add technology. Render it with the `wat-diagram` skill. A PR inside one element with no contract change gets no diagram.
 5. **Draft** `.wat-tmp/pr.md` in the Pull request format.
    - `Blast radius`: paste `blast.md`, then cut rows a reviewer does not need. Do not add claims the facts do not hold.
    - `Verify`: list the checks you ran with command and result. Then list what the reviewer runs. If you ran nothing, say so.

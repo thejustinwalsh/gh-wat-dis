@@ -1,0 +1,44 @@
+# gh-wat-dis
+
+> Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on: the problem and the solution first, the system design next, long data for agents folded away at the end. One npm package: nine skills, plus small composable tools the skills call through `npx`. A project installs nothing.
+
+## Install it
+
+Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
+
+Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.
+
+Needs: Node 24 or later (or Bun, or Deno), and the GitHub CLI 2.99 or later, signed in. The GitHub MCP server is optional.
+
+## Rules an agent must follow
+
+- Never ask a human for a GitHub token in chat, and never write a token to a file. `npx gh-wat-dis mcp <client>` prints config that reads the token from an environment variable.
+- If `gh auth` fails, the human runs `gh auth login` in their own terminal.
+- Check `.agents/gh-wat-dis/config.json` in a repository before you use the skills there. `policy.use` is `always`, `ask` or `never`. No file: ask the human first.
+- Show the human each draft before you post it.
+- The tools collect facts. They do not review code, score it or give verdicts.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/README.md): install steps, usage, tools, troubleshooting
+- [wat skill](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat/SKILL.md): entry point, repo policy, rules for every artifact
+- [Formats](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat/references/formats.md): the shape of an issue, a PR, a milestone
+- [Style](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat/references/style.md): how the words are written
+- [Tools](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat/references/tools.md): every command, and how they chain
+- [Rendering](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat/references/rendering.md): what GitHub renders in issues, PRs and milestones
+
+## Skills
+
+- [wat-issue](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-issue/SKILL.md): create and edit issues, find related work and duplicates, file follow-ups
+- [wat-pr](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-pr/SKILL.md): pull requests, blast radius, links and auto-close checks
+- [wat-milestone](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-milestone/SKILL.md): create, plan, report on and close milestones
+- [wat-triage](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-triage/SKILL.md): classify issues and propose milestones
+- [wat-maintain](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-maintain/SKILL.md): audits and cleanup
+- [wat-architecture](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-architecture/SKILL.md): map a system to C4 elements, measure what a change reaches
+- [wat-diagram](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-diagram/SKILL.md): diagram specs, graph filters, SVG rendering, attaching
+- [wat-setup](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-setup/SKILL.md): install, GitHub MCP server, repo config
+
+## Source
+
+- [Repository](https://github.com/thejustinwalsh/gh-wat-dis)
+- [npm](https://www.npmjs.com/package/gh-wat-dis)

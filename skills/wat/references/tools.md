@@ -57,10 +57,15 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 
 | Need | Command |
 |---|---|
-| Blast radius for the PR body | `npx gh-wat-dis impact --md` |
-| Full facts for the agent block | `npx gh-wat-dis impact --json` |
-| Facts for uncommitted work | `npx gh-wat-dis impact --working-tree --md` |
-| Diagram spec from the change | `npx gh-wat-dis impact --diagram change.json` |
+| Facts on what a change touches and reaches | `npx gh-wat-dis impact > facts.json` |
+| The same, with uncommitted work | `npx gh-wat-dis impact --working-tree > facts.json` |
+| Blast radius section for a PR body | `npx gh-wat-dis blast facts.json` |
+| Who depends on a file or symbol (no diff needed) | `npx gh-wat-dis reach src/price.ts#formatPrice` |
+| Owners of paths | `npx gh-wat-dis owners <path>...` |
+| Architecture elements and the files they map | `npx gh-wat-dis elements` |
+| Diagram spec from facts | `npx gh-wat-dis graph from-facts facts.json > change.json` |
+| Reshape a spec | `npx gh-wat-dis graph focus\|collapse\|drop\|merge\|diff\|set\|rename` |
+| Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
 | Render a diagram | `npx gh-wat-dis diagram change.json -o change.svg` |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --md` |
@@ -68,6 +73,20 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | The same, for an open PR | `npx gh-wat-dis links --pr <n> --closes <n>,<m> --text` |
 | Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone` |
 | Health check | `npx gh-wat-dis doctor` |
+
+### Compose them
+
+Each tool does one thing. Data tools print JSON on stdout. `-` or piped stdin stands in for a file. Chain them, and add a filter where the default shape is wrong:
+
+```bash
+npx gh-wat-dis impact \
+  | npx gh-wat-dis graph from-facts \
+  | npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 \
+  | npx gh-wat-dis graph collapse --to-type container \
+  | npx gh-wat-dis diagram -o .wat-tmp/change.svg
+```
+
+A diagram spec is plain JSON. When no filter does what you need, edit the file. Run any tool with `--help` for its options.
 
 Every command runs through `npx`. A project installs nothing. The first run downloads the package; later runs use the npm cache.
 

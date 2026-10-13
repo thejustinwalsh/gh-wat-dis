@@ -22,7 +22,7 @@ The map gives every issue and PR the same names for the same things. It lives in
 2. **Find the people and external systems.** Who calls in (users, other teams' systems, webhooks) and what the code calls out to (payment, email, auth providers).
 3. **Find components only where work happens.** A component is a group of code behind one interface: a module with a public entry file, a library crate. Map components for the containers that change often. Skip the rest.
 4. **Name relationships by intent and protocol.** "Reads orders from [SQL]", "Publishes OrderPlaced to [Kafka]". Never a bare "uses".
-5. **Check against the code.** Run `npx gh-wat-dis impact --base <an older ref> --json` and compare `elements` and `edges` with your map. An import edge the map lacks is a missing relationship. Add it or ask the user.
+5. **Check against the code.** Run `npx gh-wat-dis elements` to see which files each element maps and which files are unmapped. Run `npx gh-wat-dis impact --base <an older ref>` and compare `edges` with your relationships. An import edge the map lacks is a missing relationship. Add it or ask the user.
 6. **Show the user** a container diagram (`wat-diagram`) and the element list. Save the map only after a yes.
 
 ```json
@@ -51,8 +51,10 @@ The map gives every issue and PR the same names for the same things. It lives in
 ## Measure a change
 
 ```bash
-npx gh-wat-dis impact --json                  # this branch against the default branch
-npx gh-wat-dis impact --working-tree --json   # include uncommitted work
+npx gh-wat-dis impact                    # this branch against the default branch
+npx gh-wat-dis impact --working-tree     # include uncommitted work
+npx gh-wat-dis reach <path|path#symbol>  # who depends on this, with no diff
+npx gh-wat-dis owners <path>...          # CODEOWNERS for paths
 ```
 
 Read the facts in this order:

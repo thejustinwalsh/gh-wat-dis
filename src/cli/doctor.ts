@@ -30,9 +30,10 @@ function checkGh(offline: boolean): Check[] {
     ? { status: 'ok', name: 'gh', detail: `${v}, --attach available` }
     : { status: 'FAIL', name: 'gh', detail: `${v}. Attachments need ${MIN_GH} or later. Upgrade: brew upgrade gh, or https://cli.github.com` }];
   if (!offline) {
-    res.push(run('gh', ['auth', 'token'])
-      ? { status: 'ok', name: 'gh auth', detail: 'signed in' }
-      : { status: 'FAIL', name: 'gh auth', detail: 'not signed in. Run in your own terminal: gh auth login' });
+    const login = run('gh', ['api', 'user', '--jq', '.login']);
+    res.push(login
+      ? { status: 'ok', name: 'gh auth', detail: `signed in as ${login}` }
+      : { status: 'FAIL', name: 'gh auth', detail: 'not signed in, or the token is no longer valid. Run in your own terminal: gh auth login' });
   }
   return res;
 }

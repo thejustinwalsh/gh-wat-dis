@@ -16,7 +16,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    ```
    The table lists open and closed issues and PRs with the signals they share with the draft. The tool reports signals. You judge. Read each candidate above 30 points, then sort it with "Related, duplicate or new" below. Show the user what you found before you draft further.
 2. **State the problem.** Write it in one or two sentences before anything else. If you cannot, you do not understand the request yet: read more code or ask the user one question. Then state the intended solution, or that it is not known.
-3. **Gather facts.** Read the code the issue names. For a bug, get expected vs actual and a reproduction. For work that changes code you can see, run `npx gh-wat-dis impact --working-tree --json` or read the files. Record what you could not check.
+3. **Gather facts.** Read the code the issue names. For a bug, get expected vs actual and a reproduction. To learn what depends on the code an issue names, run `npx gh-wat-dis reach <path or symbol>`. For work already in the tree, run `npx gh-wat-dis impact --working-tree`. Record what you could not check.
 4. **Place it in the system.** Name the elements and relationships from the architecture map in `.agents/gh-wat-dis/config.json`. No map: use the `wat-architecture` skill to name them, and offer to save the map.
 5. **Decide on a diagram.** Draw one when the issue adds, removes or rewires an element or relationship, or when a bug crosses 3 or more elements. Use the `wat-diagram` skill. Otherwise skip it.
 6. **Draft** `.wat-tmp/issue.md` in the Issue format. Pick the row in "By issue type" and follow it.

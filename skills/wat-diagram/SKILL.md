@@ -14,10 +14,26 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
 
 1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment.
 2. **Get the elements.**
-   - From a change: `npx gh-wat-dis impact --diagram .wat-tmp/change.json`, then edit the spec.
+   - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`.
    - From the map: copy elements and relationships from `.agents/gh-wat-dis/config.json` → `architecture`.
    - From neither: read the code. Never draw an element you did not find.
-3. **Write the spec** to `.wat-tmp/<name>.json`.
+3. **Shape the spec.** The spec is the one format every graph tool reads and writes, so shape it in steps:
+   ```bash
+   npx gh-wat-dis graph stats .wat-tmp/change.json     # how big is it?
+   npx gh-wat-dis graph focus .wat-tmp/change.json --on status:changed,added,removed --hops 1 \
+     | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/<name>.json
+   ```
+   | Filter | Use it to |
+   |---|---|
+   | `focus --on <ids or status:...> --hops N` | Keep some elements and their neighbours |
+   | `collapse --into <id>` / `--to-type container` | Fold components into their parent |
+   | `drop --ids` / `--status unchanged` / `--external` / `--orphans` | Remove noise |
+   | `merge a.json b.json` | Join two specs |
+   | `diff base.json head.json` | Mark added, removed and changed between two specs |
+   | `set --element <id> key=value` / `set --title` | Fix a name, label or technology |
+   | `rename <old> <new>` | Change an id everywhere |
+
+   Then open the JSON and fix what filters cannot know: relationship labels that say what moves, and technology. Writing a spec by hand from the start is also fine.
 4. **Render.**
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg
