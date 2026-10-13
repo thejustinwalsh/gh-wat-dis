@@ -29,7 +29,7 @@ Use the richest element that carries the information in the fewest words. Check 
 | A small config or API change | ` ```diff ` block |
 | The one blocking caveat | One alert |
 | Work items | Task list in the body; sub-issues for more than 5 |
-| Long logs, facts, file lists | `<details>` agent block |
+| Long logs, facts, file lists | `<details>` agent block, one code block inside it (GitHub adds a copy button) |
 | Status | Labels, fields, sub-issue progress. Not prose. |
 
 ## Images

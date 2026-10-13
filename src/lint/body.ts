@@ -106,6 +106,9 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
         const after = L.slice(close + 1).find((l) => l.kind !== 'blank' && !CLOSING.test(l.t));
         if (after) err(after.n, '"Agent context" must be the last block. Only a closing line such as "Closes #12" may follow it.');
       }
+      if (start >= 0 && close >= 0 && !L.slice(start, close).some((l) => l.kind === 'fence')) {
+        warn(first0.n, '"Agent context" holds no code block. GitHub shows a copy button only on a code block: put the content in one fenced block.');
+      }
       const next = L[openIdx + 1];
       if (next && next.kind !== 'blank' && !/<\/details>/i.test(next.t)) {
         warn(next.n, 'leave a blank line after </summary> so Markdown inside the block renders');

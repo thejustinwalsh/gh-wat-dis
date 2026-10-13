@@ -164,6 +164,9 @@ tr + tr td { border-top: 1px solid var(--card-line); }
 .fold b { font-weight: 700; }
 .fold .mono { margin-left: auto; font-size: 12px; color: var(--storage); }
 .fold pre { margin: 0; max-height: 320px; overflow: auto; padding: 14px; background: var(--card-panel); font: 400 12.5px/1.6 var(--mono); tab-size: 2; }
+/* GitHub puts a copy button in the corner of a code block. This one copies the whole context. */
+.fold .code { position: relative; }
+.fold .code button.copy { position: absolute; top: 10px; right: 22px; z-index: 1; padding: 7px 10px; font-size: 12px; border-radius: 6px; }
 
 .pipe { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 36px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
 .step { display: flex; flex-direction: column; gap: 10px; padding: 22px 20px; border-right: 1px solid var(--line); min-height: 170px; }
@@ -297,7 +300,12 @@ footer span { color: var(--muted); }
         <span class="tag">5 · Long data for agents, collapsed</span>
         <details class="fold">
           <summary><b>Agent context</b><span class="mono">paths · commands · facts.json</span></summary>
-          <pre tabindex="0">Paths
+          <div class="code"><button class="copy" type="button" aria-label="Copy the agent context">Copy</button><pre tabindex="0">You are working in acme/shop on the issue "Payments worker: duplicate charge when the webhook retries".
+Problem and plan: Stripe retries a webhook when our reply takes over 10 s, and the Payments worker charges the card again. The worker will key each charge on event.id so a retry finds the first charge and stops.
+Task: do the steps under Do in the issue. Start with the files under Paths.
+The facts below were collected by tools at base 4f1c2ab, working tree. Check a fact against the code before you rely on it.
+
+Paths
   services/payments/src/charge.ts         retryCharge, chargeOnce (new)
   services/payments/src/webhook.ts        handleStripeEvent
   services/orders/migrations/0042_payment_keys.sql
@@ -346,7 +354,7 @@ facts.json (trimmed)
 
 Links read
   #131 Payments worker: move retries off the request path (closed)
-  https://docs.stripe.com/webhooks#retries</pre>
+  https://docs.stripe.com/webhooks#retries</pre></div>
         </details>
       </div>
     </article>
@@ -439,7 +447,7 @@ Links read
 <script>
 for (const button of document.querySelectorAll('button.copy')) {
   button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(button.dataset.copy); button.textContent = 'Copied'; }
+    try { await navigator.clipboard.writeText(button.dataset.copy ?? button.nextElementSibling.textContent); button.textContent = 'Copied'; }
     catch { button.textContent = 'Select the text'; }
     setTimeout(() => { button.textContent = 'Copy'; }, 1600);
   });

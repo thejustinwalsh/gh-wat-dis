@@ -173,4 +173,4 @@ Use the Mermaid output only where an attachment is not possible: a milestone tra
 
 ## Updating a diagram
 
-Edit the spec, render again, and edit the body with the new file: `gh issue edit <n> --body-file <body> --attach <svg>`. Keep the spec in the Agent context block as a `json` code block so the next agent can change it.
+Edit the spec, render again, and edit the body with the new file: `gh issue edit <n> --body-file <body> --attach <svg>`. Keep the spec inside the Agent context code block, under a "Diagram spec" heading line, so the next agent can change it.
