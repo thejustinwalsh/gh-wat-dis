@@ -1,6 +1,6 @@
 # gh-wat-dis
 
-> Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on: the problem and the solution first, the system design next, long data for agents folded away at the end. One npm package: nine skills, plus small composable tools the skills call through `npx`. A project installs nothing.
+> Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on: the problem and the solution first, the system design next, long data for agents folded away at the end. One npm package: ten skills, plus small composable tools the skills call through `npx`. A project installs nothing.
 
 ## Install it
 
@@ -37,6 +37,7 @@ Needs: Node 24 or later (or Bun, or Deno), and the GitHub CLI 2.99 or later, sig
 - [wat-architecture](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-architecture/SKILL.md): map a system to C4 elements, measure what a change reaches
 - [wat-diagram](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-diagram/SKILL.md): diagram specs, graph filters, SVG rendering, attaching
 - [wat-setup](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-setup/SKILL.md): install, GitHub MCP server, repo config
+- [wat-migrate](https://raw.githubusercontent.com/thejustinwalsh/gh-wat-dis/main/skills/wat-migrate/SKILL.md): migrate a repository with existing issues, labels and milestones onto the formats, one milestone at a time
 
 ## Source
 
