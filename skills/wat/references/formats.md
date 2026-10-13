@@ -106,7 +106,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 - **<Pitfall>**: <what breaks, when> → <mitigation or rollback>
 
 ## Evidence
-<before / after table, benchmark numbers, screenshots, test output: short>
+<a before and after pair when the change can be seen, benchmark numbers, test output: short>
 
 ## Unknowns
 - <what you did not check> → <how to check it>
@@ -130,7 +130,7 @@ Refs #<m>
 ````
 
 - Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
-- Before / after images go in a 2-column table.
+- A change a person can see gets a before and after pair in `Evidence`: see "Before and after" below.
 - Link lines go last, after the agent block, one issue per line.
   - `Closes #n`: the issue closes when the PR merges. Use it only for an issue this PR finishes.
   - `Refs #n`: a link with no effect on state. Use it for a tracking issue, a related issue, or an issue this PR only partly covers.
@@ -204,6 +204,67 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 - Each diagram sits next to the words it supports. Do not stack them at the top.
 - When lines carry numbers, put the legend table directly under the image. The table holds the words: the reader can search, copy and link them.
 - A second or third diagram that only some readers need goes in a `<details>` block with a summary that says what it shows.
+
+## Before and after
+
+When a change can be seen, show it. Two captures of the same thing, one from before the change and one from after, tell a reviewer more than a paragraph does. They go in `Evidence`.
+
+**When it applies.** The change alters something a person looks at or reads:
+
+| The change | Show it as |
+|---|---|
+| A screen, a page, a component, a layout, a colour, a spacing | Two screenshots |
+| A rendered artifact: a diagram, a chart, a generated image, a PDF | Two renders |
+| What a command prints, an error message, a log line | Two text blocks, or a `diff` block. Not a screenshot |
+| A terminal UI where the colour or the layout is the change | Two screenshots of the terminal |
+
+**When it does not.** Leave it out when the output is the same before and after (a refactor, a rename, a speed-up: use numbers), when only a test can observe the change, or when you could not capture both sides. Something new has no "before": show one capture under `After` and say that it is new. Never fill the `Before` cell with a mock, a description or a capture of something else.
+
+**What makes a good pair.** A reader should find the difference in a few seconds, and it should be the only difference.
+
+1. **Same surface.** The same page, the same component, the same command with the same arguments.
+2. **Same framing.** The same viewport size, zoom, theme, scroll position and crop. Capture both with one procedure, and change only the code between the two.
+3. **Same state.** The same data, the same account, the same step in the flow. A pair with different content shows the content, not the change.
+4. **Cropped to the change**, with enough around it to see where it is. A whole page for one button hides the button.
+5. **Real captures.** `Before` comes from the base branch or the commit before the change, not from memory. Do not draw on a capture or edit it.
+6. **Nothing private** in the frame: no token, no personal data, no customer name.
+7. **Few.** One pair for each visible change, three pairs at most. Past that, show the most telling ones and list the rest in a sentence. Capture both themes or a second width only when the change differs there.
+
+If you cannot meet 1 to 3, the pair misleads. Say what you could not capture under `Unknowns` and leave the pair out.
+
+**The table.** Two columns labelled `Before` and `After`, the pair side by side, and one sentence under it that says what to look at:
+
+```markdown
+| Before | After |
+|---|---|
+| ![Hero at 1440px, dark: the headline alone](./hero-before.png) | ![Hero at 1440px, dark: the cat card beside the headline](./hero-after.png) |
+
+The card sits to the right of the headline. The install block moved under both columns.
+```
+
+- Each column is about 420px wide on GitHub. Capture at a width that stays readable there, or crop. When the surface is too wide to read at that size, stack the pair: a `Before` row, then an `After` row, in a one-column table.
+- The alt text names the surface, the framing and what the capture shows.
+- Name the files `<what>-before.<ext>` and `<what>-after.<ext>`, and attach each with `--attach`, written the same way in the body and the flag.
+
+**Text output.** A fenced block cannot sit in a table cell, and text should stay text so a reader can search and copy it. Use two labelled blocks, trimmed to the lines that matter:
+
+````markdown
+**Before**
+```text
+$ npx gh-wat-dis lint --help
+gh-wat-dis lint: unknown option --help
+```
+
+**After**
+```text
+$ npx gh-wat-dis lint --help
+Usage: npx gh-wat-dis lint <body.md|-> --kind issue|pr|milestone|comment [--json]
+```
+````
+
+When only a few lines of a long output differ, one `diff` block is shorter and clearer.
+
+**How to capture.** Use the screenshot or browser tool your harness has, at a fixed size. Get the `before` side from a second checkout of the base branch (`git worktree add <dir> <base>`), or from the deployed version when that matches the base. For a diagram, `npx gh-wat-dis diagram <spec> --png <file>` on each version of the spec. No tool for it: do not ask the project to install one. Say that you have no capture.
 
 ## Agent context
 

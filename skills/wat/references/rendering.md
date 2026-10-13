@@ -24,7 +24,8 @@ Use the richest element that carries the information in the fewest words. Check 
 | You need to show | Use |
 |---|---|
 | Structure: elements and relationships | SVG from `npx gh-wat-dis diagram` |
-| Before vs after | 2-column table, or one diagram with change status |
+| A visible change, before vs after | Two captures in a `Before` / `After` table; text output as two labelled code blocks. See "Before and after" in the formats |
+| A structural change, before vs after | One diagram with change status |
 | A sequence over time | Numbered list, or a dynamic diagram for 4+ actors |
 | A small config or API change | ` ```diff ` block |
 | The one blocking caveat | One alert |
