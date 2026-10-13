@@ -106,9 +106,9 @@ Skip this step when the user chose no rewrites.
 
 **The first rewrite is a local before and after.** Do this once, whatever `policy.confirmBeforeWrite` says, and write nothing to GitHub until the user says yes.
 
-1. Take the first row of the first scope (the command is below, with `--limit 1`). Pick the next row if this one is an issue you would keep, or one another person wrote.
+1. Ask which issue to show first, and offer the first row of the first scope as the default (the command is below, with `--limit 1`). The user can name any issue. When they leave it to you, skip a row you would keep and a row another person wrote, and prefer an issue of ordinary length: a very long one makes a poor first example.
 2. Save the body as it is to `.wat-tmp/migrate/<n>-before.md`. Write the rewrite to `.wat-tmp/migrate/<n>-after.md` by "Rewrite one issue" below.
-3. Show both in the chat, the body as it is and then the draft, with the two file paths and one line on what moved. The user can open the files side by side.
+3. Show both in the chat, the body as it is and then the draft, with the two file paths and one line on what moved. The user can open the files side by side. When a body runs past about 100 lines, show its opening and its list of headings in place of the whole text, and say that the file holds the rest.
 4. Ask: go on like this, change the approach, or stop. On a change, redo the draft and show it again. A yes covers this one issue and the approach. Post it, then start the batches.
 
 **Then work through one scope at a time,** 5 issues to a batch:
