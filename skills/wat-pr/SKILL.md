@@ -24,7 +24,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    ```
    Shape the spec with `graph` filters, then edit it: replace generated labels with the real relationship ("publishes OrderPlaced", not "imports (3)") and add technology. Render it with the `wat-diagram` skill. For a hard change inside one element, write a component or dynamic spec by hand with that element's parts as the boxes. A mechanical change gets no diagram, however wide it is.
 5. **Draft** `.wat-tmp/pr.md` in the Pull request format.
-   - `Blast radius`: paste `blast.md`, then cut rows a reviewer does not need. Do not add claims the facts do not hold.
+   - `Blast radius`: every PR has this section. Paste `blast.md`, then cut rows a reviewer does not need. Always keep the bold summary line and the `Files changed` list with its links: they tell the reviewer where to look. A PR with nothing else to report keeps those two and no more. Do not add claims the facts do not hold. The file links point at the head commit, so push the branch before you post.
    - `Verify`: list the checks you ran with command and result. Then list what the reviewer runs. If you ran nothing, say so.
    - `Risks`: start from the facts. A changed exported signature with dependents → name the callers. A migration or schema → state the deploy order. Risks describe what the change does to the system. They do not grade the code.
    - `Unknowns`: `coChange` lists files that changed with these in the last 90 days and are not in this diff. Check each one, then drop it or list it.

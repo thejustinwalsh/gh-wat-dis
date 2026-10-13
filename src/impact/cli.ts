@@ -54,20 +54,25 @@ export const impact: Command = async (argv) => {
   return 0;
 };
 
-const BLAST_HELP = `Usage: gh-wat-dis blast [facts.json|-] [--max-items 5] [--heading "<text>"] [--no-heading]
+const BLAST_HELP = `Usage: gh-wat-dis blast [facts.json|-] [--max-items 5] [--heading "<text>"] [--no-heading] [--no-links]
 
 Format impact facts as a Markdown "Blast radius" section. Reads Facts JSON from a file or stdin.
 
   --max-items N     entries per list before "+N more" (default 5)
   --heading <text>  heading line (default "## Blast radius")
   --no-heading      print no heading
+  --no-links        print file paths as code, not as links to the file at the head commit
+
+Paths link to the repository when the facts name one (the origin remote) and the head is a commit.
+Push the branch before you post the section, or the links lead nowhere.
 `;
 
 export const blast: Command = async (argv) => {
-  const a = parseArgs(argv, { booleans: ['help', 'no-heading'], strings: ['max-items', 'heading'], aliases: ALIASES });
+  const a = parseArgs(argv, { booleans: ['help', 'no-heading', 'no-links'], strings: ['max-items', 'heading'], aliases: ALIASES });
   if (a.help) return help(BLAST_HELP);
   process.stdout.write(toMarkdown(readFacts(a._[0]), {
     maxItems: count(a['max-items'], 'max-items', 5),
+    ...(a['no-links'] ? { links: false } : {}),
     ...(a['no-heading'] ? { heading: false as const } : a.heading !== undefined ? { heading: a.heading } : {}),
   }));
   return 0;

@@ -3,7 +3,7 @@ import { extOf, kindOf, languageOf, schemaKind } from './classify.ts';
 import { loadCodeowners, ownersOf } from './codeowners.ts';
 import type { ElementMap } from './elements.ts';
 import { buildElements } from './elements.ts';
-import { diffEntries, history, readBlobs, resolveRange, tryGit } from './git.ts';
+import { diffEntries, history, readBlobs, resolveRange, tryGit, webUrl } from './git.ts';
 import type { DiffEntry } from './git.ts';
 import { buildGraph, reverseReach } from './graph.ts';
 import { diffManifest, isManifest } from './manifests.ts';
@@ -299,11 +299,13 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const ran = ['git', ...(graph.nodes.size ? ['ast-grep'] : []), ...(co ? ['codeowners'] : []),
     ...(graph.packages.length || dependencies.length ? ['manifest'] : []), ...(els.mapping === 'config' ? ['config'] : [])];
 
+  const repository = webUrl(await tryGit(root, ['remote', 'get-url', 'origin']));
   return {
     schema: 1,
     base: range.base,
     head: range.head ?? 'WORKING_TREE',
     range: { baseRef: range.baseRef, headRef: range.head ? range.headRef : 'working tree', workingTree: !range.head, depth },
+    ...(repository ? { repository } : {}),
     tiers: { ran, languages: graph.languages, unavailable: graph.unavailable },
     summary: {
       filesChanged: files.length,

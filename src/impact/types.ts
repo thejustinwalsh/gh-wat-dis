@@ -129,6 +129,8 @@ export interface Facts {
   /** Commit sha of the head side, or "WORKING_TREE". */
   head: string;
   range: { baseRef: string; headRef: string; workingTree: boolean; depth: number };
+  /** Web address of the repository, from the `origin` remote. Absent when there is none. */
+  repository?: string;
   tiers: Tiers;
   summary: FactsSummary;
   files: FileFact[];
@@ -153,7 +155,7 @@ export interface AnalyzeOptions {
   now?: Date;
 }
 
-export interface MarkdownOptions { maxItems?: number; heading?: string | false }
+export interface MarkdownOptions { maxItems?: number; heading?: string | false; /** Link file paths to the repository. Default true. */ links?: boolean }
 export interface SpecOptions { title?: string; all?: boolean }
 
 export interface OwnerMatch { path: string; owners: string[]; rule: string | null; file: string | null; line?: number; provenance: 'exact' }

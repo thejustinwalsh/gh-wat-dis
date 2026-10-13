@@ -26,10 +26,21 @@ function list(title: string, items: string[], max: number): string[] {
   return ['', `**${title}**`, ...shown];
 }
 
+/** A path as code, linked to the file at the commit when the facts name a repository and a commit. */
+function linker(facts: Facts, on: boolean): (path: string) => string {
+  const deleted = new Set(facts.files.filter((f) => f.status === 'deleted').map((f) => f.path));
+  return (path) => {
+    const sha = deleted.has(path) ? facts.base : facts.head;
+    if (!on || !facts.repository || !/^[0-9a-f]{7,64}$/.test(sha)) return code(path);
+    return `[${code(path)}](${facts.repository}/blob/${sha.slice(0, 12)}/${path.split('/').map(encodeURIComponent).join('/')})`;
+  };
+}
+
 export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   const max = opts.maxItems ?? 5;
   const s = facts.summary;
   const labels = new Set<Provenance>();
+  const file = linker(facts, opts.links !== false);
   const out: string[] = [];
   const heading = opts.heading === undefined ? '## Blast radius' : opts.heading;
   if (heading) out.push(heading, '');
@@ -58,6 +69,10 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
     if (rows.length > TABLE_ROWS) out.push('', `+${rows.length - TABLE_ROWS} more elements`);
   }
 
+  const churn = (f: { insertions: number; deletions: number }): number => f.insertions + f.deletions;
+  out.push(...list('Files changed', [...facts.files].sort((a, b) => churn(b) - churn(a) || a.path.localeCompare(b.path))
+    .map((f) => `${file(f.path)} · ${f.binary ? 'binary' : `+${f.insertions} −${f.deletions}`}${f.status === 'modified' ? '' : ` · ${f.status}`}`), max));
+
   const exported = facts.symbols.filter((x) => x.exported);
   const deps = (d: SymbolDependent[]): string => {
     if (!d.length) return '';
@@ -73,17 +88,17 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   note(sig.slice(0, max)); note(moved.slice(0, max)); note(inNew.slice(0, 1));
   for (const x of [...sig.slice(0, max), ...moved.slice(0, max)]) note(x.dependents);
 
-  const movedLines = list('Exports added or removed', moved.map((x) => `${x.change} ${code(x.name)} (${x.file})${deps(x.dependents)}`), max);
+  const movedLines = list('Exports added or removed', moved.map((x) => `${x.change} ${code(x.name)} (${file(x.file)})${deps(x.dependents)}`), max);
   if (inNew.length) {
     if (!movedLines.length) movedLines.push('', '**Exports added or removed**');
     movedLines.push(`- added ${plural(inNew.length, 'export')} in ${plural(new Set(inNew.map((x) => x.file)).size, 'new file')}`);
   }
   out.push(
-    ...list('Exported signatures changed', sig.map((x) => `${x.kind === 'method' ? `${code(x.name)}: ` : ''}${arrow(x.before ?? '', x.after ?? '')} (${x.file})${deps(x.dependents)}`), max),
+    ...list('Exported signatures changed', sig.map((x) => `${x.kind === 'method' ? `${code(x.name)}: ` : ''}${arrow(x.before ?? '', x.after ?? '')} (${file(x.file)})${deps(x.dependents)}`), max),
     ...movedLines,
-    ...list('Contract surfaces touched', facts.contracts.map((c) => `${code(c.path)} · ${c.kind} · ${c.note}`), max),
-    ...list('Tests that import the changed modules', facts.tests.importingChanged.map(code), max),
-    ...list('Changed together in the last 90 days, not in this diff', facts.coChange.map((c) => `${code(c.file)} with ${code(c.withFile)} · ${plural(c.commits, 'commit')} (${Math.round(c.ratio * 100)}%)`), max),
+    ...list('Contract surfaces touched', facts.contracts.map((c) => `${file(c.path)} · ${c.kind} · ${c.note}`), max),
+    ...list('Tests that import the changed modules', facts.tests.importingChanged.map(file), max),
+    ...list('Changed together in the last 90 days, not in this diff', facts.coChange.map((c) => `${file(c.file)} with ${file(c.withFile)} · ${plural(c.commits, 'commit')} (${Math.round(c.ratio * 100)}%)`), max),
     ...list('Dependency changes', facts.dependencies.map((d) => `${d.change} ${code(d.name)}${d.from !== undefined || d.to !== undefined ? ` ${[d.from, d.to].filter((v) => v !== undefined).join(' → ')}` : ''} (${d.manifest})`), max),
   );
   note(facts.contracts.slice(0, max));

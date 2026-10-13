@@ -279,11 +279,17 @@ test('ts: elements, edges, markdown and spec', async () => {
   assert.match(md, /\| @acme\/web \| affected \| 0 of 6 \| 5 \| @acme\/web \|/);
   assert.match(md, /`function formatPrice\(amount: number\): string` → `function formatPrice\(amount: number, currency: string\): string`.*6 dependents \(1 in this diff\)/);
   assert.match(md, /- `Money\.add`: `add\(other: Money\): Money` → `add\(other: Money, round: boolean\): Money`/);
-  assert.match(md, /- removed `legacyFormat` \(packages\/shared\/src\/price\.ts\) · 3 dependents\n- added `parsePrice` \(packages\/shared\/src\/price\.ts\)\n/);
+  assert.match(md, /- removed `legacyFormat` \(`packages\/shared\/src\/price\.ts`\) · 3 dependents\n- added `parsePrice` \(`packages\/shared\/src\/price\.ts`\)\n/);
   assert.match(md, /- `packages\/web\/src\/total\.test\.ts`/);
   assert.match(md, /- `docs\/pricing\.md` with `packages\/shared\/src\/price\.ts` · 4 commits \(80%\)/);
   assert.match(md, /- bumped `express` \^4\.0\.0 → \^5\.0\.0/);
   assert.match(md, /_Sources: git, ast-grep \(TypeScript\), codeowners, manifest\. Labels: exact, resolved, measured, heuristic\._/);
+  assert.match(md, /\*\*Files changed\*\*\n- `/);
+  const linked = toMarkdown({ ...facts, repository: 'https://github.com/acme/shop' });
+  assertMarkdownShape(linked);
+  assert.ok(linked.includes(`[\`packages/web/src/total.test.ts\`](https://github.com/acme/shop/blob/${facts.head.slice(0, 12)}/packages/web/src/total.test.ts)`));
+  assert.doesNotMatch(toMarkdown({ ...facts, repository: 'https://github.com/acme/shop' }, { links: false }), /\]\(https:/);
+  assert.doesNotMatch(toMarkdown({ ...facts, repository: 'https://github.com/acme/shop', head: 'WORKING_TREE' }), /\]\(https:/);
   assert.match(toMarkdown(facts, { maxItems: 1 }), /- \+2 more/);
   assert.doesNotMatch(toMarkdown(facts, { heading: false }), /^## /m);
 
@@ -315,6 +321,15 @@ test('ts: working tree picks up staged, unstaged and untracked files', async () 
   assert.equal(committed.files.length, 0);
   assert.ok(committed.caveats.some((c) => c.includes('same commit')));
   assertMarkdownShape(toMarkdown(committed));
+});
+
+test('webUrl: ssh and https remotes give the same web address', async () => {
+  const { webUrl } = await import('../src/impact/git.ts');
+  for (const r of ['git@github.com:o/r.git', 'https://github.com/o/r.git', 'https://github.com/o/r', 'ssh://git@github.com/o/r.git', 'https://token@github.com/o/r.git\n']) {
+    assert.equal(webUrl(r), 'https://github.com/o/r');
+  }
+  assert.equal(webUrl(null), null);
+  assert.equal(webUrl('/srv/git/r.git'), null);
 });
 
 test('reach: path, path#symbol and bare symbol', async () => {

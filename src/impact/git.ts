@@ -17,6 +17,12 @@ export async function tryGit(cwd: string, args: string[]): Promise<string | null
 const revParse = async (cwd: string, ref: string): Promise<string | null> =>
   (await tryGit(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]))?.trim() || null;
 
+/** The web address for a remote URL: `git@github.com:o/r.git` and `https://github.com/o/r.git` both give `https://github.com/o/r`. */
+export function webUrl(remote: string | null): string | null {
+  const m = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)([^/:]+)[:/](.+?)(?:\.git)?\/?$/.exec((remote ?? '').trim());
+  return m ? `https://${m[1]}/${m[2]}` : null;
+}
+
 export interface Range { base: string; head: string | null; baseRef: string; headRef: string; caveats: string[] }
 
 /** `head` is null when the head side is the working tree. */

@@ -63,7 +63,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 |---|---|
 | Facts on what a change touches and reaches | `npx gh-wat-dis impact > facts.json` |
 | The same, with uncommitted work | `npx gh-wat-dis impact --working-tree > facts.json` |
-| Blast radius section for a PR body | `npx gh-wat-dis blast facts.json` |
+| Blast radius section for a PR body, with links to each changed file | `npx gh-wat-dis blast facts.json` |
 | Who depends on a file or symbol (no diff needed) | `npx gh-wat-dis reach src/price.ts#formatPrice` |
 | Owners of paths | `npx gh-wat-dis owners <path>...` |
 | Architecture elements and the files they map | `npx gh-wat-dis elements` |
