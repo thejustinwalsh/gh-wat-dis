@@ -1,0 +1,589 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { analyze, listElements, reachOf, resolveOwners, toDiagramSpec, toMarkdown } from '../src/impact/index.ts';
+import type { Facts } from '../src/impact/index.ts';
+import { ELEMENT_TYPES, PROVENANCE, STATUSES } from '../src/spec.ts';
+import type { DiagramSpec } from '../src/spec.ts';
+
+const NOW = new Date('2026-06-01T12:00:00Z');
+const DAY = 86_400_000;
+const BIN = resolve(import.meta.dirname, '../src/bin.ts');
+const repos: string[] = [];
+test.after(() => { for (const r of repos) rmSync(r, { recursive: true, force: true }); });
+
+type Files = Record<string, string | null>;
+
+function repo(): { dir: string; commit: (files: Files, daysAgo: number, msg?: string) => void; write: (files: Files) => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'wat-impact-'));
+  repos.push(dir);
+  const git = (args: string[], date?: string): void => {
+    execFileSync('git', args, {
+      cwd: dir, stdio: 'pipe',
+      env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com',
+        GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) },
+    });
+  };
+  const write = (files: Files): void => {
+    for (const [path, text] of Object.entries(files)) {
+      if (text === null) { rmSync(join(dir, path)); continue; }
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+  };
+  git(['init', '-q', '-b', 'main']);
+  return {
+    dir, write,
+    commit(files, daysAgo, msg = 'change') {
+      write(files);
+      git(['add', '-A']);
+      git(['commit', '-q', '-m', msg], new Date(NOW.getTime() - daysAgo * DAY).toISOString());
+    },
+  };
+}
+
+const cli = (args: string[], input?: string): string =>
+  execFileSync(process.execPath, [BIN, ...args], { encoding: 'utf8', input: input ?? '', stdio: ['pipe', 'pipe', 'pipe'] });
+
+function assertFactsShape(f: Facts): void {
+  assert.equal(f.schema, 1);
+  const labelled = [...f.files, ...f.symbols, ...f.dependents.direct, ...f.dependents.transitive, ...f.elements, ...f.edges, ...f.contracts, ...f.coChange, ...f.dependencies];
+  for (const x of labelled) assert.ok(PROVENANCE.includes(x.provenance), `provenance on ${JSON.stringify(x).slice(0, 80)}`);
+  const ids = new Set(f.elements.map((e) => e.id));
+  assert.equal(ids.size, f.elements.length, 'element ids are unique');
+  for (const e of f.edges) assert.ok(ids.has(e.from) && ids.has(e.to) && e.from !== e.to, `edge ${e.from} -> ${e.to}`);
+  for (const x of [...f.files, ...f.symbols, ...f.dependents.direct, ...f.dependents.transitive]) assert.ok(ids.has(x.element), `element ${x.element}`);
+}
+
+function assertSpecValid(spec: DiagramSpec): void {
+  const ids = new Set(spec.elements.map((e) => e.id));
+  assert.equal(ids.size, spec.elements.length, 'unique ids');
+  for (const e of spec.elements) {
+    assert.ok(ELEMENT_TYPES.includes(e.type), `type ${e.type}`);
+    assert.ok(e.status && STATUSES.includes(e.status), `status ${e.status}`);
+    assert.ok(e.name && e.description);
+    assert.ok(!e.parent || ids.has(e.parent), `parent ${e.parent}`);
+    assert.ok(e.meta && 'filesChanged' in e.meta && 'dependentsAffected' in e.meta && 'provenance' in e.meta);
+  }
+  for (const r of spec.relationships) {
+    assert.ok(ids.has(r.from) && ids.has(r.to), `endpoints ${r.from} -> ${r.to}`);
+    assert.ok(r.label.trim() && r.label !== 'uses', `label "${r.label}"`);
+    assert.ok(r.status && STATUSES.includes(r.status));
+    assert.ok(r.meta && typeof r.meta.weight === 'number' && PROVENANCE.includes(r.meta.provenance as never));
+  }
+}
+
+function assertMarkdownShape(md: string): void {
+  const lines = md.trimEnd().split('\n');
+  assert.match(lines[0]!, /^## Blast radius$/);
+  assert.match(lines[2]!, /^\*\*\d+ files? changed in \d+ elements? · \d+ direct dependents?.*\*\*$/);
+  assert.match(lines[lines.length - 1]!, /^_Sources: git[^_]*\.( Labels: [a-z, ]+\.)?_$/);
+  lines.forEach((line, i) => {
+    if (/^\*\*[A-Z][^*]+\*\*$/.test(line)) assert.match(lines[i + 1] ?? '', /^- /, `section "${line}" is empty`);
+  });
+  assert.ok(lines.length <= 45, `${lines.length} lines`);
+  assert.doesNotMatch(md, /\b(should|consider|risky|dangerous|careful|recommend|missing tests?)\b/i);
+}
+
+// ---------------------------------------------------------------- TypeScript monorepo
+
+const PRICE_V1 = `// price helpers
+export function formatPrice(amount: number): string {
+  return amount.toFixed(2);
+}
+
+export function legacyFormat(amount: number): string {
+  return String(amount);
+}
+
+export const TAX = 0.2;
+
+export class Money {
+  constructor(readonly amount: number) {}
+  add(other: Money): Money { return new Money(this.amount + other.amount); }
+}
+
+export interface PriceOptions { currency: string }
+`;
+const PRICE_V2 = `// price helpers, v2
+export function formatPrice(amount: number, currency: string): string {
+  return currency + amount.toFixed(2);
+}
+
+export const TAX = 0.2;
+
+export class Money {
+  constructor(readonly amount: number) {}
+  add(other: Money, round: boolean): Money { return new Money(round ? Math.round(this.amount + other.amount) : this.amount + other.amount); }
+}
+
+export interface PriceOptions { currency: string; locale: string }
+
+export function parsePrice(text: string): number { return Number(text); }
+`;
+
+function tsMonorepo(): string {
+  const r = repo();
+  r.commit({
+    'package.json': JSON.stringify({ name: 'acme', private: true, workspaces: ['packages/*'] }),
+    'tsconfig.json': `{
+  // aliases
+  "compilerOptions": { "baseUrl": ".", "paths": { "@lib/*": ["packages/shared/src/*"], } },
+}`,
+    '.github/CODEOWNERS': '* @acme/all\n/packages/shared/ @acme/core @alice\n/packages/web/ @acme/web\n*.proto @acme/api\n',
+    'packages/shared/package.json': JSON.stringify({ name: '@acme/shared', main: 'dist/index.js' }),
+    'packages/shared/src/price.ts': PRICE_V1,
+    'packages/shared/src/price.test.ts': "import { formatPrice } from './price';\nformatPrice(1);\n",
+    'packages/shared/src/index.ts': "export * from './price.js';\n",
+    'packages/api/package.json': JSON.stringify({ name: '@acme/api', dependencies: { '@acme/shared': 'workspace:*', express: '^4.0.0' } }),
+    'packages/api/src/server.ts': "import { formatPrice } from '@acme/shared';\nexport const handle = (): string => formatPrice(1);\n",
+    'packages/api/src/routes.ts': "import { handle } from './server.ts';\nexport const routes = [handle];\n",
+    'packages/api/schema/api.proto': 'syntax = "proto3";\nmessage Price { int64 amount = 1; }\n',
+    'packages/web/package.json': JSON.stringify({ name: '@acme/web', dependencies: { '@acme/shared': 'workspace:*' } }),
+    'packages/web/src/cart.ts': "import * as shared from '@acme/shared';\nexport const cart = (): string => shared.formatPrice(2);\n",
+    'packages/web/src/total.ts': "import { formatPrice, legacyFormat } from '@lib/price';\nexport const total = (): string => formatPrice(3) + legacyFormat(3);\n",
+    'packages/web/src/total.test.ts': "import { formatPrice } from '../../shared/src/price.ts';\nformatPrice(4);\n",
+    'packages/web/src/app.ts': "import { total } from './total';\nexport const app = total;\n",
+    'packages/web/src/lazy.ts': "export const load = () => import('./app.js');\nconst legacy = require('./cart');\nexport { legacy };\n",
+    'docs/pricing.md': '# Pricing\n',
+    'tools/report.py': 'print("v1")\n',
+  }, 30, 'init');
+  for (const [i, days] of [20, 15, 10].entries()) {
+    r.commit({ 'packages/shared/src/price.ts': PRICE_V1.replace('// price helpers', `// price helpers ${i}`), 'docs/pricing.md': `# Pricing ${i}\n` }, days, `tune ${i}`);
+  }
+  r.commit({
+    'packages/shared/src/price.ts': PRICE_V2,
+    'packages/shared/src/price.test.ts': "import { formatPrice } from './price';\nformatPrice(1, '$');\n",
+    'packages/api/schema/api.proto': 'syntax = "proto3";\nmessage Price { int64 amount = 1; string currency = 2; }\n',
+    'packages/api/package.json': JSON.stringify({ name: '@acme/api', dependencies: { '@acme/shared': 'workspace:*', express: '^5.0.0', zod: '^3.0.0' } }),
+    'tools/report.py': 'print("v2")\n',
+  }, 1, 'currency');
+  return r.dir;
+}
+
+let tsRepo: string | undefined;
+let tsFacts: Facts | undefined;
+async function tsFixture(): Promise<{ dir: string; facts: Facts }> {
+  tsRepo ??= tsMonorepo();
+  tsFacts ??= await analyze({ cwd: tsRepo, base: 'HEAD~1', now: NOW });
+  return { dir: tsRepo, facts: tsFacts };
+}
+
+test('ts: git tier reports files, kinds, churn, owners and dependency changes', async () => {
+  const { facts } = await tsFixture();
+  assertFactsShape(facts);
+  assert.deepEqual(facts.files.map((f) => f.path), [
+    'packages/api/package.json', 'packages/api/schema/api.proto', 'packages/shared/src/price.test.ts', 'packages/shared/src/price.ts', 'tools/report.py']);
+  const byPath = new Map(facts.files.map((f) => [f.path, f]));
+  const price = byPath.get('packages/shared/src/price.ts')!;
+  assert.equal(price.status, 'modified');
+  assert.equal(price.kind, 'source');
+  assert.equal(price.language, 'typescript');
+  assert.equal(price.element, 'acme-shared');
+  assert.deepEqual(price.owners, ['@acme/core', '@alice']);
+  assert.equal(price.churn90d, 5);
+  assert.equal(price.provenance, 'exact');
+  assert.equal(price.source, 'git');
+  assert.ok(price.insertions > 0 && price.deletions > 0);
+  assert.equal(byPath.get('packages/api/package.json')!.kind, 'manifest');
+  assert.equal(byPath.get('packages/api/schema/api.proto')!.kind, 'schema');
+  assert.deepEqual(byPath.get('packages/api/schema/api.proto')!.owners, ['@acme/api']);
+  assert.equal(byPath.get('packages/shared/src/price.test.ts')!.kind, 'test');
+  assert.deepEqual(byPath.get('tools/report.py')!.owners, ['@acme/all']);
+  assert.deepEqual(facts.summary.byKind, { manifest: 1, schema: 1, test: 1, source: 2 });
+  assert.equal(facts.summary.filesChanged, 5);
+  assert.deepEqual(facts.dependencies.map((d) => [d.name, d.change, d.from, d.to, d.section]), [
+    ['express', 'bumped', '^4.0.0', '^5.0.0', 'dependencies'], ['zod', 'added', undefined, '^3.0.0', 'dependencies']]);
+  assert.ok(facts.caveats.includes('no symbol analysis for .py'));
+  assert.deepEqual(facts.tiers.languages, ['typescript']);
+  assert.ok(['git', 'ast-grep', 'codeowners', 'manifest'].every((t) => facts.tiers.ran.includes(t)));
+  assert.equal(facts.owners.find((o) => o.owner === '@acme/web')!.dependentFiles.length, 3);
+});
+
+test('ts: changed symbols, signatures, added and removed exports', async () => {
+  const { facts } = await tsFixture();
+  const sym = (name: string) => facts.symbols.find((s) => s.name === name && s.file === 'packages/shared/src/price.ts');
+  const fp = sym('formatPrice')!;
+  assert.equal(fp.change, 'modified');
+  assert.equal(fp.exported, true);
+  assert.equal(fp.signatureChanged, true);
+  assert.equal(fp.before, 'function formatPrice(amount: number): string');
+  assert.equal(fp.after, 'function formatPrice(amount: number, currency: string): string');
+  assert.equal(fp.source, 'ast-grep');
+  assert.deepEqual(fp.dependents.map((d) => [d.file, d.provenance, d.inDiff]), [
+    ['packages/api/src/server.ts', 'resolved', false],
+    ['packages/shared/src/index.ts', 'heuristic', false],
+    ['packages/shared/src/price.test.ts', 'resolved', true],
+    ['packages/web/src/cart.ts', 'heuristic', false],
+    ['packages/web/src/total.test.ts', 'resolved', false],
+    ['packages/web/src/total.ts', 'resolved', false],
+  ]);
+  const legacy = sym('legacyFormat')!;
+  assert.equal(legacy.change, 'removed');
+  assert.ok(legacy.dependents.some((d) => d.file === 'packages/web/src/total.ts' && d.provenance === 'resolved'));
+  assert.equal(sym('parsePrice')!.change, 'added');
+  assert.equal(sym('TAX'), undefined);
+  assert.equal(sym('Money.add')!.signatureChanged, true);
+  assert.equal(sym('Money')!.signatureChanged, false);
+  assert.equal(sym('PriceOptions')!.signatureChanged, true);
+  assert.equal(facts.summary.exportedSignatureChanges, 3);
+});
+
+test('ts: dependents, provenance labels, transitive rollup, tests and co-change', async () => {
+  const { facts } = await tsFixture();
+  const direct = new Map(facts.dependents.direct.map((d) => [d.file, d]));
+  assert.deepEqual([...direct.keys()], [
+    'packages/api/src/server.ts', 'packages/shared/src/index.ts', 'packages/web/src/cart.ts', 'packages/web/src/total.test.ts', 'packages/web/src/total.ts']);
+  assert.equal(direct.get('packages/api/src/server.ts')!.provenance, 'resolved');
+  assert.deepEqual(direct.get('packages/api/src/server.ts')!.symbols, ['formatPrice']);
+  assert.deepEqual(direct.get('packages/api/src/server.ts')!.via, ['@acme/shared']);
+  assert.equal(direct.get('packages/web/src/cart.ts')!.provenance, 'heuristic');
+  assert.equal(direct.get('packages/web/src/total.ts')!.provenance, 'resolved');
+  assert.deepEqual(direct.get('packages/web/src/total.ts')!.via, ['@lib/price']);
+  assert.equal(direct.get('packages/web/src/total.test.ts')!.isTest, true);
+  assert.equal(facts.summary.directDependents, 5);
+  assert.deepEqual(facts.dependents.transitive, [
+    { element: 'acme-web', count: 5, minDepth: 1, provenance: 'measured' },
+    { element: 'acme-api', count: 2, minDepth: 1, provenance: 'measured' },
+    { element: 'acme-shared', count: 1, minDepth: 1, provenance: 'measured' },
+  ]);
+  const shallow = await analyze({ cwd: (await tsFixture()).dir, base: 'HEAD~1', now: NOW, depth: 1 });
+  assert.equal(shallow.dependents.transitive.find((t) => t.element === 'acme-web')!.count, 3);
+  assert.deepEqual(facts.tests, { changed: ['packages/shared/src/price.test.ts'], importingChanged: ['packages/web/src/total.test.ts'] });
+  assert.deepEqual(facts.coChange, [{ file: 'docs/pricing.md', withFile: 'packages/shared/src/price.ts', commits: 4, ratio: 0.8, provenance: 'measured' }]);
+  assert.deepEqual(facts.contracts.map((c) => [c.path, c.kind]), [['packages/api/schema/api.proto', 'protobuf']]);
+});
+
+test('ts: elements, edges, markdown and spec', async () => {
+  const { facts } = await tsFixture();
+  const el = new Map(facts.elements.map((e) => [e.id, e]));
+  assert.equal(el.get('acme-shared')!.status, 'changed');
+  assert.equal(el.get('acme-shared')!.provenance, 'heuristic');
+  assert.equal(el.get('acme-api')!.status, 'changed');
+  assert.equal(el.get('acme-web')!.status, 'affected');
+  assert.equal(el.get('acme-web')!.dependentsAffected, 5);
+  assert.equal(el.get('docs')!.status, 'unchanged');
+  assert.equal(el.get('tools')!.status, 'changed');
+  assert.equal(facts.summary.elementsChanged, 3);
+  const edge = (from: string, to: string) => facts.edges.find((e) => e.from === from && e.to === to);
+  assert.deepEqual(edge('acme-web', 'acme-shared'), { from: 'acme-web', to: 'acme-shared', weight: 3, status: 'unchanged', provenance: 'exact', source: 'manifest' });
+  assert.equal(edge('acme-api', 'acme-shared')!.weight, 1);
+
+  const md = toMarkdown(facts);
+  assertMarkdownShape(md);
+  assert.match(md, /\*\*5 files changed in 3 elements · 5 direct dependents · 3 exported signatures changed\*\*/);
+  assert.match(md, /\| @acme\/shared \| changed \| 2 of 4 \| 1 \| @acme\/core @alice \|/);
+  assert.match(md, /\| @acme\/web \| affected \| 0 of 6 \| 5 \| @acme\/web \|/);
+  assert.match(md, /`function formatPrice\(amount: number\): string` → `function formatPrice\(amount: number, currency: string\): string`.*6 dependents \(1 in this diff\)/);
+  assert.match(md, /- `Money\.add`: `add\(other: Money\): Money` → `add\(other: Money, round: boolean\): Money`/);
+  assert.match(md, /- removed `legacyFormat` \(packages\/shared\/src\/price\.ts\) · 3 dependents\n- added `parsePrice` \(packages\/shared\/src\/price\.ts\)\n/);
+  assert.match(md, /- `packages\/web\/src\/total\.test\.ts`/);
+  assert.match(md, /- `docs\/pricing\.md` with `packages\/shared\/src\/price\.ts` · 4 commits \(80%\)/);
+  assert.match(md, /- bumped `express` \^4\.0\.0 → \^5\.0\.0/);
+  assert.match(md, /_Sources: git, ast-grep \(TypeScript\), codeowners, manifest\. Labels: exact, resolved, measured, heuristic\._/);
+  assert.match(toMarkdown(facts, { maxItems: 1 }), /- \+2 more/);
+  assert.doesNotMatch(toMarkdown(facts, { heading: false }), /^## /m);
+
+  const spec = toDiagramSpec(facts);
+  assertSpecValid(spec);
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['acme-api', 'acme-shared', 'acme-web', 'tools']);
+  assert.equal(spec.relationships.find((r) => r.from === 'acme-web')!.label, 'imports (3)');
+  assert.equal(spec.elements.find((e) => e.id === 'acme-shared')!.description, '4 files · 2 changed');
+  const all = toDiagramSpec(facts, { all: true, title: 'Everything' });
+  assertSpecValid(all);
+  assert.equal(all.title, 'Everything');
+  assert.equal(all.elements.length, facts.elements.length);
+  assert.equal(all.relationships.length, facts.edges.length);
+});
+
+test('ts: working tree picks up staged, unstaged and untracked files', async () => {
+  const r = repo();
+  r.commit({ 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': "import { a } from './a';\nexport const b = a;\n", 'src/c.ts': 'export const c = 1;\n' }, 5);
+  r.write({ 'src/a.ts': 'export const a = 2;\nexport const extra = 1;\n', 'src/new.ts': "import { c } from './c';\nexport const n = c;\n" });
+  execFileSync('git', ['add', 'src/a.ts'], { cwd: r.dir });
+  r.write({ 'src/c.ts': 'export const c = 2;\n' });
+  const facts = await analyze({ cwd: r.dir, workingTree: true, now: NOW });
+  assertFactsShape(facts);
+  assert.equal(facts.head, 'WORKING_TREE');
+  assert.deepEqual(facts.files.map((f) => [f.path, f.status]), [['src/a.ts', 'modified'], ['src/c.ts', 'modified'], ['src/new.ts', 'added']]);
+  assert.deepEqual(facts.dependents.direct.map((d) => d.file), ['src/b.ts']);
+  assert.ok(facts.symbols.some((s) => s.name === 'extra' && s.change === 'added'));
+  const committed = await analyze({ cwd: r.dir, now: NOW });
+  assert.equal(committed.files.length, 0);
+  assert.ok(committed.caveats.some((c) => c.includes('same commit')));
+  assertMarkdownShape(toMarkdown(committed));
+});
+
+test('reach: path, path#symbol and bare symbol', async () => {
+  const { dir } = await tsFixture();
+  const res = await reachOf({ cwd: dir, targets: ['packages/shared/src/price.ts', 'packages/shared/src/price.ts#formatPrice', 'formatPrice', 'TAX', 'nope'] });
+  const [path, hashed, bare, tax, nope] = res.targets;
+  assert.deepEqual(path!.matches[0]!.direct.map((d) => d.file), [
+    'packages/api/src/server.ts', 'packages/shared/src/index.ts', 'packages/shared/src/price.test.ts',
+    'packages/web/src/cart.ts', 'packages/web/src/total.test.ts', 'packages/web/src/total.ts']);
+  assert.equal(hashed!.matches[0]!.symbol, 'formatPrice');
+  assert.equal(hashed!.matches[0]!.kind, 'function');
+  assert.equal(hashed!.matches[0]!.direct.find((d) => d.file === 'packages/web/src/cart.ts')!.provenance, 'heuristic');
+  assert.equal(hashed!.matches[0]!.direct.find((d) => d.file === 'packages/api/src/server.ts')!.provenance, 'resolved');
+  assert.deepEqual(hashed!.matches[0]!.transitive.find((t) => t.element === 'acme-api'), { element: 'acme-api', count: 2, minDepth: 1, provenance: 'measured' });
+  assert.equal(bare!.ambiguous, false);
+  assert.equal(bare!.matches[0]!.file, 'packages/shared/src/price.ts');
+  assert.deepEqual(bare!.matches[0]!.direct, hashed!.matches[0]!.direct);
+  assert.deepEqual(tax!.matches[0]!.direct.map((d) => [d.file, d.provenance]), [['packages/shared/src/index.ts', 'heuristic'], ['packages/web/src/cart.ts', 'heuristic']]);
+  assert.equal(nope!.found, false);
+
+  const r = repo();
+  r.commit({ 'a/x.ts': 'export const same = 1;\n', 'b/x.ts': 'export const same = 2;\n', 'c.ts': "import { same } from './a/x';\nexport default same;\n" }, 3);
+  const amb = (await reachOf({ cwd: r.dir, targets: ['same'] })).targets[0]!;
+  assert.equal(amb.ambiguous, true);
+  assert.deepEqual(amb.matches.map((m) => [m.file, m.direct.length]), [['a/x.ts', 1], ['b/x.ts', 0]]);
+});
+
+test('owners: last match wins; elements: workspace fallback', async () => {
+  const { dir } = await tsFixture();
+  const owners = await resolveOwners({ cwd: dir, paths: ['packages/web/src/app.ts', 'packages/shared/schema/x.proto', 'README.md'] });
+  assert.deepEqual(owners.map((o) => [o.owners, o.rule]), [[['@acme/web'], '/packages/web/'], [['@acme/api'], '*.proto'], [['@acme/all'], '*']]);
+  assert.ok(owners.every((o) => o.file === '.github/CODEOWNERS' && o.provenance === 'exact'));
+  const els = await listElements({ cwd: dir });
+  assert.equal(els.mapping, 'workspace');
+  const shared = els.elements.find((e) => e.id === 'acme-shared')!;
+  assert.deepEqual([shared.found, shared.files, shared.globs, shared.provenance], ['workspace', 4, ['packages/shared/**'], 'heuristic']);
+  assert.ok(els.unmapped.includes('docs/pricing.md') && els.unmapped.includes('tsconfig.json'));
+  assert.equal(els.elements.find((e) => e.id === 'docs')!.found, 'directory');
+});
+
+test('cli: impact | blast, graph from-facts, owners from stdin, reach, elements, usage errors', async () => {
+  const { dir } = await tsFixture();
+  const out = cli(['impact', '--base', 'HEAD~1', '--cwd', dir]);
+  const facts = JSON.parse(out) as Facts;
+  assert.equal(facts.summary.filesChanged, 5);
+  assert.match(out, /^\{\n  "schema": 1,/);
+  assertMarkdownShape(cli(['blast', '--max-items', '3'], out));
+  assertSpecValid(JSON.parse(cli(['graph', 'from-facts', '-', '--title', 'T'], out)) as DiagramSpec);
+  const owners = JSON.parse(cli(['owners', '-', '--cwd', dir], 'packages/web/src/app.ts\n\ntools/report.py\n')) as { path: string; owners: string[] }[];
+  assert.deepEqual(owners.map((o) => [o.path, o.owners]), [['packages/web/src/app.ts', ['@acme/web']], ['tools/report.py', ['@acme/all']]]);
+  assert.equal((JSON.parse(cli(['reach', 'formatPrice', '--cwd', dir, '--depth', '1'])) as { targets: unknown[] }).targets.length, 1);
+  assert.equal((JSON.parse(cli(['elements', '--cwd', dir])) as { mapping: string }).mapping, 'workspace');
+  for (const cmd of ['impact', 'blast', 'reach', 'owners', 'elements']) assert.match(cli([cmd, '--help']), /^Usage: gh-wat-dis /);
+  assert.match(cli(['graph', 'from-facts', '--help']), /^Usage: gh-wat-dis graph from-facts/);
+  const fails = (args: string[], input = ''): number => {
+    try { cli(args, input); return 0; } catch (e) { return (e as { status: number }).status; }
+  };
+  assert.equal(fails(['impact', '--nope']), 2);
+  assert.equal(fails(['blast'], '{"not":"facts"}'), 2);
+  assert.equal(fails(['reach', '--cwd', dir]), 2);
+  assert.equal(fails(['reach', 'doesNotExist', '--cwd', dir]), 1);
+  assert.equal(fails(['impact', '--base', 'no-such-ref', '--cwd', dir]), 1);
+});
+
+// ---------------------------------------------------------------- Rust workspace
+
+function rustWorkspace(): string {
+  const r = repo();
+  const pricing = (sig: string, body: string): string => `/// Formats a price.
+pub fn format_price(${sig}) -> String {
+    ${body}
+}
+
+pub(crate) fn helper() -> u64 { 1 }
+
+pub const RATE: u64 = 2;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats() { let _ = helper(); }
+}
+`;
+  const shape = (extra: string): string => `pub trait Describe {
+    fn describe(&self) -> String;
+}
+
+pub struct Circle {
+    pub r: f64,
+}
+
+impl Circle {
+    pub fn area(&self) -> f64 { self.r * self.r * 3.14 }
+    fn secret(&self) {}
+}
+${extra}`;
+  r.commit({
+    'Cargo.toml': '[workspace]\nmembers = ["crates/*"]\nresolver = "2"\n\n[workspace.dependencies]\nserde = "1"\n',
+    'CODEOWNERS': '/crates/core/ @rust/core\n/crates/api/ @rust/api\n',
+    'crates/core/Cargo.toml': '[package]\nname = "core-crate"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\nserde = { workspace = true }\n',
+    'crates/core/src/lib.rs': 'pub mod pricing;\npub mod shape;\n\npub use pricing::format_price;\n',
+    'crates/core/src/pricing.rs': pricing('amount: u64', 'amount.to_string()'),
+    'crates/core/src/shape.rs': shape(''),
+    'crates/api/Cargo.toml': '[package]\nname = "api"\nversion = "0.1.0"\n\n[dependencies]\ncore-crate = { path = "../core" }\n',
+    'crates/api/src/lib.rs': 'mod everything;\n\nuse core_crate::pricing::format_price;\nuse core_crate::shape::{Circle, Describe as D};\n\npub fn quote() -> String { format_price(1) }\n',
+    'crates/api/src/everything.rs': 'use core_crate::pricing::*;\n\npub fn rate() -> u64 { RATE }\n',
+    'crates/api/tests/quote.rs': 'use core_crate::format_price;\n\n#[test]\nfn quotes() { format_price(1); }\n',
+    'crates/cli/Cargo.toml': '[package]\nname = "cli"\nversion = "0.1.0"\n\n[dependencies]\napi = { path = "../api" }\n\n[dev-dependencies]\nserde = "1"\n',
+    'crates/cli/src/main.rs': 'use api::quote;\n\nfn main() { println!("{}", quote()); }\n',
+  }, 12, 'init');
+  r.commit({
+    'crates/core/src/pricing.rs': pricing('amount: u64, currency: &str', 'format!("{currency}{amount}")'),
+    'crates/core/src/shape.rs': shape('\nimpl Describe for Circle {\n    fn describe(&self) -> String { String::from("circle") }\n}\n'),
+    'crates/cli/Cargo.toml': '[package]\nname = "cli"\nversion = "0.1.0"\n\n[dependencies]\napi = { path = "../api" }\ncore-crate = { path = "../core" }\n\n[dev-dependencies]\nserde = "1.0.200"\n',
+  }, 2, 'currency');
+  return r.dir;
+}
+
+test('rust: signatures, trait impls, dependents through use paths, crate edges', async () => {
+  const dir = rustWorkspace();
+  const facts = await analyze({ cwd: dir, base: 'HEAD~1', now: NOW });
+  assertFactsShape(facts);
+  assert.deepEqual(facts.tiers.languages, ['rust']);
+  assert.deepEqual(facts.tiers.unavailable, []);
+
+  const sym = (name: string) => facts.symbols.find((s) => s.name === name);
+  const fp = sym('format_price')!;
+  assert.equal(fp.file, 'crates/core/src/pricing.rs');
+  assert.equal(fp.kind, 'function');
+  assert.equal(fp.change, 'modified');
+  assert.equal(fp.signatureChanged, true);
+  assert.equal(fp.before, 'pub fn format_price(amount: u64) -> String');
+  assert.equal(fp.after, 'pub fn format_price(amount: u64, currency: &str) -> String');
+  assert.deepEqual(fp.dependents.map((d) => [d.file, d.provenance]), [
+    ['crates/api/src/everything.rs', 'heuristic'],
+    ['crates/api/src/lib.rs', 'resolved'],
+    ['crates/api/tests/quote.rs', 'resolved'],
+    ['crates/core/src/lib.rs', 'resolved'],
+  ]);
+  const impl = sym('impl Describe for Circle')!;
+  assert.deepEqual([impl.kind, impl.change, impl.exported], ['trait-impl', 'added', true]);
+  assert.ok(impl.dependents.some((d) => d.file === 'crates/api/src/lib.rs' && d.provenance === 'heuristic'));
+  assert.equal(sym('helper'), undefined);
+  assert.equal(sym('Circle'), undefined);
+  assert.equal(facts.summary.exportedSignatureChanges, 1);
+
+  const direct = new Map(facts.dependents.direct.map((d) => [d.file, d]));
+  assert.deepEqual([...direct.keys()], ['crates/api/src/everything.rs', 'crates/api/src/lib.rs', 'crates/api/tests/quote.rs', 'crates/core/src/lib.rs']);
+  assert.equal(direct.get('crates/api/src/everything.rs')!.provenance, 'heuristic');
+  assert.deepEqual(direct.get('crates/api/src/everything.rs')!.via, ['core_crate::pricing::*']);
+  assert.equal(direct.get('crates/api/src/lib.rs')!.provenance, 'resolved');
+  assert.deepEqual(direct.get('crates/api/src/lib.rs')!.symbols, ['format_price']);
+  assert.equal(direct.get('crates/api/tests/quote.rs')!.isTest, true);
+  assert.deepEqual(facts.tests.importingChanged, ['crates/api/tests/quote.rs']);
+  assert.deepEqual(facts.dependents.transitive, [
+    { element: 'api', count: 3, minDepth: 1, provenance: 'measured' },
+    { element: 'core-crate', count: 1, minDepth: 1, provenance: 'measured' },
+    { element: 'cli', count: 1, minDepth: 2, provenance: 'measured' },
+  ]);
+
+  const el = new Map(facts.elements.map((e) => [e.id, e]));
+  assert.deepEqual(['core-crate', 'api', 'cli'].map((id) => el.get(id)!.status), ['changed', 'affected', 'changed']);
+  assert.equal(el.get('core-crate')!.technology, 'Rust crate');
+  const edge = (from: string, to: string) => facts.edges.find((e) => e.from === from && e.to === to);
+  assert.deepEqual(edge('api', 'core-crate'), { from: 'api', to: 'core-crate', weight: 4, status: 'unchanged', provenance: 'exact', source: 'manifest' });
+  assert.deepEqual(edge('cli', 'api'), { from: 'cli', to: 'api', weight: 1, status: 'unchanged', provenance: 'exact', source: 'manifest' });
+  assert.deepEqual(edge('cli', 'core-crate'), { from: 'cli', to: 'core-crate', weight: 0, status: 'added', provenance: 'exact', source: 'manifest' });
+  assert.deepEqual(facts.dependencies.map((d) => [d.name, d.section, d.change, d.from, d.to]), [
+    ['core-crate', 'dependencies', 'added', undefined, 'path:../core'], ['serde', 'dev-dependencies', 'bumped', '1', '1.0.200']]);
+  assert.deepEqual(facts.files.find((f) => f.path === 'crates/core/src/pricing.rs')!.owners, ['@rust/core']);
+  assert.ok(facts.files.find((f) => f.path === 'crates/core/src/pricing.rs')!.hunkFunctions.length <= 2);
+
+  const md = toMarkdown(facts);
+  assertMarkdownShape(md);
+  assert.match(md, /`pub fn format_price\(amount: u64\) -> String` → `pub fn format_price\(amount: u64, currency: &str\) -> String`/);
+  assert.match(md, /- added `impl Describe for Circle`/);
+  assert.match(md, /ast-grep \(Rust\)/);
+  const spec = toDiagramSpec(facts);
+  assertSpecValid(spec);
+  assert.equal(spec.relationships.find((r) => r.from === 'cli' && r.to === 'core-crate')!.label, 'declares dependency');
+
+  const reach = await reachOf({ cwd: dir, targets: ['format_price', 'crates/core/src/shape.rs#Circle::area'] });
+  assert.deepEqual(reach.targets[0]!.matches.map((m) => m.file), ['crates/core/src/pricing.rs']);
+  assert.equal(reach.targets[0]!.matches[0]!.direct.length, 4);
+  assert.deepEqual(reach.targets[0]!.matches[0]!.transitive.find((t) => t.element === 'cli'), { element: 'cli', count: 1, minDepth: 2, provenance: 'measured' });
+  assert.deepEqual(reach.targets[1]!.matches[0]!.direct.map((d) => [d.file, d.provenance]), [['crates/api/src/lib.rs', 'heuristic']]);
+});
+
+// ---------------------------------------------------------------- Config architecture map
+
+test('config: architecture map drives elements, edges and labels', async () => {
+  const r = repo();
+  const files: Files = {
+    'src/server/handler.ts': 'export function handle(id: string): string { return id; }\n',
+    'src/server/db/schema.sql': 'create table t (id int);\n',
+    'src/client/view.ts': "import { handle } from '../server/handler.ts';\nexport const view = handle('1');\n",
+    'src/client/page.tsx': "import { view } from './view';\nexport const Page = () => <p>{view}</p>;\n",
+    'lib/misc.ts': "import { view } from '../src/client/view';\nexport const misc = view;\n",
+    'README.md': '# demo\n',
+  };
+  r.commit(files, 9, 'init');
+  const before = await listElements({ cwd: r.dir });
+  assert.equal(before.mapping, 'directory');
+  assert.deepEqual(before.elements.map((e) => e.name).sort(), ['(root)', 'lib', 'src']);
+  assert.ok(before.elements.every((e) => e.provenance === 'heuristic' && e.found === 'directory'));
+  assert.deepEqual(before.unmapped, []);
+
+  r.commit({
+    '.agents/gh-wat-dis/config.json': JSON.stringify({
+      version: 1,
+      architecture: {
+        system: { name: 'Demo', description: '' },
+        elements: [
+          { id: 'platform', name: 'Platform', type: 'boundary' },
+          { id: 'db', name: 'Database', type: 'datastore', technology: 'Postgres', parent: 'platform', paths: ['src/server/db/**'] },
+          { id: 'server', name: 'API server', type: 'container', technology: 'Node', description: 'Serves requests', parent: 'platform', paths: ['src/server/**'] },
+          { id: 'client', name: 'Web client', type: 'container', paths: ['src/client/*.{ts,tsx}'] },
+          { id: 'mail', name: 'Mail', type: 'system', external: true },
+        ],
+        relationships: [{ from: 'client', to: 'server', label: 'calls API', technology: 'HTTPS' }, { from: 'server', to: 'mail', label: 'sends mail' }],
+      },
+    }),
+  }, 8, 'map');
+  r.commit({
+    'src/server/handler.ts': 'export function handle(id: string, verbose: boolean): string { return verbose ? id : ""; }\n',
+    'src/server/db/schema.sql': 'create table t (id int, name text);\n',
+  }, 1, 'verbose');
+
+  const listed = await listElements({ cwd: r.dir });
+  assert.equal(listed.mapping, 'config');
+  const byId = new Map(listed.elements.map((e) => [e.id, e]));
+  assert.deepEqual([byId.get('server')!.files, byId.get('server')!.globs, byId.get('server')!.found], [1, ['src/server/**'], 'config']);
+  assert.deepEqual([byId.get('db')!.files, byId.get('client')!.files, byId.get('platform')!.files], [1, 2, 0]);
+  assert.deepEqual(listed.unmapped.sort(), ['.agents/gh-wat-dis/config.json', 'README.md', 'lib/misc.ts']);
+  assert.equal(byId.get('lib')!.found, 'directory');
+
+  const facts = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW });
+  assertFactsShape(facts);
+  assert.ok(facts.tiers.ran.includes('config'));
+  const el = new Map(facts.elements.map((e) => [e.id, e]));
+  assert.deepEqual([el.get('server')!.status, el.get('server')!.provenance, el.get('server')!.source, el.get('server')!.type], ['changed', 'exact', 'config', 'container']);
+  assert.deepEqual([el.get('db')!.status, el.get('db')!.type, el.get('db')!.parent], ['changed', 'datastore', 'platform']);
+  assert.deepEqual([el.get('client')!.status, el.get('client')!.dependentsAffected], ['affected', 2]);
+  assert.deepEqual([el.get('lib')!.status, el.get('lib')!.provenance], ['affected', 'heuristic']);
+  assert.equal(el.get('mail')!.external, true);
+  assert.deepEqual(facts.edges.find((e) => e.from === 'client' && e.to === 'server'),
+    { from: 'client', to: 'server', weight: 1, status: 'unchanged', label: 'calls API', technology: 'HTTPS', provenance: 'exact', source: 'config' });
+  assert.deepEqual(facts.edges.find((e) => e.from === 'lib'), { from: 'lib', to: 'client', weight: 1, status: 'unchanged', provenance: 'resolved', source: 'ast-grep' });
+  assert.deepEqual(facts.contracts.map((c) => [c.path, c.kind]), [['src/server/db/schema.sql', 'sql']]);
+  assert.equal(facts.symbols.find((s) => s.name === 'handle')!.signatureChanged, true);
+
+  const spec = toDiagramSpec(facts);
+  assertSpecValid(spec);
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['client', 'db', 'mail', 'platform', 'server']);
+  const rel = spec.relationships.find((x) => x.from === 'client' && x.to === 'server')!;
+  assert.deepEqual([rel.label, rel.technology, rel.meta], ['calls API', 'HTTPS', { weight: 1, provenance: 'exact', source: 'config' }]);
+  assert.equal(spec.elements.find((e) => e.id === 'server')!.description, 'Serves requests');
+  assert.equal(spec.elements.find((e) => e.id === 'db')!.description, '1 file · 1 changed');
+  assertSpecValid(toDiagramSpec(facts, { all: true }));
+  assertMarkdownShape(toMarkdown(facts));
+
+  // An import added in this diff shows up as an added edge; a removed one as a removed edge.
+  r.commit({ 'src/server/handler.ts': "import { misc } from '../../lib/misc';\nexport function handle(id: string, verbose: boolean): string { return verbose ? id : misc; }\n", 'src/client/view.ts': "export const view = '1';\n" }, 0.5, 'rewire');
+  const rewired = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW });
+  assertFactsShape(rewired);
+  assert.equal(rewired.edges.find((e) => e.from === 'server' && e.to === 'lib')!.status, 'added');
+  const gone = rewired.edges.find((e) => e.from === 'client' && e.to === 'server')!;
+  assert.deepEqual([gone.status, gone.weight, gone.label], ['removed', 0, 'calls API']);
+  assertSpecValid(toDiagramSpec(rewired));
+});

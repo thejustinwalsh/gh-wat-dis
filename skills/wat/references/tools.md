@@ -64,6 +64,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Owners of paths | `npx gh-wat-dis owners <path>...` |
 | Architecture elements and the files they map | `npx gh-wat-dis elements` |
 | Diagram spec from facts | `npx gh-wat-dis graph from-facts facts.json > change.json` |
+| Diagram spec from the architecture map | `npx gh-wat-dis graph from-config > system.json` |
 | Reshape a spec | `npx gh-wat-dis graph focus\|collapse\|drop\|merge\|diff\|set\|rename` |
 | Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
 | Render a diagram | `npx gh-wat-dis diagram change.json -o change.svg` |

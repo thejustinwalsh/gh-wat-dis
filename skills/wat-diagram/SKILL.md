@@ -15,7 +15,7 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
 1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment.
 2. **Get the elements.**
    - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`.
-   - From the map: copy elements and relationships from `.agents/gh-wat-dis/config.json` → `architecture`.
+   - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`.
    - From neither: read the code. Never draw an element you did not find.
 3. **Shape the spec.** The spec is the one format every graph tool reads and writes, so shape it in steps:
    ```bash
@@ -25,6 +25,7 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
    ```
    | Filter | Use it to |
    |---|---|
+   | `from-facts` / `from-config` | Start a spec from impact facts or the architecture map |
    | `focus --on <ids or status:...> --hops N` | Keep some elements and their neighbours |
    | `collapse --into <id>` / `--to-type container` | Fold components into their parent |
    | `drop --ids` / `--status unchanged` / `--external` / `--orphans` | Remove noise |

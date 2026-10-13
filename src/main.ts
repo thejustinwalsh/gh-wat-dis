@@ -47,6 +47,7 @@ Collect facts (JSON out)
 
 Shape a graph (diagram spec in, diagram spec out)
   graph from-facts [facts.json]               spec from impact facts
+  graph from-config                           spec from the repo's architecture map
   graph focus|collapse|drop|merge|diff|set|rename
   graph stats|ids                             inspect a spec
 
