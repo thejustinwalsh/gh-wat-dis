@@ -63,7 +63,8 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 |---|---|
 | Facts on what a change touches and reaches | `npx gh-wat-dis impact > facts.json` |
 | The same, with uncommitted work | `npx gh-wat-dis impact --working-tree > facts.json` |
-| Blast radius section for a PR body | `npx gh-wat-dis blast facts.json` |
+| The same, between any two commits (a merged PR) | `npx gh-wat-dis impact --base <ref> --head <ref> > facts.json` |
+| Blast radius section for a PR body: what the change reaches outside its diff, with file links | `npx gh-wat-dis blast facts.json` |
 | Who depends on a file or symbol (no diff needed) | `npx gh-wat-dis reach src/price.ts#formatPrice` |
 | Owners of paths | `npx gh-wat-dis owners <path>...` |
 | Architecture elements and the files they map | `npx gh-wat-dis elements` |
@@ -73,6 +74,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
 | Overview plus one spec per changed group | `npx gh-wat-dis graph split change.json --out-dir views` |
 | Render a diagram, fitted to GitHub's width | `npx gh-wat-dis diagram change.json -o change.svg` |
+| The same, plus a PNG to look at | `npx gh-wat-dis diagram change.json -o change.svg --png change.png` |
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
@@ -82,7 +84,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Labels the config wants, compared with GitHub | `npx gh-wat-dis labels --text` |
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |
 | The same, for an open PR | `npx gh-wat-dis links --pr <n> --closes <n>,<m> --text` |
-| Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone` |
+| Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone\|comment` |
 | Health check | `npx gh-wat-dis doctor` |
 
 ### Compose them
@@ -99,8 +101,10 @@ npx gh-wat-dis impact \
 
 A diagram spec is plain JSON. When no filter does what you need, edit the file. Run any tool with `--help` for its options.
 
+`npx gh-wat-dis help` lists every tool with what it does and whether it writes; `npx gh-wat-dis help --json` prints the same list as JSON, and `npx gh-wat-dis <tool> --help` gives one tool's options. When a skill and the help disagree, the help is right.
+
 Every command runs through `npx`. A project installs nothing. The first run downloads the package; later runs use the npm cache.
 
 ## Scratch files
 
-Write drafts, specs and SVGs to `.wat-tmp/` at the repo root (git-ignored by `npx gh-wat-dis init`). Remove them after the post succeeds.
+Write drafts, specs and SVGs to `.wat-tmp/` at the repo root (git-ignored by `npx gh-wat-dis init`). Look in it before you write: files there may belong to another session or to work that has not been posted. When it is not empty, work in a folder of your own, `.wat-tmp/<short-task-name>/`, and use that path wherever a skill shows `.wat-tmp/`. Remove only the files you wrote, after the post succeeds.

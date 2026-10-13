@@ -2,7 +2,7 @@ import type { ElementFact, Facts, MarkdownOptions, Provenance, SymbolDependent }
 
 const LANGUAGE_NAMES: Record<string, string> = { typescript: 'TypeScript', javascript: 'JavaScript', rust: 'Rust' };
 const ORDER: Provenance[] = ['exact', 'resolved', 'measured', 'heuristic'];
-const TABLE_ROWS = 10;
+const ELEMENTS_SHOWN = 6;
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 const code = (s: string): string => (s.includes('`') ? `\`\` ${s} \`\`` : `\`${s}\``);
@@ -26,10 +26,21 @@ function list(title: string, items: string[], max: number): string[] {
   return ['', `**${title}**`, ...shown];
 }
 
+/** A path as code, linked to the file at the commit when the facts name a repository and a commit. */
+function linker(facts: Facts, on: boolean): (path: string) => string {
+  const deleted = new Set(facts.files.filter((f) => f.status === 'deleted').map((f) => f.path));
+  return (path) => {
+    const sha = deleted.has(path) ? facts.base : facts.head;
+    if (!on || !facts.repository || !/^[0-9a-f]{7,64}$/.test(sha)) return code(path);
+    return `[${code(path)}](${facts.repository}/blob/${sha.slice(0, 12)}/${path.split('/').map(encodeURIComponent).join('/')})`;
+  };
+}
+
 export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   const max = opts.maxItems ?? 5;
   const s = facts.summary;
   const labels = new Set<Provenance>();
+  const file = linker(facts, opts.links !== false);
   const out: string[] = [];
   const heading = opts.heading === undefined ? '## Blast radius' : opts.heading;
   if (heading) out.push(heading, '');
@@ -39,24 +50,30 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   out.push(`**${parts.join(' · ')}**`);
   if (facts.files.length) labels.add('exact');
 
-  const ownersOf = (e: ElementFact): string => {
-    const changed = facts.files.filter((f) => f.element === e.id);
-    const paths = new Set(changed.length ? changed.map((f) => f.path) : facts.dependents.direct.filter((d) => d.element === e.id).map((d) => d.file));
-    const names = facts.owners.filter((o) => [...o.files, ...o.dependentFiles].some((p) => paths.has(p))).map((o) => o.owner);
-    return names.length ? names.join(' ') : '–';
-  };
+  // The diff already shows the changed files. This section says what the diff does not:
+  // which parts of the system the change sits in, and what outside the diff leans on it.
   const rank = { removed: 0, added: 1, changed: 2, affected: 3, unchanged: 4 };
-  const rows = facts.elements.filter((e) => e.status !== 'unchanged')
+  const els = facts.elements.filter((e) => e.status !== 'unchanged')
     .sort((a, b) => rank[a.status] - rank[b.status] || b.filesChanged - a.filesChanged || b.dependentsAffected - a.dependentsAffected || a.name.localeCompare(b.name));
-  if (rows.length) {
-    out.push('', '| Element | Change | Files | Dependents | Owners |', '|---|---|---|---|---|');
-    for (const e of rows.slice(0, TABLE_ROWS)) {
-      labels.add(e.provenance);
-      if (e.dependentsAffected) labels.add('measured');
-      out.push(`| ${e.name} | ${e.status} | ${e.filesChanged} of ${e.files} | ${e.dependentsAffected} | ${ownersOf(e)} |`);
-    }
-    if (rows.length > TABLE_ROWS) out.push('', `+${rows.length - TABLE_ROWS} more elements`);
-  }
+  const named = (xs: ElementFact[], detail: (e: ElementFact) => string): string => {
+    const shown = xs.slice(0, ELEMENTS_SHOWN).map((e) => `${e.name}${detail(e)}`);
+    return [...shown, ...(xs.length > ELEMENTS_SHOWN ? [`+${xs.length - ELEMENTS_SHOWN} more`] : [])].join(', ');
+  };
+  const touched = els.filter((e) => e.status !== 'affected');
+  const reached = els.filter((e) => e.status === 'affected');
+  const where: string[] = [];
+  if (touched.length) where.push(`Changes ${named(touched, (e) => (e.status === 'changed' ? '' : ` (${e.status})`))}.`);
+  if (reached.length) { where.push(`Reaches ${named(reached, (e) => ` (${plural(e.dependentsAffected, 'file')})`)}.`); labels.add('measured'); }
+  els.forEach((e) => labels.add(e.provenance));
+  if (where.length) out.push('', where.join(' '));
+  if (facts.owners.length) out.push('', `Owners: ${facts.owners.map((o) => o.owner).join(' ')}`);
+
+  const inDiff = new Set(facts.files.map((f) => f.path));
+  const outside = facts.dependents.direct.filter((d) => !d.isTest && !inDiff.has(d.file))
+    .sort((a, b) => b.symbols.length - a.symbols.length || b.imports.length - a.imports.length || a.file.localeCompare(b.file));
+  outside.slice(0, max).forEach((d) => labels.add(d.provenance));
+  out.push(...list('Depends on the changed code, not in this diff', outside.map((d) =>
+    `${file(d.file)} · ${d.symbols.length ? `uses ${d.symbols.slice(0, 3).map(code).join(', ')}${d.symbols.length > 3 ? ` +${d.symbols.length - 3}` : ''}` : `imports ${d.imports.slice(0, 2).map(file).join(', ')}`}`), max));
 
   const exported = facts.symbols.filter((x) => x.exported);
   const deps = (d: SymbolDependent[]): string => {
@@ -73,17 +90,22 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   note(sig.slice(0, max)); note(moved.slice(0, max)); note(inNew.slice(0, 1));
   for (const x of [...sig.slice(0, max), ...moved.slice(0, max)]) note(x.dependents);
 
-  const movedLines = list('Exports added or removed', moved.map((x) => `${x.change} ${code(x.name)} (${x.file})${deps(x.dependents)}`), max);
+  const movedLines = list('Exports added or removed', moved.map((x) => `${x.change} ${code(x.name)} (${file(x.file)})${deps(x.dependents)}`), max);
   if (inNew.length) {
     if (!movedLines.length) movedLines.push('', '**Exports added or removed**');
     movedLines.push(`- added ${plural(inNew.length, 'export')} in ${plural(new Set(inNew.map((x) => x.file)).size, 'new file')}`);
   }
+  // One line for each file that is missing from the diff, with its strongest partner first.
+  const byFile = new Map<string, typeof facts.coChange>();
+  for (const c of facts.coChange) byFile.set(c.file, [...(byFile.get(c.file) ?? []), c]);
+  const together = [...byFile].map(([f, cs]) => [f, [...cs].sort((a, b) => b.commits - a.commits || b.ratio - a.ratio)] as const)
+    .sort((a, b) => b[1][0]!.commits - a[1][0]!.commits || b[1][0]!.ratio - a[1][0]!.ratio || a[0].localeCompare(b[0]));
   out.push(
-    ...list('Exported signatures changed', sig.map((x) => `${x.kind === 'method' ? `${code(x.name)}: ` : ''}${arrow(x.before ?? '', x.after ?? '')} (${x.file})${deps(x.dependents)}`), max),
+    ...list('Exported signatures changed', sig.map((x) => `${x.kind === 'method' ? `${code(x.name)}: ` : ''}${arrow(x.before ?? '', x.after ?? '')} (${file(x.file)})${deps(x.dependents)}`), max),
     ...movedLines,
-    ...list('Contract surfaces touched', facts.contracts.map((c) => `${code(c.path)} · ${c.kind} · ${c.note}`), max),
-    ...list('Tests that import the changed modules', facts.tests.importingChanged.map(code), max),
-    ...list('Changed together in the last 90 days, not in this diff', facts.coChange.map((c) => `${code(c.file)} with ${code(c.withFile)} · ${plural(c.commits, 'commit')} (${Math.round(c.ratio * 100)}%)`), max),
+    ...list('Contract surfaces touched', facts.contracts.map((c) => `${file(c.path)} · ${c.kind} · ${c.note}`), max),
+    ...list('Tests that import the changed modules', facts.tests.importingChanged.map(file), max),
+    ...list('Usually changes with these files, not in this diff', together.map(([f, cs]) => `${file(f)} with ${file(cs[0]!.withFile)}${cs.length > 1 ? ` and ${cs.length - 1} more` : ''} · ${plural(cs[0]!.commits, 'commit')} in 90 days (${Math.round(cs[0]!.ratio * 100)}%)`), max),
     ...list('Dependency changes', facts.dependencies.map((d) => `${d.change} ${code(d.name)}${d.from !== undefined || d.to !== undefined ? ` ${[d.from, d.to].filter((v) => v !== undefined).join(' → ')}` : ''} (${d.manifest})`), max),
   );
   note(facts.contracts.slice(0, max));

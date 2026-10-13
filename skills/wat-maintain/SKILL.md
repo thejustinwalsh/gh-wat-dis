@@ -6,13 +6,17 @@ license: MIT
 
 # wat-maintain
 
-Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Commands: `../wat/references/tools.md`.
+Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Style: `../wat/references/style.md`. Commands: `../wat/references/tools.md`.
 
 Maintenance has two phases. **Audit** reads and reports. **Apply** changes GitHub, and runs only on the rows the user approves.
 
 ## Audit
 
-Run the checks the user asks for. Default: all. Thresholds come from `.agents/gh-wat-dis/config.json` → `triage` and `maintain`; the defaults are below.
+Run the checks the user asks for. Default: all. Two thresholds come from `.agents/gh-wat-dis/config.json`: `triage.staleIssueDays` (60) and `triage.stalePrDays` (14). The others are fixed and stated in the table.
+
+Most of these queries go through `gh`, and here `gh` is the first choice, not the fallback: the GitHub MCP server cannot filter by `updated:<DATE`, `linked:pr` or `is:blocked`, and does not return milestones or closing references.
+
+List the open milestones first (`gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[].title'`): the milestone checks run once for each title.
 
 | Check | Finds | Query |
 |---|---|---|
@@ -20,13 +24,15 @@ Run the checks the user asks for. Default: all. Thresholds come from `.agents/gh
 | Stale PRs | Open, no update in 14 days | `gh pr list --search "updated:<DATE" --json number,title,updatedAt,isDraft,reviewDecision,author` |
 | Awaiting author | The last comment is a question from a maintainer, with no reply in 14 days | `gh issue list --search "updated:<DATE comments:>0"`, then read the last comment |
 | Missing fields | Open issues with no type, more than one type label, or no surface label | `npx gh-wat-dis issues` → rows where `missing` is not empty |
-| Stalled or blocked milestone | The current milestone with no issue closed in 7 days, or with an issue blocked from outside | `npx gh-wat-dis milestone` → `status` |
+| Stalled or blocked milestone | The current milestone with no issue closed in 7 days, or with an issue blocked from outside. A later milestone that reports `stalled` has not started: that is not a finding. | `npx gh-wat-dis milestone` → `status` |
 | Finished milestone left open | Every issue closed | `npx gh-wat-dis milestone "<title>"` → `status: done` |
 | Orphan PRs | Open PR that closes no issue | `gh pr list --json number,title,closingIssuesReferences` |
-| Done but open | Issue whose linked PR merged | `gh issue list --search "linked:pr is:open"` then check PR state |
+| Done but open | Issue whose linked PR merged. Also an open issue in the current milestone that a merged PR names with `Refs`: read the PR and say whether it finished the work. | `gh issue list --search "linked:pr is:open"` then check PR state. For the second: `gh pr list --state merged --search "<n> in:body" --json number,title` |
 | Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan (priority and status are not labels; type is a label only on a user repository) | `npx gh-wat-dis labels --text` |
 | Blocked chains | Issues blocked by a closed or stale issue | `npx gh-wat-dis relations <n>` for each issue from `gh issue list --search "is:blocked"` |
-| Format drift | Open issues in the current milestone with no clear problem statement, no system statement, or a body GitHub renders wrong | read each body against `../wat/references/formats.md` |
+| Format drift | Open issues in the current milestone with no clear problem statement, no system statement, a body GitHub renders wrong, or a `Refs #n` line that repeats a parent or blocked-by relation the issue already has. A Task meets the system statement by naming its element in the opening: it needs no `System` section. | read each body against `../wat/references/formats.md`; relations from `npx gh-wat-dis relations <n>` |
+| Out-of-date facts | A statement in an open issue of the current milestone that another issue, a merged PR or the code now contradicts | read while you check format drift; name the source that contradicts it |
+| Milestone description | An open milestone whose description has no `**Tracking:**` line, a current milestone with no tracking issue, or a done-when condition that names something that already shipped or no longer exists | `npx gh-wat-dis milestone "<title>"` → `trackingFrom`, `tracking`, `doneWhen`; check each condition against the repository |
 
 Compute dates in the shell (`date -v-60d +%Y-%m-%d` on macOS, `date -d '60 days ago' +%Y-%m-%d` on Linux). Do not guess today's date.
 
@@ -47,6 +53,9 @@ Compute dates in the shell (`date -v-60d +%Y-%m-%d` on macOS, `date -d '60 days 
 | 2 | v1.3 | Move 2 open issues to v1.4, close | Stalled, 14 of 16 closed |
 | 3 | label `bug ` / `Bug` | Merge into `type: bug` | Same meaning |
 ```
+
+- **Needs a decision** counts the findings where the action itself is open: more than one reasonable fix, or a choice only the user can make. Every fix needs a yes before it is applied, so a yes alone does not count.
+- **A finding that fits no check** still goes in the report. Add a row named "Outside the checks" and say what you looked at.
 
 List 5 fixes per check at most, worst first. Give the full list in an Agent context block only if the user wants the report posted as an issue.
 

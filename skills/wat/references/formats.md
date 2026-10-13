@@ -63,13 +63,13 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 
 Pick the type by what is wrong: **Bug** when the system does something other than what it should. **Feature** when it cannot do something yet. **Task** for everything else, including missing or wrong documentation, cleanup, releases and checks.
 
-"Usually omit" means: leave the section out unless it holds a fact the reader needs. When the facts are the whole case, keep it.
+"Usually omit" means: leave the section out unless it holds a fact the reader needs. When the facts are the whole case, keep it. A section the row does not name follows the general rule: use it when it has something true to say.
 
 | Type | The opening states | Must have | Usually omit |
 |---|---|---|---|
 | Bug | The wrong behaviour, where it shows, expected vs actual | `Evidence` with expected vs actual and a reproduction; `System` names the failing element | `Change` until the cause is known |
 | Feature | What users or the system cannot do today, and what that costs | `System`, `Change`, `Do` | — |
-| Task / chore | What is out of date, missing or in the way | `Do` | Diagram, `Evidence` |
+| Task / chore | What is out of date, missing or in the way, and the element it sits in | `Do` | Diagram, `System`, `Evidence` |
 | Spike / research | The decision that is blocked, and what is not known | `Unknowns` as the main section, a time limit in `Do` | `Change` |
 | Tracking issue | The gap between the system today and the goal | `System` with a diagram; work as **sub-issues**, not checkboxes | `Do` |
 
@@ -92,7 +92,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 | <name> | <what is different> | <reason> |
 
 ## Blast radius
-<Output of `npx gh-wat-dis blast`, trimmed. Dependents, changed exported signatures, contracts, owners.>
+<Only when the change reaches past its own diff. Output of `npx gh-wat-dis blast`, trimmed to what a reviewer would act on: code outside the diff that depends on the change, changed exported signatures, contracts, tests, files that usually change with these.>
 
 ## Verify
 - [x] <check you ran, with the command and the result>
@@ -130,6 +130,7 @@ Refs #<m>
 - Never put `close`, `fix` or `resolve` in front of an issue number anywhere else in the body or in a commit message. GitHub ignores the words around the keyword: "does not fix #12" closes #12.
 - `Follow-ups` lists issues that already exist. File them first. Omit the section when there are none.
 - A PR that changes no element, relationship or contract (typo, dependency bump, formatting) keeps only: the opening, `Verify`, link lines.
+- Name a file as a link when the reader should open it and it is not in the diff. `blast` prints its paths as links for this.
 
 ## Link lines
 
@@ -143,7 +144,7 @@ GitHub renders only basic Markdown in milestone descriptions. Use plain text, bo
 <Goal: one sentence. What users or the system can do when this ships. No date.>
 
 **Done when**
-- <observable condition>
+- <condition that names its check: a command and its output, a URL and its status, or an issue number>
 - <3 at most>
 
 **In scope:** <elements or capabilities>
@@ -168,11 +169,14 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 - [x] <condition> (<evidence>)
 - [ ] <condition> (<what is missing, or "not checked">)
 
+**Decides the outcome**
+- #<n> <title>: <what it blocks, or which condition needs it>
+
 **Changed since last update**
 - <3 at most, or "First status.">
 
 **Needs a decision**
-- <question> → @<owner>
+- <question> → @<the issue's assignee, else the repository owner>
 ```
 
 The numbers come from `npx gh-wat-dis milestone`. Counts are issues only: pull requests and the tracking issue are not counted. There is no schedule rating, because milestones have no due dates. Omit `Needs a decision` when there is none.
@@ -187,6 +191,7 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 | **Scoped view**: one group opened, its neighbours folded | In `System`, or in the section that discusses that part | 8 boxes or fewer |
 | **Flow**: numbered steps, left to right | Where the behaviour is described: `Change`, `Risks` or `Verify` | 8 steps or fewer |
 
+- The box counts are aims for a diagram in a body. A whole-system view the user asked for keeps every container when the renderer reports that it fits 860px.
 - Use one diagram when it fits. Use an overview plus a scoped view when one diagram would pass 8 boxes. Three is the limit for a visible body.
 - Each diagram sits next to the words it supports. Do not stack them at the top.
 - When lines carry numbers, put the legend table directly under the image. The table holds the words: the reader can search, copy and link them.

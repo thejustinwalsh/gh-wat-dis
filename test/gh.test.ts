@@ -140,6 +140,13 @@ test('related: product names and plain words in backticks are not identifiers', 
   assert.ok(s.idents.includes('OrderPlacedEvent'));
 });
 
+test('related: a package runner and common flags are not identifiers', () => {
+  const s = extractSignals({ title: 'Site: no page lists every command', body: 'Run `npx gh-wat-dis` with `--help`, or `npx gh-wat-dis <command> --help`. See `npx -y gh-wat-dis impact --working-tree`.' });
+  assert.deepEqual(s.spans, ['<command> --help', 'impact --working-tree']);
+  const other = { title: 'Fix the triage skill', body: 'Run `npx gh-wat-dis --help` first.' };
+  assert.equal(score(s, other).signals.some((x) => x.kind === 'identifier'), false);
+});
+
 test('labels: agents plus one per surface; other labels are extra and never dropped by default', async () => {
   const { planLabels } = await import('../src/gh/labels.ts');
   const { defaultConfig } = await import('../src/cli/config.ts');
@@ -217,6 +224,8 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   };
   const s = milestoneStatus(base);
   assert.equal(s.tracking, 1);
+  assert.equal(s.trackingFrom, 'description');
+  assert.deepEqual(Object.keys(milestoneStatus({ ...base, blockedBy: new Map([[4, [{ number: 3, title: 't3', state: 'open', body: 'x'.repeat(5000), user: {} } as never]]]) }).open[1]!.blockedBy[0]!).sort(), ['inMilestone', 'number', 'state', 'title'], 'a blocker is four fields, not the raw API object');
   assert.deepEqual(s.counts, { total: 3, closed: 1, open: 2, inReview: 1, blocked: 1, blockedOutside: 0, closedLast7Days: 1 });
   assert.equal(s.status, 'moving');
   assert.equal(s.milestone.current, true, 'v0.2.0 comes before v0.10.0');

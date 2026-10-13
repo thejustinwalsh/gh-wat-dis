@@ -16,6 +16,8 @@ const HELP = `Lint a diagram spec and draw it as SVG.
 Usage: npx gh-wat-dis diagram [spec.json|-] [options]
 
   -o, --output <file>   where to write the SVG ("-" for stdout)
+  --png <file>          also write a PNG of the drawing at 2x, to look at it. Light colours unless --theme dark.
+                        GitHub gets the SVG: do not attach the PNG.
   --theme <name>        auto (default: follows the viewer's colour scheme), light, dark,
                         or split (needs -o; writes <name>.light.svg and <name>.dark.svg)
   --mermaid             print a Mermaid flowchart to stdout instead of drawing SVG
@@ -39,7 +41,7 @@ type Theme = (typeof THEMES)[number];
 export const main: Command = async (argv) => {
   const args = parseArgs(argv, {
     booleans: ['help', 'mermaid', 'lint-only', 'no-lint'],
-    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width'],
+    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png'],
     aliases: { '-o': '--output', '-h': '--help' },
   });
   if (args.help) { process.stdout.write(HELP); return 0; }
@@ -74,6 +76,7 @@ export const main: Command = async (argv) => {
   if (args.mermaid) { process.stdout.write(toMermaid(spec)); return 0; }
 
   const target = output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : '-');
+  if (args.png && theme === 'split') throw new UsageError('--png draws one image: do not combine it with --theme split');
   if (theme === 'split') {
     const base = target.replace(/\.svg$/i, '');
     for (const t of ['light', 'dark'] as const) {
@@ -91,6 +94,13 @@ export const main: Command = async (argv) => {
   }
   if (out.width > maxWidth) {
     console.error(`warning: ${out.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Cut elements with "graph focus" or "graph collapse", or split into two diagrams.`);
+  }
+  if (args.png) {
+    // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
+    const { toPng } = await import('../tools/raster.ts');
+    const image = toPng(theme === 'auto' ? await renderSvg(spec, { ...opts, theme: 'light' }) : out.svg);
+    writeFileSync(args.png, image.png);
+    if (target !== '-') console.log(args.png); else console.error(args.png);
   }
   return 0;
 };

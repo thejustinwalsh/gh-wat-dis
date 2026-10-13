@@ -54,9 +54,20 @@ The map gives every issue and PR the same names for the same things. It lives in
 ```bash
 npx gh-wat-dis impact                    # this branch against the default branch
 npx gh-wat-dis impact --working-tree     # include uncommitted work
+npx gh-wat-dis impact --base <ref> --head <ref>   # any two commits
 npx gh-wat-dis reach <path|path#symbol>  # who depends on this, with no diff
 npx gh-wat-dis owners <path>...          # CODEOWNERS for paths
 ```
+
+**A pull request that already merged.** On the default branch the first command compares nothing, so name the commits:
+
+```bash
+gh pr list --state merged --limit 1 --json number,title,mergedAt,mergeCommit   # the last merged PR
+git fetch origin && git cat-file -e <mergeCommit>                              # the local clone must hold it
+npx gh-wat-dis impact --base <mergeCommit>~1 --head <mergeCommit>              # squash or merge commit
+```
+
+A PR merged by rebase lands as several commits: use `<mergeCommit>~<number of commits in the PR>` as the base. If the MCP pull request list shows `merged: false` beside a `merged_at` date, trust the date.
 
 Read the facts in this order:
 
@@ -69,8 +80,25 @@ Read the facts in this order:
 | `contracts` | Schemas, migrations, API specs, manifests touched | `Risks`, the alert |
 | `tests.importingChanged` | Test files that import the changed modules | `Verify` |
 | `coChange` | Files that changed with these before and are not in this diff | `Unknowns` |
+| `complexity` | Functions whose complexity the change moved, with the score before and after. Empty when cccc is not installed | The diagram and `Blast radius` decisions. Not the body |
 | `owners` | Who owns the touched paths | reviewers |
 | `tiers`, `caveats` | Which tools ran and what they could not see | wording |
+
+**`coChange`: which pairs to keep.** Most pairs are history noise. Keep one only when the missing file describes, tests or configures the changed file it is paired with: the README for a command, the schema for a query, the test for a module. Open that file and check. Then drop the pair, or list it under `Unknowns` with what you found.
+
+**An element that is not in the map.** An element whose `source` is not `config` (a `test` directory, `(root)`) is a directory fallback. Report it as "not in the architecture map". Propose a map entry only when it holds product code.
+
+**`complexity` is an input, not a grade.** Never print a score in an issue or PR, and never call code complex. Use the numbers to decide what the reader needs: see "When a diagram is needed". When `tiers.unavailable` lists cccc, the numbers are absent: say so only if the user asks, and offer `npx gh-wat-dis doctor --tools install`.
+
+### Answering a question in chat
+
+When the user asks what a change affects and wants no issue or PR, answer in this order and stop where the facts stop:
+
+1. One sentence: what changed, in how many files and which elements, and whether any relationship was added or removed.
+2. What it reaches outside the diff: dependents, changed exported signatures, contracts. "Nothing" is an answer.
+3. Unknowns: what the tools could not see, and any `coChange` pair you kept.
+
+Use prose and short lists. Do not borrow the sections of a PR body.
 
 ### Wording follows the label
 
@@ -87,7 +115,7 @@ A tool that did not run produced no fact. Say "not analyzed: <reason>" under `Un
 
 ### Questions the tools cannot answer
 
-Ask them of every change that crosses an element boundary:
+Ask them of every change that crosses an element boundary, and of a change that adds a call to another system on a relationship that already exists (a new API read, a new query, a new message):
 
 1. Does data cross a new boundary: process, network, trust, team?
 2. Does a contract change for a consumer that deploys on its own? Then deploy order matters.
@@ -96,6 +124,33 @@ Ask them of every change that crosses an element boundary:
 5. Does it reverse an earlier decision: an ADR, a documented rule?
 
 A yes goes in `Risks` with what the change does about it, or in `Unknowns` with the check that settles it.
+
+## When a diagram is needed
+
+The measure is how hard the change is to follow, not how much it touches. A change inside one file can need a diagram. A change across twenty modules can need none.
+
+**Draw one** when the change alters how parts relate, at any level, down to the functions of one module:
+- Parts are added, removed or rewired: what calls, owns or depends on what.
+- The order of steps changes, or steps become async, retried or conditional.
+- State is added or moves: a new state, a new owner, new transitions.
+- The shape of data that crosses a boundary changes: a contract, a message, a stored format.
+
+**Do not draw one**, however many files or elements change, when the parts relate as they did before: formatting, a rename, a codemod, a dependency bump, text and documentation, the same small edit repeated in many places, new values in an unchanged flow.
+
+**With complexity facts** (`complexity` and `summary.complexity` from `impact`, present when cccc is installed), start from the numbers:
+
+| The facts show | Then |
+|---|---|
+| No function moved (`functions` is 0) | The flow did not change. No diagram for the logic, however many files changed. Draw one only if an element or relationship was added or removed. |
+| Every rise in cognitive complexity is under 5 | Small edits to existing flows. A sentence covers it. |
+| One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a component or dynamic diagram earns its place. |
+| Between those | Apply the test below. |
+
+The numbers point at where to look. The test decides.
+
+**The test:** say what is different in the structure or the flow. If the answer names three or more parts and how they connect, or an order of steps, draw it. If one plain sentence covers it ("adds a flag to `lint`", "renames the field everywhere"), write the sentence and skip the diagram.
+
+Draw at the level where the difficulty sits. For a hard change inside one module, that is a component or dynamic diagram of that module's own parts, not a container diagram with one changed box.
 
 ## Choose what to show
 
@@ -107,6 +162,7 @@ A yes goes in `Risks` with what the change does about it, or in `Unknowns` with 
 | Moves work across a thread, worker or WASM boundary, or changes an ABI or message format | Component, with the execution contexts as nested boundaries |
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
-| Stays inside one component, no contract change | None. Use a `diff` block or a table. |
+| Reworks the flow or state inside one component or file | Component or dynamic, with that component's own parts as the boxes |
+| Passes none of the tests above, whatever its size | None. Use a sentence, a `diff` block or a table. |
 
 Show the changed elements plus one hop of neighbours. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.

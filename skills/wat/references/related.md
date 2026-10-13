@@ -14,6 +14,8 @@ Points run from 0 to 100 and add up what a candidate shares:
 | Words in the title | up to 30 | `heuristic` |
 | Words in the body | 10 | `heuristic` |
 
+A package runner with its package (`npx <package>`) and common flags such as `--help` do not count as identifiers: they appear in every issue that shows a command.
+
 30 or more means at least one exact match, or a title that is almost the same. Read every candidate at 30 or more. Below 30 the candidate shares only common words: skip it unless the title looks like the same problem.
 
 ## Issues and pull requests

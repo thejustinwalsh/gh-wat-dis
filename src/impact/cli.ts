@@ -1,6 +1,7 @@
 import { UsageError, parseArgs, readInput } from '../cli/util.ts';
 import type { Command } from '../cli/util.ts';
 import { analyze, DEFAULT_DEPTH } from './analyze.ts';
+import { locate } from '../tools/cccc.ts';
 import { toMarkdown } from './markdown.ts';
 import { listElements, reachOf, resolveOwners } from './reach.ts';
 import { toDiagramSpec } from './to-spec.ts';
@@ -29,7 +30,7 @@ function readFacts(file: string | undefined): Facts {
   return facts as Facts;
 }
 
-const IMPACT_HELP = `Usage: gh-wat-dis impact [--base <ref>] [--head <ref>] [--working-tree] [--depth N] [--cwd dir]
+const IMPACT_HELP = `Usage: gh-wat-dis impact [--base <ref>] [--head <ref>] [--working-tree] [--depth N] [--no-complexity] [--cwd dir]
 
 Collect facts about a change: files, changed symbols, dependents, elements, owners. Prints Facts JSON.
 
@@ -37,37 +38,46 @@ Collect facts about a change: files, changed symbols, dependents, elements, owne
   --head <ref>      head side (default: HEAD)
   --working-tree    compare base with the working tree: staged, unstaged and untracked files
   --depth N         import hops to follow for transitive dependents (default ${DEFAULT_DEPTH})
+  --no-complexity   do not run cccc
   --cwd dir         repository to read (default: current directory)
 
+With cccc installed (npx gh-wat-dis doctor --tools install), complexity[] lists each function whose
+cognitive or cyclomatic complexity the change moved, with the score before and after.
 Every fact has a provenance label (exact, resolved, measured, heuristic) and a source.
 `;
 
 export const impact: Command = async (argv) => {
-  const a = parseArgs(argv, { booleans: ['working-tree', 'help'], strings: ['base', 'head', 'depth', 'cwd'], aliases: ALIASES });
+  const a = parseArgs(argv, { booleans: ['working-tree', 'help', 'no-complexity'], strings: ['base', 'head', 'depth', 'cwd'], aliases: ALIASES });
   if (a.help) return help(IMPACT_HELP);
   if (a._.length) throw new UsageError(`unexpected argument "${a._[0]}"`);
   if (a['working-tree'] && a.head) throw new UsageError('--working-tree and --head cannot be combined');
   json(await analyze({
     ...(a.cwd ? { cwd: a.cwd } : {}), ...(a.base ? { base: a.base } : {}), ...(a.head ? { head: a.head } : {}),
     workingTree: !!a['working-tree'], depth: count(a.depth, 'depth', DEFAULT_DEPTH),
+    ...(a['no-complexity'] ? {} : { cccc: locate()?.path ?? null }),
   }));
   return 0;
 };
 
-const BLAST_HELP = `Usage: gh-wat-dis blast [facts.json|-] [--max-items 5] [--heading "<text>"] [--no-heading]
+const BLAST_HELP = `Usage: gh-wat-dis blast [facts.json|-] [--max-items 5] [--heading "<text>"] [--no-heading] [--no-links]
 
 Format impact facts as a Markdown "Blast radius" section. Reads Facts JSON from a file or stdin.
 
   --max-items N     entries per list before "+N more" (default 5)
   --heading <text>  heading line (default "## Blast radius")
   --no-heading      print no heading
+  --no-links        print file paths as code, not as links to the file at the head commit
+
+Paths link to the repository when the facts name one (the origin remote) and the head is a commit.
+Push the branch before you post the section, or the links lead nowhere.
 `;
 
 export const blast: Command = async (argv) => {
-  const a = parseArgs(argv, { booleans: ['help', 'no-heading'], strings: ['max-items', 'heading'], aliases: ALIASES });
+  const a = parseArgs(argv, { booleans: ['help', 'no-heading', 'no-links'], strings: ['max-items', 'heading'], aliases: ALIASES });
   if (a.help) return help(BLAST_HELP);
   process.stdout.write(toMarkdown(readFacts(a._[0]), {
     maxItems: count(a['max-items'], 'max-items', 5),
+    ...(a['no-links'] ? { links: false } : {}),
     ...(a['no-heading'] ? { heading: false as const } : a.heading !== undefined ? { heading: a.heading } : {}),
   }));
   return 0;

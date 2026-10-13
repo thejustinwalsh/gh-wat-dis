@@ -7,7 +7,8 @@ import { validateConfig } from './config.ts';
 import type { Config } from './config.ts';
 import { MANIFEST, hashDir, skillNames, targets } from './install.ts';
 import type { Manifest } from './install.ts';
-import { CONFIG_REL, PKG, compareVersions, errorMessage, parseArgs, readJson, repoRoot, run } from './util.ts';
+import { CCCC, install as installCccc, locate as locateCccc, platformKey } from '../tools/cccc.ts';
+import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, readJson, repoRoot, run } from './util.ts';
 
 const MIN_GH = '2.99.0';
 const MIN_NODE = '24.0.0';
@@ -222,6 +223,7 @@ function checkConfig(cwd: string): Check {
 async function checkTools(): Promise<Check[]> {
   const probes: [name: string, load: () => Promise<void>][] = [
     ['diagram layout', async () => { await import('elkjs/lib/elk.bundled.js'); }],
+    ['diagram png', async () => { (await import('../tools/raster.ts')).toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'); }],
     ['facts typescript', async () => {
       const { parse, Lang } = await import('@ast-grep/napi');
       parse(Lang.TypeScript, 'export const a = 1');
@@ -241,8 +243,43 @@ async function checkTools(): Promise<Check[]> {
   return res;
 }
 
+const TOOLS_CMD = 'npx gh-wat-dis doctor --tools install';
+
+/** Optional: complexity scores for the facts. A missing tool is a warning, never a failure. */
+function checkComplexity(): Check {
+  const name = 'complexity (optional)';
+  const found = locateCccc();
+  if (found?.receipt) {
+    const how = found.receipt.attested ? 'sha256 pinned, build attested' : 'sha256 pinned, not attested';
+    return { status: 'ok', name, detail: `cccc ${found.version} from ${CCCC.repo} (${how})` };
+  }
+  if (found) return { status: 'ok', name, detail: `cccc ${found.version} on PATH. You installed it; gh-wat-dis did not check it.` };
+  if (!CCCC.assets[platformKey()]) return { status: 'ok', name, detail: `cccc has no build for ${platformKey()}. impact reports no complexity.` };
+  return { status: 'warn', name, detail: `cccc is not installed, so impact reports no complexity. Install: ${TOOLS_CMD}` };
+}
+
+/**
+ * Offer to fetch cccc. `mode` is the --tools flag: install without asking, or skip.
+ * With no terminal attached and no flag it changes nothing: the warning already names the command.
+ */
+export async function offerTools(checks: Check[], mode?: string): Promise<boolean> {
+  if (mode === 'skip' || !checks.some((c) => c.name === 'complexity (optional)' && c.status === 'warn')) return false;
+  if (mode !== 'install') {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = (await rl.question(`\nInstall cccc ${CCCC.version} for complexity facts? It is downloaded from github.com/${CCCC.repo}, checked against a pinned sha256 and its build attestation, and kept in your user cache. [Y/n] `)).trim().toLowerCase();
+    rl.close();
+    if (answer && answer !== 'y' && answer !== 'yes') return false;
+  }
+  console.log('\nInstalling cccc');
+  try { installCccc((line) => console.log(`  ${line}`)); return true; } catch (e) {
+    console.log(`  failed: ${errorMessage(e)}`);
+    return false;
+  }
+}
+
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools())];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity()];
 }
 
 export function printChecks(checks: Check[]): number {
@@ -253,8 +290,25 @@ export function printChecks(checks: Check[]): number {
   return fails;
 }
 
+const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]
+
+Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config. Offers a fix where it has one.
+Exits non-zero when a check fails.
+
+  --offline        skip the checks that call GitHub
+  --json           print the checks as JSON and offer no fixes
+  --no-login       do not offer to run gh auth login
+  --mcp <scope>    where to write the GitHub MCP server config when none is found: user, project or skip
+  --tools <mode>   optional analysis tools (cccc, for complexity facts): install without asking, or skip
+
+Optional tools are fetched from their own releases into your user cache, checked against a pinned sha256
+and the release's build attestation. A missing optional tool is a warning, never a failure.
+`;
+
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login'], strings: ['mcp'] });
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp', 'tools'], aliases: { '-h': '--help' } });
+  if (args.tools && !['install', 'skip'].includes(args.tools)) throw new UsageError('--tools must be install or skip');
+  if (args.help) { process.stdout.write(HELP); return 0; }
   let checks = await runChecks({ offline: args.offline });
   if (args.json) {
     console.log(JSON.stringify(checks, null, 2));
@@ -266,6 +320,7 @@ export async function main(argv: string[]): Promise<number> {
     const { offerMcpSetup } = await import('./mcp-apply.ts');
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
+  again = await offerTools(checks, args.tools) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks({ offline: args.offline });

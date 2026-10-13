@@ -26,4 +26,5 @@ by Simon Brown (CC BY 4.0).
 ## Dependencies
 
 - [elkjs](https://github.com/kieler/elkjs) lays out diagrams. EPL-2.0. gh-wat-dis depends on it and does not modify or bundle it.
+- [@resvg/resvg-js](https://github.com/thx/resvg-js) draws a PNG of a diagram for `diagram --png`. MPL-2.0. gh-wat-dis depends on it and does not modify or bundle it.
 - [@ast-grep/napi](https://github.com/ast-grep/ast-grep) parses source for impact analysis. MIT.
