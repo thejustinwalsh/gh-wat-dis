@@ -153,9 +153,17 @@ tr + tr td { border-top: 1px solid var(--card-line); }
 .risk { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; }
 .risk dt { font-weight: 700; }
 .risk dd { margin: 0; }
-.fold { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--card-line); border-radius: 8px; }
+/* The collapsed block of an issue, as GitHub draws <details>. Open, it scrolls inside a fixed height. */
+.fold { border: 1px solid var(--card-line); border-radius: 8px; overflow: hidden; }
+.fold summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; }
+.fold summary::-webkit-details-marker { display: none; }
+.fold summary::before { content: "▸"; font-family: var(--mono); }
+.fold[open] summary::before { transform: rotate(90deg); }
+.fold[open] summary { border-bottom: 1px solid var(--card-line); }
+.fold summary:focus-visible, .fold pre:focus-visible { outline: 2px solid var(--keyword); outline-offset: -2px; }
 .fold b { font-weight: 700; }
 .fold .mono { margin-left: auto; font-size: 12px; color: var(--storage); }
+.fold pre { margin: 0; max-height: 320px; overflow: auto; padding: 14px; background: var(--card-panel); font: 400 12.5px/1.6 var(--mono); tab-size: 2; }
 
 .pipe { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 36px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
 .step { display: flex; flex-direction: column; gap: 10px; padding: 22px 20px; border-right: 1px solid var(--line); min-height: 170px; }
@@ -208,7 +216,7 @@ footer span { color: var(--muted); }
   .risk, .skills dl div, .more div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   table { font-size: 14px; }
 }
-@media (prefers-reduced-motion: no-preference) { a, button.copy { transition: color 0.15s, opacity 0.15s; } button.copy:hover { opacity: 0.88; } }
+@media (prefers-reduced-motion: no-preference) { a, button.copy { transition: color 0.15s, opacity 0.15s; } .fold summary::before { transition: transform 0.15s; } button.copy:hover { opacity: 0.88; } }
 </style>
 </head>
 <body>
@@ -287,7 +295,59 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">5 · Long data for agents, collapsed</span>
-        <div class="fold"><span class="mono" aria-hidden="true" style="margin:0;color:inherit">▸</span><b>Agent context</b><span class="mono">facts.json · 214 lines</span></div>
+        <details class="fold">
+          <summary><b>Agent context</b><span class="mono">paths · commands · facts.json</span></summary>
+          <pre tabindex="0">Paths
+  services/payments/src/charge.ts         retryCharge, chargeOnce (new)
+  services/payments/src/webhook.ts        handleStripeEvent
+  services/orders/migrations/0042_payment_keys.sql
+
+Commands run
+  npx gh-wat-dis impact --working-tree &gt; facts.json
+  npx gh-wat-dis reach services/payments/src/charge.ts#retryCharge
+  npx gh-wat-dis related --title "Payments worker: duplicate charge when the webhook retries"
+
+Reproduction
+  1. stripe trigger payment_intent.succeeded
+  2. hold the reply for 11 s (WEBHOOK_DELAY_MS=11000)
+  3. Stripe delivers evt_1Q8x again; the worker logs two "charge created" lines
+
+facts.json (trimmed)
+{
+  "schema": 1,
+  "summary": { "filesChanged": 3, "elementsChanged": 2, "directDependents": 3, "exportedSignatureChanges": 1 },
+  "elements": [
+    { "id": "payments-worker", "status": "changed", "filesChanged": 2, "provenance": "exact", "source": "config" },
+    { "id": "orders-db", "status": "changed", "filesChanged": 1, "provenance": "exact", "source": "config" },
+    { "id": "orders-api", "status": "affected", "dependentsAffected": 2, "provenance": "resolved", "source": "ast-grep" }
+  ],
+  "symbols": [
+    { "name": "retryCharge", "file": "services/payments/src/charge.ts", "exported": true, "signatureChanged": true,
+      "before": "retryCharge(orderId: string): Promise&lt;Charge&gt;",
+      "after": "retryCharge(orderId: string, eventId: string): Promise&lt;Charge&gt;",
+      "dependents": [
+        { "file": "services/payments/src/webhook.ts", "inDiff": true, "provenance": "resolved" },
+        { "file": "services/orders/src/refund.ts", "inDiff": false, "provenance": "resolved" },
+        { "file": "services/orders/src/reconcile.ts", "inDiff": false, "provenance": "resolved" }
+      ] }
+  ],
+  "edges": [
+    { "from": "payments-worker", "to": "orders-db", "status": "added", "provenance": "exact", "source": "config" }
+  ],
+  "contracts": [
+    { "path": "services/orders/migrations/0042_payment_keys.sql", "kind": "migration", "note": "adds table payment_keys", "provenance": "heuristic" }
+  ],
+  "tests": { "changed": [], "importingChanged": ["services/payments/test/charge.test.ts"] },
+  "coChange": [
+    { "file": "docs/runbooks/payments.md", "withFile": "services/payments/src/webhook.ts", "commits": 5, "ratio": 0.71, "provenance": "measured" }
+  ],
+  "caveats": ["dependents are files whose imports resolve to a changed file"]
+}
+
+Links read
+  #131 Payments worker: move retries off the request path (closed)
+  https://docs.stripe.com/webhooks#retries</pre>
+        </details>
       </div>
     </article>
   </div>
