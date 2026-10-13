@@ -8,7 +8,7 @@ license: MIT
 
 Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Which diagram type: the `wat-architecture` skill (`../wat-architecture/SKILL.md`).
 
-A diagram earns its place when it shows structure that a sentence cannot. One per artifact. 12 elements at most.
+A diagram earns its place when it shows structure that a sentence cannot. Small diagrams beat one large one: GitHub draws a body about 860px wide, so a wide image shrinks and a tall one scrolls.
 
 ## Steps
 
@@ -40,13 +40,16 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg
    ```
    Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`.
-5. **Look at it.** Open the SVG or a rasterized copy. Check that no label overlaps a box and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram.
-6. **Reference it** in the body by its local path. The alt text is the diagram title:
+5. **Read what the renderer reports.** It tries top-down and left-to-right, with words or numbers on the lines, and keeps the shortest layout that fits 860px. It prints the size and the layout it chose.
+   - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`.
+   - `wider than GitHub's 860px`, or taller than about 900px: split it (below) or cut elements.
+6. **Look at it.** Open the SVG or a rasterized copy. Check that no label overlaps a box and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram.
+7. **Reference it** in the body by its local path. The alt text is the diagram title:
    ```markdown
    ![Checkout: payment retries move to a worker](./<name>.svg)
    ```
    Write the path relative to the body file. Put the diagram right after the opening and the alert.
-7. **Attach on post.** `gh issue create|edit --body-file <body> --attach <svg>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. Check the posted body: the image link must start with `https://`.
+8. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. Check the posted body: the image link must start with `https://`.
 
 ## Spec
 
@@ -93,10 +96,10 @@ A diagram earns its place when it shows structure that a sentence cannot. One pe
 
 - **Names match the architecture map**, letter for letter. The body and the diagram use the same words.
 - **Every relationship has a label** that says what moves or happens, in the direction of the arrow. Never "uses" or "calls". Container-to-container lines name the protocol in `technology`.
-- **Status carries the change.** One diagram shows before and after: `removed` for what goes, `added` for what comes. Do not draw two diagrams.
+- **Status carries the change.** One diagram shows before and after: `removed` for what goes, `added` for what comes. Do not draw a "before" and an "after" diagram.
 - **Descriptions stay under 60 characters.** The body holds the detail.
 - **Show one hop.** Changed elements plus their direct neighbours. Leave out the rest of the system.
-- **A dynamic diagram has 8 steps at most.** Longer flows go in a numbered list.
+- **A flow has 8 steps at most.** Longer flows go in a numbered list.
 - The renderer adds the title, the subtitle and the key. Do not repeat them in the body.
 
 ## Inside one process or one repository
@@ -115,6 +118,29 @@ Not every system is services and databases. For a library, an app in one browser
 - **Leave out build-time edges** such as `import type` of a shared types package, unless the change is to that contract. Name the package in the body.
 - **Nest by where code runs, not by folder.** A package that runs in two contexts appears in the one this change touches.
 
+## Overview plus scoped views
+
+When one diagram would be large, make several small ones:
+
+```bash
+npx gh-wat-dis graph split .wat-tmp/change.json --out-dir .wat-tmp/views
+```
+
+It writes `overview.json`, with every group folded to one box, and one `<group>.json` for each group that holds a change, with that group opened and its neighbours folded. Render each one. Pass `--groups id,id` to choose the groups, and `--all` for a view of every group.
+
+Place the overview after the opening and each scoped view beside the text about that part. See "Diagrams" in `../wat/references/formats.md`.
+
+## Flows
+
+A `dynamic` diagram draws as a left-to-right flow with numbered steps, and wraps onto a second row to fit the width. Give each relationship an `order`. The words go in the legend table:
+
+```bash
+npx gh-wat-dis diagram .wat-tmp/flow.json -o .wat-tmp/flow.svg
+npx gh-wat-dis legend .wat-tmp/flow.json >> .wat-tmp/issue.md
+```
+
+Use a flow for behaviour over time: a request path, a retry, a migration sequence. Use a container or component diagram for structure.
+
 ## Keep it compact
 
 - Above 5 elements the renderer drops descriptions. The body's `Change` table carries them.
@@ -128,6 +154,10 @@ Not every system is services and databases. For a library, an app in one browser
 |---|---|
 | Check a spec only | `npx gh-wat-dis diagram spec.json --lint-only` |
 | Show or hide descriptions | `--detail full` or `--detail compact` |
+| Words or numbers on the lines | `--labels text` or `--labels numbered` (default `auto`) |
+| Force a direction | `--direction down` or `--direction right` |
+| Fit another width | `--max-width 700` |
+| Legend table for numbered lines | `npx gh-wat-dis legend spec.json` |
 | Force a palette | `--theme light` or `--theme dark` (default `auto` follows the reader's system) |
 | Two files for a `<picture>` tag | `--theme split` writes `.light.svg` and `.dark.svg` |
 | Mermaid text, no file | `npx gh-wat-dis diagram spec.json --mermaid` |

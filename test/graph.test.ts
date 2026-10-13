@@ -303,3 +303,18 @@ test('cli: exit codes, stdout and stderr', () => {
   assert.deepEqual(run(`${diagram} "${file}" --theme split -o "${join(dir, 'x.svg')}"`).stdout.trim().split('\n'), [join(dir, 'x.light.svg'), join(dir, 'x.dark.svg')]);
   assert.equal(run(`${diagram} "${file}" --theme neon`).status, 2);
 });
+
+test('split: an overview with groups folded, and a view per changed group', async () => {
+  const { split, splitGroups } = await import('../src/graph/split.ts');
+  const spec = JSON.parse(readFileSync(new URL('../examples/diagrams/in-process.json', import.meta.url), 'utf8')) as DiagramSpec;
+  assert.deepEqual(splitGroups(spec), ['main', 'worker']);
+  const views = split(spec);
+  assert.ok(views.overview.elements.length < spec.elements.length);
+  assert.ok(!views.overview.elements.some((e) => e.parent === 'main' || e.parent === 'worker'));
+  assert.equal(views.overview.elements.find((e) => e.id === 'worker')?.status, 'added');
+  assert.deepEqual(views.details.map((d) => d.id), ['main', 'worker']);
+  const main = views.details[0]!.spec;
+  assert.ok(main.elements.some((e) => e.id === 'editor'));
+  assert.ok(!main.elements.some((e) => e.id === 'core'));
+  for (const v of [views.overview, ...views.details.map((d) => d.spec)]) assert.deepEqual(lintSpec(v).errors, []);
+});

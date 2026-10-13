@@ -1,9 +1,11 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
-import type { DiagramSpec, Detail } from '../spec.ts';
-import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, PIPE_RX, badgeWidth, layout } from './layout.ts';
+import type { DiagramSpec } from '../spec.ts';
+import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, PIPE_RX, badgeWidth } from './layout.ts';
 import type { EdgePath, NodeBox, Pt } from './layout.ts';
 import { escapeXml, fit, textWidth } from './measure.ts';
 import { FONT, applyTheme } from './theme.ts';
+import { fit as fitLayout } from './fit.ts';
+import type { FitOptions } from './fit.ts';
 import type { ThemeName } from './theme.ts';
 import { STATUS_BADGE, STATUS_MARK, TYPE_LABEL, active, kindLine } from './vocab.ts';
 
@@ -40,6 +42,8 @@ const CSS = [
   '.e-removed{stroke:var(--removed);stroke-width:2;stroke-dasharray:1.5 5;stroke-linecap:round}',
   '.e-affected{stroke:var(--affected);stroke-width:1.8;stroke-dasharray:12 4 2 4}',
   '.halo{fill:var(--bg);opacity:.94}.rule{stroke:var(--frame)}',
+  '.num{fill:var(--bg);stroke:var(--line);stroke-width:1.2}.en{font-size:11px;font-weight:700;text-anchor:middle}',
+  '.n-added{stroke:var(--added);stroke-width:2}.n-changed{stroke:var(--changed);stroke-width:2}.n-removed{stroke:var(--removed);stroke-width:2}.n-affected{stroke:var(--affected);stroke-width:2}',
 ].join('');
 
 const n = (v: number): string => String(Math.round(v * 10) / 10);
@@ -143,6 +147,10 @@ function drawLabel(e: EdgePath): string {
   if (!l) return '';
   const status = active(e.rel.status);
   const cx = l.x + l.w / 2;
+  if (l.lines[0]?.cls === 'en') {
+    return `<rect class="num${status ? ` n-${status}` : ''}" x="${n(l.x)}" y="${n(l.y)}" width="${n(l.w)}" height="${n(l.h)}" rx="10"/>`
+      + `<text class="en" x="${n(cx)}" y="${n(l.y + 14)}">${escapeXml(l.lines[0].text)}</text>`;
+  }
   let out = `<rect class="halo" x="${n(l.x)}" y="${n(l.y)}" width="${n(l.w)}" height="${n(l.h)}" rx="4"/>`;
   l.lines.forEach((line, i) => {
     const marked = i === 0 && status !== undefined;
@@ -156,7 +164,7 @@ function drawLabel(e: EdgePath): string {
 
 interface KeyItem { w: number; draw: (x: number, y: number) => string; label: string }
 
-function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[]): KeyItem[] {
+function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], numbered: boolean): KeyItem[] {
   const items: KeyItem[] = [];
   const leaves = boxes.filter((b) => !b.group);
   const sample = (x: number, y: number, status = ''): string =>
@@ -174,7 +182,7 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[]): KeyIt
   if (boxes.some((b) => b.group)) {
     items.push({ w: 26, label: 'Boundary', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
-  if (edges.length) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : 'Relationship', draw: (x, y) => sample(x, y) });
+  if (edges.length) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : numbered ? 'Relationship, numbered in the table' : 'Relationship', draw: (x, y) => sample(x, y) });
   for (const status of STATUSES) {
     if (status === 'unchanged') continue;
     const onNode = boxes.some((b) => b.el.status === status);
@@ -210,8 +218,15 @@ function describe(spec: DiagramSpec, subtitle: string): string {
   return `${subtitle}. ${els.length} elements: ${els.join(', ')}. ${rels.length} relationships: ${rels.join('; ')}.`;
 }
 
-export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName; detail?: Detail } = {}): Promise<string> {
-  const g = await layout(spec, { detail: opts.detail });
+export interface RenderOptions extends FitOptions { theme?: ThemeName }
+export interface Rendered { svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean }
+
+export async function renderSvg(spec: DiagramSpec, opts: RenderOptions = {}): Promise<string> {
+  return (await render(spec, opts)).svg;
+}
+
+export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promise<Rendered> {
+  const g = await fitLayout(spec, opts);
   const kind = spec.type[0]!.toUpperCase() + spec.type.slice(1);
   const subtitle = `${kind} diagram${spec.scope ? ` for ${spec.scope}` : ''}`;
   const width = Math.ceil(Math.max(g.width, textWidth(spec.title, 18, true), textWidth(subtitle, 12.5), MIN_WIDTH) + 2 * MARGIN);
@@ -228,7 +243,7 @@ export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName; de
 
   const keyTop = oy + g.height + 26;
   let x = MARGIN, y = keyTop + 30, key = '';
-  for (const item of keyItems(spec, g.nodes, g.edges)) {
+  for (const item of keyItems(spec, g.nodes, g.edges, g.numbered)) {
     const w = item.w + 7 + textWidth(item.label, 11.5) + 20;
     if (x > MARGIN && x + w - 20 > width - MARGIN) { x = MARGIN; y += 26; }
     key += item.draw(x, y) + `<text class="kt" x="${n(x + item.w + 7)}" y="${n(y + 12)}">${escapeXml(item.label)}</text>`;
@@ -236,7 +251,7 @@ export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName; de
   }
   const height = Math.ceil(y + 16 + MARGIN - 4);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
     + `<title id="dg-title">${escapeXml(`${spec.title}: ${subtitle}`)}</title>`
     + `<desc id="dg-desc">${escapeXml(describe(spec, subtitle))}</desc>`
     + `<style>${applyTheme(CSS, opts.theme ?? 'auto')}</style>`
@@ -247,4 +262,5 @@ export async function renderSvg(spec: DiagramSpec, opts: { theme?: ThemeName; de
     + `<path class="rule" d="M${MARGIN} ${n(keyTop)}H${width - MARGIN}"/>`
     + `<text class="kh" x="${MARGIN}" y="${n(keyTop + 18)}">KEY</text>${key}`
     + '</svg>\n';
+  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact };
 }

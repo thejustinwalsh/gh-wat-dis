@@ -19,6 +19,7 @@ const COMMANDS: Record<string, Loader> = {
   elements: async () => (await import('./impact/cli.ts')).elements,
   graph: async () => (await import('./graph-dispatch.ts')).main,
   diagram: async () => (await import('./diagram/cli.ts')).main,
+  legend: async () => (await import('./diagram/cli.ts')).legend,
   lint: async () => (await import('./lint/cli.ts')).main,
 };
 
@@ -49,10 +50,12 @@ Shape a graph (diagram spec in, diagram spec out)
   graph from-facts [facts.json]               spec from impact facts
   graph from-config                           spec from the repo's architecture map
   graph focus|collapse|drop|merge|diff|set|rename
+  graph split --out-dir <dir>                 an overview plus one small spec per changed group
   graph stats|ids                             inspect a spec
 
 Render
-  diagram [spec.json] [-o out.svg]            lint a spec and draw it as SVG
+  diagram [spec.json] [-o out.svg]            lint a spec and draw it as SVG, fitted to GitHub's width
+  legend [spec.json]                          a spec's relationships as a Markdown table
   blast [facts.json]                          impact facts as a Markdown "Blast radius" section
 
 Check

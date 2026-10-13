@@ -14,9 +14,20 @@ export interface NodeBox {
 }
 export interface EdgeLabel { x: number; y: number; w: number; h: number; lines: TextLine[] }
 export interface EdgePath { rel: SpecRelationship; points: Pt[]; label?: EdgeLabel }
-export interface Layout { width: number; height: number; nodes: NodeBox[]; edges: EdgePath[] }
+export interface Layout { width: number; height: number; nodes: NodeBox[]; edges: EdgePath[]; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean }
+export interface LayoutOptions {
+  detail?: Detail;
+  direction?: 'DOWN' | 'RIGHT';
+  numbered?: boolean;
+  /** Target width / height. When set, ELK may wrap a long chain onto a second row or column. */
+  wrap?: number;
+}
+
+/** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
+export const relNumber = (spec: DiagramSpec, rel: SpecRelationship): number => rel.order ?? spec.relationships.indexOf(rel) + 1;
 
 export const NODE_W = 208;
+const NODE_W_FLOW = 176;
 export const CYLINDER_RY = 8;
 export const PIPE_RX = 11;
 export const GROUP_NAME_PX = 13;
@@ -29,8 +40,8 @@ const TOP_INSET: Record<string, number> = { person: 40, datastore: 2 * CYLINDER_
 
 export const badgeWidth = (status: string): number => textWidth(STATUS_BADGE[status] ?? '', BADGE_PX, true) + 14;
 
-function leafText(el: SpecElement, compact: boolean): { h: number; lines: TextLine[] } {
-  const inner = NODE_W - 2 * PAD_X - (el.type === 'queue' ? 2 * PIPE_RX : 0);
+function leafText(el: SpecElement, compact: boolean, width: number): { h: number; lines: TextLine[] } {
+  const inner = width - 2 * PAD_X - (el.type === 'queue' ? 2 * PIPE_RX : 0);
   const lines: TextLine[] = [];
   let y = TOP_INSET[el.type] ?? (compact ? 11 : 14);
   const add = (texts: string[], cls: string, lineHeight: number, ascent: number): void => {
@@ -43,7 +54,11 @@ function leafText(el: SpecElement, compact: boolean): { h: number; lines: TextLi
   return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : compact ? 10 : 13)), lines };
 }
 
-function edgeLabel(rel: SpecRelationship): { w: number; h: number; lines: TextLine[] } {
+function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number; lines: TextLine[] } {
+  if (num !== undefined) {
+    const text = String(num);
+    return { w: Math.ceil(Math.max(20, textWidth(text, 11, true) + 12)), h: 20, lines: [{ text, cls: 'en', dy: 14 }] };
+  }
   const status = active(rel.status);
   const text = `${status ? `${STATUS_MARK[status]} ` : ''}${rel.order !== undefined ? `${rel.order}. ` : ''}${rel.label}`;
   const lines: TextLine[] = [];
@@ -79,12 +94,14 @@ function snap(p: Pt, n: NodeBox): void {
   }
 }
 
-export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}): Promise<Layout> {
-  const direction = spec.direction === 'RIGHT' ? 'RIGHT' : 'DOWN';
+export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promise<Layout> {
+  const direction = opts.direction ?? (spec.direction === 'RIGHT' ? 'RIGHT' : 'DOWN');
+  const numbered = opts.numbered ?? spec.labels === 'numbered';
   const detail = opts.detail ?? spec.detail ?? 'auto';
   const parents = new Set(spec.elements.map((e) => e.parent));
   const leaves = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node').length;
   const compact = detail === 'compact' || (detail === 'auto' && leaves > FULL_DETAIL_MAX);
+  const nodeW = compact && numbered ? NODE_W_FLOW : NODE_W;
   const ids = new Set(spec.elements.map((e) => e.id));
   const kids = new Map<string | undefined, SpecElement[]>();
   for (const el of spec.elements) {
@@ -95,7 +112,7 @@ export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}):
     'elk.algorithm': 'layered',
     'elk.direction': direction,
     'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.spacing.nodeNodeBetweenLayers': compact ? '18' : '26',
+    'elk.layered.spacing.nodeNodeBetweenLayers': numbered ? '14' : compact ? '18' : '26',
     'elk.spacing.nodeNode': compact ? '20' : '26',
     'elk.spacing.edgeNode': '18',
     'elk.spacing.edgeEdge': '14',
@@ -105,15 +122,16 @@ export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}):
     'elk.layered.spacing.edgeEdgeBetweenLayers': '12',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
+    ...(opts.wrap ? { 'elk.aspectRatio': String(opts.wrap), 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.layered.wrapping.additionalEdgeSpacing': '14' } : {}),
   };
   const boxes = new Map<string, NodeBox>();
   // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
   const build = (el: SpecElement, depth: number, seen: Set<string>): any => {
     const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
     const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
-    const text = group ? { h: 64, lines: [] } : leafText(el, compact);
-    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyGroupWidth(el) : NODE_W, h: text.h, lines: text.lines });
-    if (!group) return { id: el.id, width: NODE_W, height: text.h };
+    const text = group ? { h: 64, lines: [] } : leafText(el, compact, nodeW);
+    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyGroupWidth(el) : nodeW, h: text.h, lines: text.lines });
+    if (!group) return { id: el.id, width: nodeW, height: text.h };
     const below = new Set(seen).add(el.id);
     return {
       id: el.id,
@@ -130,7 +148,7 @@ export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}):
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
   const edges = spec.relationships.flatMap((rel, i) => {
     if (!boxes.has(rel.from) || !boxes.has(rel.to)) return [];
-    const label = edgeLabel(rel);
+    const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
     labels.set(i, label);
     return [{ id: `e${i}`, sources: [rel.from], targets: [rel.to], labels: [{ id: `l${i}`, text: rel.label, width: label.w, height: label.h, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
   });
@@ -175,5 +193,5 @@ export async function layout(spec: DiagramSpec, opts: { detail?: Detail } = {}):
     snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
   }
   paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
-  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths };
+  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact };
 }

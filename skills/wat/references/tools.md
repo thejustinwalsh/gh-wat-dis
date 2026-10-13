@@ -67,7 +67,9 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Diagram spec from the architecture map | `npx gh-wat-dis graph from-config > system.json` |
 | Reshape a spec | `npx gh-wat-dis graph focus\|collapse\|drop\|merge\|diff\|set\|rename` |
 | Inspect a spec | `npx gh-wat-dis graph stats change.json` · `graph ids change.json` |
-| Render a diagram | `npx gh-wat-dis diagram change.json -o change.svg` |
+| Overview plus one spec per changed group | `npx gh-wat-dis graph split change.json --out-dir views` |
+| Render a diagram, fitted to GitHub's width | `npx gh-wat-dis diagram change.json -o change.svg` |
+| Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --md` |
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |

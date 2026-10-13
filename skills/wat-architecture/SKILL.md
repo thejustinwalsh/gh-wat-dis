@@ -109,4 +109,4 @@ A yes goes in `Risks` with what the change does about it, or in `Unknowns` with 
 | Changes where things run: regions, nodes, scaling | Deployment |
 | Stays inside one component, no contract change | None. Use a `diff` block or a table. |
 
-One diagram per artifact. Show the changed elements plus one hop of neighbours. 12 elements at most.
+Show the changed elements plus one hop of neighbours. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.

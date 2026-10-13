@@ -144,9 +144,9 @@ test('svg: status is text and line style, and the key lists only what is used', 
   assert.match(key(impact), />\+ Added<.*>~ Changed<.*>− Removed<.*>Affected</);
   assert.doesNotMatch(key(impact), />Person</);
   const plain = key(await renderSvg(example('container')));
-  assert.match(plain, />Person<.*>Container<.*>Data Store<.*>Queue<.*>External<.*>Boundary<.*>Relationship</);
+  assert.match(plain, />Person<.*>Container<.*>Data Store<.*>Queue<.*>External<.*>Boundary<.*>Relationship/);
   assert.doesNotMatch(plain, /Added|Changed|Removed|Affected|Component/);
-  assert.match(await renderSvg(example('dynamic')), />1\. Submits the checkout.*>Numbered step</s);
+  assert.match(await renderSvg(example('dynamic'), { labels: 'text' }), />1\. Submits the checkout.*>Numbered step</s);
 });
 
 test('svg: a 12 element container diagram stays near 900px wide', async () => {
@@ -191,4 +191,19 @@ test('mermaid: flowchart with subgraphs, shapes and statuses', () => {
   assert.equal(text.match(/^\s*subgraph /gm)!.length, text.match(/^\s*end$/gm)!.length);
   const odd = toMermaid({ ...base(), direction: 'RIGHT', elements: [{ id: 'end', type: 'person', name: 'Say "hi"' }], relationships: [] });
   assert.match(odd, /^flowchart LR\n {2}n_end\(\["Say #quot;hi#quot;<br\/>\[Person\]"\]\)/);
+});
+
+test('fit: a flow draws left to right with numbered steps inside the page width', async () => {
+  const { render, toLegend, MAX_WIDTH } = await import('../src/diagram/index.ts');
+  const flow = await render(example('dynamic'));
+  assert.equal(flow.direction, 'RIGHT');
+  assert.equal(flow.numbered, true);
+  assert.ok(flow.width <= MAX_WIDTH, `${flow.width}`);
+  assert.match(flow.svg, /class="en"[^>]*>1</);
+  const legend = toLegend(example('dynamic'));
+  assert.match(legend, /^\| # \| From \| To \| What \| How \|/);
+  assert.match(legend, /\| 1 \| Shopper \| Storefront \| Submits the checkout form \| `HTTPS` \|/);
+  const forced = await render(example('dynamic'), { labels: 'text', direction: 'DOWN' });
+  assert.equal(forced.numbered, false);
+  assert.equal(forced.direction, 'DOWN');
 });

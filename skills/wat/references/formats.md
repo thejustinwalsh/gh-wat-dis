@@ -31,6 +31,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 
 ## System
 <1 to 3 sentences. Which elements and relationships this touches, and why the design goes this way.>
+<Optional: one scoped diagram for the part that changes, with its legend table.>
 
 ## Change
 | Element | Today | After |
@@ -159,6 +160,21 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 **Needs a decision**
 - <question> → @<owner>
 ```
+
+## Diagrams
+
+GitHub draws a body about 860px wide. A wider image is scaled down and its text shrinks, and a taller one makes the reader scroll to follow a line. So prefer small diagrams.
+
+| Diagram | Where | Size to aim for |
+|---|---|---|
+| **Overview**: the system with groups folded to boxes | Right after the opening | 6 boxes or fewer |
+| **Scoped view**: one group opened, its neighbours folded | In `System`, or in the section that discusses that part | 8 boxes or fewer |
+| **Flow**: numbered steps, left to right | Where the behaviour is described: `Change`, `Risks` or `Verify` | 8 steps or fewer |
+
+- Use one diagram when it fits. Use an overview plus a scoped view when one diagram would pass 8 boxes. Three is the limit for a visible body.
+- Each diagram sits next to the words it supports. Do not stack them at the top.
+- When lines carry numbers, put the legend table directly under the image. The table holds the words: the reader can search, copy and link them.
+- A second or third diagram that only some readers need goes in a `<details>` block with a summary that says what it shows.
 
 ## Agent context
 

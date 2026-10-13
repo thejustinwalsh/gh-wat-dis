@@ -18,6 +18,10 @@ export type Provenance = (typeof PROVENANCE)[number];
 export const DETAILS = ['auto', 'full', 'compact'] as const;
 export type Detail = (typeof DETAILS)[number];
 
+export const LABEL_MODES = ['auto', 'text', 'numbered'] as const;
+/** `numbered` draws a number on each relationship; the words go in a legend table beside the diagram. */
+export type LabelMode = (typeof LABEL_MODES)[number];
+
 export interface SpecElement {
   id: string;
   type: ElementType;
@@ -52,6 +56,8 @@ export interface DiagramSpec {
   direction?: 'DOWN' | 'RIGHT';
   /** How much text each element shows. `auto` (default) drops descriptions once a diagram has more than 5 elements. */
   detail?: Detail;
+  /** `auto` (default) keeps the words on the lines when the diagram fits GitHub's width, and numbers them when it does not. */
+  labels?: LabelMode;
   elements: SpecElement[];
   relationships: SpecRelationship[];
 }

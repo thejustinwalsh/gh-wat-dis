@@ -80,7 +80,9 @@ export function collapse(spec: DiagramSpec, opts: CollapseOptions): DiagramSpec 
   const elements = spec.elements.filter((e) => !into.has(e.id)).map((e) => {
     const gone = inside.get(e.id);
     if (!gone) return e;
-    const status = mergeStatus([e, ...gone].map(statusOf));
+    // A group that is itself new or gone stays so, whatever it holds.
+    const own = statusOf(e);
+    const status = own === 'added' || own === 'removed' ? own : mergeStatus([e, ...gone].map(statusOf));
     return withStatus({ ...e, meta: { ...e.meta, collapsed: gone.length } }, status);
   });
   const groups = new Map<string, { moved: boolean; rels: SpecRelationship[] }>();
