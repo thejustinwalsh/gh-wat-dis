@@ -103,4 +103,4 @@ Every command runs through `npx`. A project installs nothing. The first run down
 
 ## Scratch files
 
-Write drafts, specs and SVGs to `.wat-tmp/` at the repo root (git-ignored by `npx gh-wat-dis init`). Remove them after the post succeeds.
+Write drafts, specs and SVGs to `.wat-tmp/` at the repo root (git-ignored by `npx gh-wat-dis init`). Look in it before you write: files there may belong to another session or to work that has not been posted. When it is not empty, work in a folder of your own, `.wat-tmp/<short-task-name>/`, and use that path wherever a skill shows `.wat-tmp/`. Remove only the files you wrote, after the post succeeds.

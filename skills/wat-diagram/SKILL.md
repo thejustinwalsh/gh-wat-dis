@@ -12,10 +12,10 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 
 ## Steps
 
-1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment.
+1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment. A container diagram keeps the people and the external systems that have a line to a container: they show who and what the system talks to.
 2. **Get the elements.**
    - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`.
-   - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`.
+   - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`. That holds every element, components too. For the container view of the whole system, fold the components: `npx gh-wat-dis graph from-config | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/containers.json`. (`from-config --type` only sets the spec's type field. It filters nothing.)
    - From neither: read the code. Never draw an element you did not find.
 3. **Shape the spec.** The spec is the one format every graph tool reads and writes, so shape it in steps:
    ```bash
@@ -40,17 +40,25 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg
    ```
-   Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`.
+   Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`. When the fact is known and the architecture map lacks it (a relationship with no `technology`), set it in the spec, tell the user, and offer to save it in `.agents/gh-wat-dis/config.json`.
+   The title names the change ("Checkout: payment retries move to a worker"). For a view of the system with no change in it, name the system and the view: "Storefront: containers".
 5. **Read what the renderer reports.** It tries top-down and left-to-right, with words or numbers on the lines, and keeps the shortest layout that fits 860px. It prints the size and the layout it chose.
    - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`.
    - `wider than GitHub's 860px`, or taller than about 900px: split it (below) or cut elements.
-6. **Look at it.** Open the SVG or a rasterized copy. Check that no label overlaps a box and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram.
-7. **Reference it** in the body by its local path. The alt text is the diagram title:
+6. **Look at it.** Check that no label overlaps a box, that nothing is cut at an edge, and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram. To see it, use the first of these you have:
+   - A browser or image tool in your harness: open the SVG file.
+   - macOS: `sips -s format png .wat-tmp/<name>.svg --out .wat-tmp/<name>.png`. Do not use `qlmanage`: it makes a square thumbnail and crops a wide diagram, which looks like a renderer fault and is not one.
+   - Linux: `rsvg-convert`, `magick` or `inkscape`, when one is installed. Do not install one for this.
+   - None of these: say that you did not look at it. The renderer's size report and a clean lint are what you have.
+
+   Inspect the default theme. It follows the viewer's colour scheme on GitHub, and both schemes use the same layout.
+7. **No issue or PR to put it in?** When the user asked only for the diagram, stop here: give the path of the SVG and print the legend table when the lines are numbered. Do not attach it anywhere.
+8. **Reference it** in the body by its local path. The alt text is the diagram title:
    ```markdown
    ![Checkout: payment retries move to a worker](./<name>.svg)
    ```
    Write the path relative to the body file. Put the diagram right after the opening and the alert.
-8. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. Check the posted body: the image link must start with `https://`.
+9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. Check the posted body: the image link must start with `https://`.
 
 ## Spec
 

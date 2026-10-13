@@ -191,6 +191,7 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 | **Scoped view**: one group opened, its neighbours folded | In `System`, or in the section that discusses that part | 8 boxes or fewer |
 | **Flow**: numbered steps, left to right | Where the behaviour is described: `Change`, `Risks` or `Verify` | 8 steps or fewer |
 
+- The box counts are aims for a diagram in a body. A whole-system view the user asked for keeps every container when the renderer reports that it fits 860px.
 - Use one diagram when it fits. Use an overview plus a scoped view when one diagram would pass 8 boxes. Three is the limit for a visible body.
 - Each diagram sits next to the words it supports. Do not stack them at the top.
 - When lines carry numbers, put the legend table directly under the image. The table holds the words: the reader can search, copy and link them.

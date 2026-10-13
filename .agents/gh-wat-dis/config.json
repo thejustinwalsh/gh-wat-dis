@@ -208,7 +208,8 @@
       {
         "from": "setup",
         "to": "skills",
-        "label": "Copies into the harness"
+        "label": "Copies into the harness",
+        "technology": "file copy"
       },
       {
         "from": "facts",

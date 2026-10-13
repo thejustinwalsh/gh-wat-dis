@@ -61,4 +61,6 @@ gh-wat-dis decides how to communicate: the shape, the words, the diagram, the fi
 - **Read with the GitHub MCP server.** Search, list, read threads, diffs and check runs. If the server is not connected, use `gh` for reads too and suggest `wat-setup`. Where a step shows a `gh` read command, that is the fallback: the matching MCP tool is the first choice. Where a step names an `npx gh-wat-dis` tool, use that tool and do not rebuild its output from raw reads.
 - **Measure with `npx gh-wat-dis`.** `impact`, `diagram`, `related`, `links`, `lint`. The package carries everything these commands need. Never ask a project to install another tool for them.
 
+Scratch files go in `.wat-tmp/`. Check it first and never overwrite a file you did not write: see "Scratch files" in the command map.
+
 Command map: [references/tools.md](references/tools.md). What GitHub renders and where: [references/rendering.md](references/rendering.md).
