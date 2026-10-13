@@ -97,6 +97,22 @@ Ask them of every change that crosses an element boundary:
 
 A yes goes in `Risks` with what the change does about it, or in `Unknowns` with the check that settles it.
 
+## When a diagram is needed
+
+The measure is how hard the change is to follow, not how much it touches. A change inside one file can need a diagram. A change across twenty modules can need none.
+
+**Draw one** when the change alters how parts relate, at any level, down to the functions of one module:
+- Parts are added, removed or rewired: what calls, owns or depends on what.
+- The order of steps changes, or steps become async, retried or conditional.
+- State is added or moves: a new state, a new owner, new transitions.
+- The shape of data that crosses a boundary changes: a contract, a message, a stored format.
+
+**Do not draw one**, however many files or elements change, when the parts relate as they did before: formatting, a rename, a codemod, a dependency bump, text and documentation, the same small edit repeated in many places, new values in an unchanged flow.
+
+**The test:** say what is different in the structure or the flow. If the answer names three or more parts and how they connect, or an order of steps, draw it. If one plain sentence covers it ("adds a flag to `lint`", "renames the field everywhere"), write the sentence and skip the diagram.
+
+Draw at the level where the difficulty sits. For a hard change inside one module, that is a component or dynamic diagram of that module's own parts, not a container diagram with one changed box.
+
 ## Choose what to show
 
 | The change | Diagram |
@@ -107,6 +123,7 @@ A yes goes in `Risks` with what the change does about it, or in `Unknowns` with 
 | Moves work across a thread, worker or WASM boundary, or changes an ABI or message format | Component, with the execution contexts as nested boundaries |
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
-| Stays inside one component, no contract change | None. Use a `diff` block or a table. |
+| Reworks the flow or state inside one component or file | Component or dynamic, with that component's own parts as the boxes |
+| Passes none of the tests above, whatever its size | None. Use a sentence, a `diff` block or a table. |
 
 Show the changed elements plus one hop of neighbours. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.
