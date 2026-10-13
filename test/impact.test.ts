@@ -604,3 +604,52 @@ test('config: architecture map drives elements, edges and labels', async () => {
   assert.deepEqual([gone.status, gone.weight, gone.label], ['removed', 0, 'calls API']);
   assertSpecValid(toDiagramSpec(rewired));
 });
+
+test('complexity: callbacks count toward the named function around them, and pairs follow the name', async () => {
+  const { TOP_LEVEL, pair, units } = await import('../src/impact/complexity.ts');
+  const fn = (name: string, line: number, cognitive: number, children: unknown[] = []) => ({ name, kind: 'function', line, cognitive, cyclomatic: cognitive + 1, children });
+  const u = units([
+    fn('load', 3, 2, [fn('<anonymous>', 4, 3), fn('retry', 6, 1, [fn('<anonymous>', 7, 4)])]),
+    fn('<anonymous>', 20, 5),
+  ] as never);
+  assert.deepEqual(u.map((x) => [x.name, x.cognitive, x.cyclomatic]), [['load', 5, 6], ['load > retry', 5, 6], [TOP_LEVEL, 5, 6]]);
+
+  const at = (name: string, line: number, cognitive: number) => ({ name, kind: 'function', line, cognitive, cyclomatic: 1 });
+  const pairs = pair([at('a', 1, 1), at('dup', 10, 2), at('dup', 50, 3), at('gone', 70, 4)], [at('dup', 52, 9), at('a', 5, 1), at('new', 80, 2)]);
+  const show = pairs.map((p) => `${p.base?.name ?? '-'}@${p.base?.line ?? ''}>${p.head?.name ?? '-'}@${p.head?.line ?? ''}`).sort();
+  assert.deepEqual(show, ['-@>new@80', 'a@1>a@5', 'dup@10>-@', 'dup@50>dup@52', 'gone@70>-@']);
+});
+
+test('complexity: facts are absent unless a cccc binary is named, and a missing one is reported', async () => {
+  const r = repo();
+  r.commit({ 'src/a.ts': 'export function a(x: number) { return x; }\n' }, 5);
+  r.commit({ 'src/a.ts': 'export function a(x: number) { if (x > 1) { for (const y of [x]) { if (y) return y; } } return x; }\n' }, 1);
+  const plain = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW });
+  assert.deepEqual(plain.complexity, []);
+  assert.equal(plain.summary.complexity, undefined);
+  const missing = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW, cccc: null });
+  assert.ok(missing.tiers.unavailable.some((t) => t.tool === 'cccc' && /doctor --tools install/.test(t.reason)));
+  const broken = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW, cccc: join(r.dir, 'no-such-binary') });
+  assert.deepEqual(broken.complexity, []);
+  assert.ok(broken.tiers.unavailable.some((t) => t.tool === 'cccc'));
+  assert.ok(!broken.tiers.ran.includes('cccc'));
+
+  const { locate } = await import('../src/tools/cccc.ts');
+  const found = locate();
+  if (!found) return; // cccc is optional: the measured half runs only where it is installed
+  const facts = await analyze({ cwd: r.dir, base: 'HEAD~1', now: NOW, cccc: found.path });
+  assert.ok(facts.tiers.ran.includes('cccc'));
+  assert.equal(facts.complexity.length, 1);
+  assert.deepEqual([facts.complexity[0]!.name, facts.complexity[0]!.change, facts.complexity[0]!.before], ['a', 'modified', { cognitive: 0, cyclomatic: 1 }]);
+  assert.ok(facts.complexity[0]!.after!.cognitive >= 5);
+  assert.equal(facts.summary.complexity!.functions, 1);
+});
+
+test('cccc: the pinned manifest names an asset and a sha256 for each platform', async () => {
+  const { CCCC } = await import('../src/tools/cccc.ts');
+  assert.deepEqual(Object.keys(CCCC.assets).sort(), ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64']);
+  for (const a of Object.values(CCCC.assets)) {
+    assert.ok(a.file.startsWith(`cccc-v${CCCC.version}-`), a.file);
+    assert.match(a.sha256, /^[0-9a-f]{64}$/);
+  }
+});

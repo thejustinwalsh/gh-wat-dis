@@ -8,6 +8,8 @@ license: MIT
 
 Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each prints one `ok`, `warn` or `FAIL` line for each part. Fix only what fails.
 
+`doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. It is a warning when missing, never a failure. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
+
 A project needs three things and no more: the `gh` CLI, `npx gh-wat-dis`, and (optional) the GitHub MCP server. Never tell a project to install another tool.
 
 ```bash

@@ -90,7 +90,7 @@
         "technology": "TypeScript",
         "description": "install, init, mcp, doctor",
         "paths": [
-          "src/cli/**"
+          "src/cli/**", "src/tools/**"
         ]
       },
       {
