@@ -100,6 +100,8 @@ npx gh-wat-dis impact \
 
 A diagram spec is plain JSON. When no filter does what you need, edit the file. Run any tool with `--help` for its options.
 
+`npx gh-wat-dis help` lists every tool with what it does and whether it writes; `npx gh-wat-dis help --json` prints the same list as JSON, and `npx gh-wat-dis <tool> --help` gives one tool's options. When a skill and the help disagree, the help is right.
+
 Every command runs through `npx`. A project installs nothing. The first run downloads the package; later runs use the npm cache.
 
 ## Scratch files

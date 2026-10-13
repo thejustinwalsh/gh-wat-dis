@@ -58,13 +58,27 @@ test('skills: every file a skill links to ships inside the skills folder', () =>
   assert.deepEqual(missing, []);
 });
 
-test('cli: every command prints its usage for --help and exits 0', () => {
+test('cli: help lists every tool, and every tool prints its usage for --help', async () => {
+  const { TOOLS, helpText } = await import('../src/main.ts');
+  const run = (...args: string[]) => spawnSync(process.execPath, [join(root, 'src/bin.ts'), ...args], { encoding: 'utf8' });
+  const listed = JSON.parse(run('help', '--json').stdout) as { tools: typeof TOOLS };
+  assert.deepEqual(listed.tools, TOOLS);
+  assert.equal(new Set(TOOLS.map((t) => t.name)).size, TOOLS.length, 'tool names are unique');
+
+  // The command table in main.ts and the tool list name the same commands.
   const main = readFileSync(join(root, 'src/main.ts'), 'utf8');
   const table = main.slice(main.indexOf('const COMMANDS'), main.indexOf('};', main.indexOf('const COMMANDS')));
-  const commands = [...table.matchAll(/^\s+'?([a-z-]+)'?: async/gm)].map((m) => m[1]!);
-  assert.ok(commands.length >= 20, `found ${commands.length} commands`);
+  const commands = [...table.matchAll(/^\s+'?([a-z-]+)'?: async/gm)].map((m) => m[1]!).sort();
+  assert.deepEqual([...new Set(TOOLS.map((t) => t.name.split(' ')[0]!))].sort(), commands);
+
+  const text = helpText();
+  for (const t of TOOLS) {
+    assert.ok(text.includes(`  ${t.name} `), `help lists ${t.name}`);
+    assert.ok(t.description.length > 20 && t.description.endsWith('.'), `${t.name} has a description`);
+    assert.ok(t.usage.startsWith(t.name), `${t.name} usage starts with its name`);
+  }
   for (const c of commands) {
-    const r = spawnSync(process.execPath, [join(root, 'src/bin.ts'), c, '--help'], { encoding: 'utf8' });
+    const r = run(c, '--help');
     assert.equal(r.status, 0, `${c} --help exited ${r.status}: ${r.stderr}`);
     assert.match(r.stdout, /Usage|usage/, `${c} --help prints no usage`);
   }
