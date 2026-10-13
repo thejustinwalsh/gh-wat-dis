@@ -1,11 +1,23 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { Detail, DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
-import { textWidth, wrap } from './measure.ts';
+import { fit, monoWidth, textWidth, wrap } from './measure.ts';
 import { STATUS_BADGE, STATUS_MARK, active, kindLine } from './vocab.ts';
+import type { ActiveStatus } from './vocab.ts';
 
 export interface Pt { x: number; y: number }
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface TextLine { text: string; cls: string; dy: number }
+/** One symbol of a file card. `dy` is the middle of its row, from the top of the card. */
+export interface CardRow { name: string; kind?: string; status?: ActiveStatus; dy: number }
+/** A file drawn as a card: the path in the header, then a row for each symbol, then a note. */
+export interface FileCard {
+  dir: string; base: string; rows: CardRow[]; note?: { text: string; dy: number };
+  /** Height of the header. A long path puts its folders on a small line above the file name, and the header is taller. */
+  head: number;
+  stacked: boolean;
+  /** The name of the group the file is in, drawn above the card when the groups are not drawn as bands. */
+  lane?: string;
+}
 export interface NodeBox {
   el: SpecElement;
   group: boolean;
@@ -14,16 +26,29 @@ export interface NodeBox {
   lines: TextLine[];
   /** Where the status badge is drawn. It lies inside the box, where no relationship line runs. */
   badge?: Rect;
+  /** Set on a `file`. Its status is a mark in the header, so it has no badge. */
+  card?: FileCard;
+  /** A group in a code diagram: a tinted band with a small name, no border. */
+  light?: boolean;
 }
 export interface EdgeLabel extends Rect { lines: TextLine[] }
 export interface EdgePath { rel: SpecRelationship; points: Pt[]; label?: EdgeLabel }
-export interface Layout { width: number; height: number; nodes: NodeBox[]; edges: EdgePath[]; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean }
+export interface Layout {
+  width: number; height: number; nodes: NodeBox[]; edges: EdgePath[];
+  direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean;
+  /** True when a long chain was cut and continued on a second row or column. */
+  wrapped: boolean;
+  /** True when the groups of a code diagram are names above the cards. */
+  flat: boolean;
+}
 export interface LayoutOptions {
   detail?: Detail;
   direction?: 'DOWN' | 'RIGHT';
   numbered?: boolean;
   /** Target width / height. When set, ELK may wrap a long chain onto a second row or column. */
   wrap?: number;
+  /** In a code diagram, name the group above each file card in place of a band around the group's files. */
+  flat?: boolean;
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -47,6 +72,24 @@ const LOOP_SPAN_MAX = 48;
 /** ELK draws a self-loop about 10px deep. Its label is given this much more room so the larger loop fits. */
 const LOOP_PAD = LOOP_OUT - 10;
 const PAD_X = 14;
+export const CARD_HEAD = 30;
+export const CARD_HEAD_STACKED = 42;
+export const CARD_DIR_PX = 10.5;
+/** A path wider than this goes on two lines. */
+const CARD_PATH_MAX = 190;
+export const CARD_ROW = 20;
+export const CARD_PAD = 12;
+/** Where a symbol name starts, after its status mark. */
+export const CARD_NAME_X = 27;
+export const CARD_PATH_PX = 12;
+export const CARD_SYMBOL_PX = 11.5;
+export const CARD_KIND_PX = 10;
+export const LANE_NAME_PX = 10.5;
+const CARD_MIN = 148;
+const CARD_MAX = 240;
+const CARD_ROWS_MAX = 8;
+/** Room above a card for the name of its group. */
+const LANE_CAP = 17;
 const LABEL_MAX = 170;
 const FULL_DETAIL_MAX = 5;
 const TOP_INSET: Record<string, number> = { person: 40, datastore: 2 * CYLINDER_RY + 8 };
@@ -60,7 +103,7 @@ const badgeTop = (type: string): number => BADGE_TOP[type] ?? 5;
 
 function leafBadge(b: NodeBox): Rect | undefined {
   const status = active(b.el.status);
-  if (!status) return undefined;
+  if (!status || b.card) return undefined;
   const w = badgeWidth(status);
   return { x: b.x + b.w - (BADGE_RIGHT[b.el.type] ?? 6) - w, y: b.y + badgeTop(b.el.type), w, h: BADGE_H };
 }
@@ -91,7 +134,54 @@ function leafText(el: SpecElement, compact: boolean, width: number): { h: number
   return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : compact ? 10 : 13)), lines };
 }
 
+const monoFit = (text: string, px: number, max: number): string => {
+  const chars = [...text];
+  if (monoWidth(text, px) <= max) return text;
+  while (chars.length > 1 && monoWidth(chars.join('') + '\u2026', px) > max) chars.pop();
+  return chars.join('') + '\u2026';
+};
+
+/** True when the path of a file is too wide for one line of a card header. */
+const longPath = (el: SpecElement): boolean => {
+  const cut = el.name.lastIndexOf('/') + 1;
+  return el.type === 'file' && textWidth(el.name.slice(0, cut), CARD_PATH_PX) + textWidth(el.name.slice(cut), CARD_PATH_PX, true) + 15 > CARD_PATH_MAX;
+};
+
+/** A file card is as wide as its longest line, within limits. A long path loses its leading folders first. */
+function fileCard(el: SpecElement, stack: boolean): { w: number; h: number; card: FileCard } {
+  const mark = active(el.status) ? 15 : 0;
+  const cut = el.name.lastIndexOf('/') + 1;
+  let dir = el.name.slice(0, cut);
+  const stacked = stack && dir !== '';
+  const head = stacked ? CARD_HEAD_STACKED : CARD_HEAD;
+  const dirPx = stacked ? CARD_DIR_PX : CARD_PATH_PX;
+  const room = CARD_MAX - 2 * CARD_PAD - mark;
+  const pathWidth = (d: string, b: string): number =>
+    (stacked ? Math.max(textWidth(d, dirPx), textWidth(b, CARD_PATH_PX, true)) : textWidth(d, dirPx) + textWidth(b, CARD_PATH_PX, true));
+  while (dir && (stacked ? textWidth(dir, dirPx) : pathWidth(dir, el.name.slice(cut))) > room) {
+    const rest = dir.replace(/^\u2026\//, '');
+    const next = rest.indexOf('/');
+    dir = next < 0 || next === rest.length - 1 ? '' : `\u2026/${rest.slice(next + 1)}`;
+  }
+  const base = fit(el.name.slice(cut), CARD_PATH_PX, room - (stacked ? 0 : textWidth(dir, dirPx)), true);
+  const symbols = (el.symbols ?? []).slice(0, CARD_ROWS_MAX);
+  const kindWidth = (kind: string | undefined): number => (kind ? textWidth(kind, CARD_KIND_PX) + 12 : 0);
+  const rowWidth = Math.max(0, ...symbols.map((s) => CARD_NAME_X + monoWidth(s.name, CARD_SYMBOL_PX) + kindWidth(s.kind) + CARD_PAD));
+  const note = el.description?.trim();
+  const w = Math.ceil(Math.min(CARD_MAX, Math.max(CARD_MIN, pathWidth(dir, base) + mark + 2 * CARD_PAD, rowWidth, note ? textWidth(note, 11) + 2 * CARD_PAD : 0)));
+  const rows: CardRow[] = symbols.map((s, i) => ({
+    name: monoFit(s.name, CARD_SYMBOL_PX, w - CARD_NAME_X - kindWidth(s.kind) - CARD_PAD),
+    ...(s.kind ? { kind: s.kind } : {}), ...(active(s.status) ? { status: active(s.status)! } : {}),
+    dy: head + 4 + i * CARD_ROW + CARD_ROW / 2,
+  }));
+  let h = head + (rows.length ? rows.length * CARD_ROW + 9 : 0);
+  const card: FileCard = { dir, base, rows, head, stacked };
+  if (note) { card.note = { text: fit(note, 11, w - 2 * CARD_PAD), dy: h + (rows.length ? 9 : 12) }; h += rows.length ? 18 : 22; }
+  return { w, h, card };
+}
+
 function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number; lines: TextLine[] } {
+  if (num === undefined && !rel.label?.trim()) return { w: 0, h: 0, lines: [] };
   if (num !== undefined) {
     const text = String(num);
     return { w: Math.ceil(Math.max(20, textWidth(text, 11, true) + 12)), h: 20, lines: [{ text, cls: 'en', dy: 14 }] };
@@ -116,9 +206,12 @@ function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number;
 /** Width of a group's label on one line: name, then kind. */
 export const groupLabelWidth = (el: SpecElement): number =>
   textWidth(el.name, GROUP_NAME_PX, true) + 8 + textWidth(kindLine(el), GROUP_KIND_PX);
+/** A light group shows its name alone, small and spaced. */
+export const laneLabelWidth = (el: SpecElement): number => textWidth(el.name, LANE_NAME_PX, true) * 1.06;
 
 /** The narrowest a group can be and still show its label on one line, with its badge beside it. */
-export function groupMinWidth(el: SpecElement): number {
+export function groupMinWidth(el: SpecElement, light = false): number {
+  if (light) return Math.ceil(laneLabelWidth(el) + 2 * 10);
   const status = active(el.status);
   return Math.ceil(groupLabelWidth(el) + 2 * GROUP_PAD_X + 2 + (status ? badgeWidth(status) + BADGE_GAP : 0));
 }
@@ -203,6 +296,82 @@ function growLoop(path: EdgePath, box: NodeBox, placed: Rect | undefined, others
   }
 }
 
+/** Length of a right-angled path. */
+export const pathLength = (points: Pt[]): number =>
+  points.slice(1).reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
+
+const turn = (p: Pt): Pt => ({ x: p.y, y: p.x });
+const turnRect = (r: Rect): Rect => ({ x: r.y, y: r.x, w: r.h, h: r.w });
+
+/** True when a segment of `a` runs along a segment of `b`, less than `gap` away. */
+function runsAlong(a: Pt[], b: Pt[], gap: number): boolean {
+  for (let i = 1; i < a.length; i++) for (let j = 1; j < b.length; j++) {
+    const p = a[i - 1]!, q = a[i]!, r = b[j - 1]!, s = b[j]!;
+    for (const [u, v] of [['x', 'y'], ['y', 'x']] as const) {
+      if (Math.abs(p[u] - q[u]) > 0.5 || Math.abs(r[u] - s[u]) > 0.5 || Math.abs(p[u] - r[u]) >= gap) continue;
+      if (Math.min(Math.max(p[v], q[v]), Math.max(r[v], s[v])) - Math.max(Math.min(p[v], q[v]), Math.min(r[v], s[v])) > 1) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * When ELK wraps a chain, it routes the cut line out past the end of the row, back along the
+ * channel between the rows, and in from the far side. This draws the short way instead: out of
+ * the near side of the source, along the same channel, and into the target. The ELK route stays
+ * when the short one would touch another element, a group that holds neither end, or another line.
+ */
+function shortenWrap(path: EdgePath, boxes: Map<string, NodeBox>, others: EdgePath[], direction: 'DOWN' | 'RIGHT'): void {
+  const from = boxes.get(path.rel.from)!, to = boxes.get(path.rel.to)!;
+  if (from === to || path.points.length < 6) return;
+  // The work is done as if rows run left to right. A top-down layout is turned on its side first.
+  const t = direction === 'DOWN';
+  const rect = (r: Rect): Rect => (t ? turnRect(r) : r);
+  const pts = t ? path.points.map(turn) : path.points;
+  const a = rect(from), z = rect(to);
+  if (z.y < a.y + a.h + 16) return;
+  let channel: number | undefined, longest = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i - 1]!, q = pts[i]!;
+    if (Math.abs(p.y - q.y) > 0.5 || p.y <= a.y + a.h + 6 || p.y >= z.y - 6 || Math.abs(p.x - q.x) <= longest) continue;
+    longest = Math.abs(p.x - q.x);
+    channel = p.y;
+  }
+  if (channel === undefined) return;
+  // A group name sits above the left of a card, so the line comes in right of the middle.
+  const named = !t && to.card?.lane !== undefined;
+  const ax = a.x + a.w / 2, zx = z.x + z.w * (named ? 0.75 : 0.5);
+  const short: Pt[] = Math.abs(ax - zx) < 1
+    ? [{ x: ax, y: a.y + a.h }, { x: ax, y: z.y }]
+    : [{ x: ax, y: a.y + a.h }, { x: ax, y: channel }, { x: zx, y: channel }, { x: zx, y: z.y }];
+  if (pathLength(short) > pathLength(pts) * 0.7) return;
+  const label = path.label;
+  const mid = short.length === 2 ? { x: ax, y: (a.y + a.h + z.y) / 2 } : { x: (ax + zx) / 2, y: channel };
+  const lw = label ? (t ? label.h : label.w) : 0, lh = label ? (t ? label.w : label.h) : 0;
+  const spot: Rect = { x: mid.x - lw / 2, y: mid.y - lh / 2, w: lw, h: lh };
+  const inner = [{ x: ax, y: a.y + a.h + 1 }, ...short.slice(1, -1), { x: zx, y: z.y - 1 }];
+  const holds = (g: NodeBox, b: NodeBox): boolean => {
+    const seen = new Set<string>();
+    for (let p: NodeBox | undefined = b; p && !seen.has(p.el.id); p = p.el.parent !== undefined ? boxes.get(p.el.parent) : undefined) {
+      if (p === g) return true;
+      seen.add(p.el.id);
+    }
+    return false;
+  };
+  for (const b of boxes.values()) {
+    if (b === from || b === to || (b.group && (holds(b, from) || holds(b, to)))) continue;
+    const r = rect(b);
+    if (crossesRect(inner, r, b.group ? 0 : 8)) return;
+    if (label && !b.group && spot.x < r.x + r.w + 2 && spot.x + spot.w > r.x - 2 && spot.y < r.y + r.h + 2 && spot.y + spot.h > r.y - 2) return;
+  }
+  for (const other of others) {
+    const o = t ? other.points.map(turn) : other.points;
+    if (runsAlong(short, o, 8) || (label && crossesRect(o, spot, 2))) return;
+  }
+  path.points = t ? short.map(turn) : short;
+  if (label) Object.assign(label, t ? { x: spot.y, y: spot.x } : { x: spot.x, y: spot.y });
+}
+
 /** Move an edge end from the bounding box onto the curved side of a cylinder or pipe. */
 function snap(p: Pt, n: NodeBox): void {
   const bulge = (offset: number, half: number): number => 1 - Math.sqrt(Math.max(0, 1 - (offset / half) ** 2));
@@ -222,21 +391,30 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const numbered = opts.numbered ?? spec.labels === 'numbered';
   const detail = opts.detail ?? spec.detail ?? 'auto';
   const parents = new Set(spec.elements.map((e) => e.parent));
-  const leaves = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node').length;
+  const leaves = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node' && e.type !== 'file').length;
   const compact = detail === 'compact' || (detail === 'auto' && leaves > FULL_DETAIL_MAX);
+  // A code diagram is drawn tighter, and its groups are light bands.
+  const code = spec.type === 'code';
+  // One long path stacks every header, so the cards of a diagram match.
+  const stack = spec.elements.some(longPath);
   const nodeW = compact && numbered ? NODE_W_FLOW : NODE_W;
   const ids = new Set(spec.elements.map((e) => e.id));
+  const byId = new Map(spec.elements.map((e) => [e.id, e]));
+  // Top down, lines arrive from above, where the name would be. So the flat form is for left to right only.
+  const flat = code && direction === 'RIGHT' && Boolean(opts.flat) && spec.elements.some((e) => e.parent !== undefined && ids.has(e.parent));
   const kids = new Map<string | undefined, SpecElement[]>();
   for (const el of spec.elements) {
-    const key = el.parent !== undefined && ids.has(el.parent) ? el.parent : undefined;
+    // Flat, the files stand alone and the groups are not laid out.
+    if (flat && parents.has(el.id)) continue;
+    const key = !flat && el.parent !== undefined && ids.has(el.parent) ? el.parent : undefined;
     kids.set(key, [...(kids.get(key) ?? []), el]);
   }
   const common = {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
     'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.spacing.nodeNodeBetweenLayers': numbered ? '14' : compact ? '18' : '26',
-    'elk.spacing.nodeNode': compact ? '20' : '26',
+    'elk.layered.spacing.nodeNodeBetweenLayers': code ? '38' : numbered ? '14' : compact ? '18' : '26',
+    'elk.spacing.nodeNode': code ? '14' : compact ? '20' : '26',
     'elk.spacing.edgeNode': '18',
     'elk.spacing.edgeEdge': '14',
     'elk.spacing.edgeLabel': '5',
@@ -252,22 +430,48 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const build = (el: SpecElement, depth: number, seen: Set<string>, widen: Map<string, number>): any => {
     const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
     const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
-    const text = group ? { h: 64, lines: [] } : leafText(el, compact, nodeW);
-    const emptyW = Math.max(160, groupMinWidth(el));
-    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyW : nodeW, h: text.h, lines: text.lines });
+    if (!group && el.type === 'file') {
+      const { w, h: cardH, card } = fileCard(el, stack);
+      const lane = flat && el.parent !== undefined ? byId.get(el.parent)?.name : undefined;
+      if (lane) card.lane = lane;
+      const cap = lane ? LANE_CAP : 0, h = cardH + cap;
+      boxes.set(el.id, { el, group, depth, x: 0, y: 0, w, h, lines: [], card });
+      // Left to right, a line ends on the row it concerns: each row and the header has a port on both sides.
+      if (direction !== 'RIGHT') return { id: el.id, width: w, height: h };
+      const port = (row: number, dy: number): unknown[] => (['w', 'e'] as const).map((side) => ({
+        id: portId(el.id, row, side), x: side === 'w' ? 0 : w, y: dy + cap, width: 0, height: 0,
+        layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
+      }));
+      return {
+        id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
+        ports: [...port(-1, card.head / 2), ...card.rows.flatMap((r, i) => port(i, r.dy))],
+      };
+    }
+    const light = code && group;
+    const text = group ? { h: light ? 48 : 64, lines: [] } : leafText(el, compact, nodeW);
+    const emptyW = Math.max(light ? 120 : 160, groupMinWidth(el, light));
+    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyW : nodeW, h: text.h, lines: text.lines, ...(light ? { light } : {}) });
     if (!group) return { id: el.id, width: nodeW, height: text.h };
     const below = new Set(seen).add(el.id);
-    const side = compact ? 14 : 18;
+    const side = light ? 10 : compact ? 14 : 18;
     return {
       id: el.id,
       width: emptyW,
-      height: 64,
+      height: text.h,
       layoutOptions: {
         ...common,
-        'elk.padding': `[top=${compact ? 38 : 46},left=${side},bottom=${side},right=${side + (widen.get(el.id) ?? 0)}]`,
+        'elk.padding': `[top=${light ? 28 : compact ? 38 : 46},left=${side},bottom=${side},right=${side + (widen.get(el.id) ?? 0)}]`,
       },
       children: children.map((c) => build(c, depth + 1, below, widen)),
     };
+  };
+  const portId = (id: string, row: number, side: 'w' | 'e'): string => `${id}\u0000${row}\u0000${side}`;
+  /** The node, or the port of the symbol row or the header, that one end of a line attaches to. */
+  const end = (id: string, symbol: string | undefined, side: 'w' | 'e'): string => {
+    const b = boxes.get(id)!;
+    if (!b.card || direction !== 'RIGHT') return id;
+    const row = symbol === undefined ? -1 : (b.el.symbols ?? []).findIndex((s) => s.name === symbol);
+    return portId(id, row < b.card.rows.length ? row : -1, side);
   };
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
   const elk = new (ELK as any)();
@@ -279,7 +483,9 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
       const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
       labels.set(i, label);
       const pad = rel.from === rel.to ? LOOP_PAD : 0;
-      return [{ id: `e${i}`, sources: [rel.from], targets: [rel.to], labels: [{ id: `l${i}`, text: rel.label, width: label.w + pad, height: label.h + pad, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
+      const ends = { sources: [end(rel.from, rel.fromSymbol, 'e')], targets: [end(rel.to, rel.toSymbol, 'w')] };
+      if (!label.lines.length) return [{ id: `e${i}`, ...ends }];
+      return [{ id: `e${i}`, ...ends, labels: [{ id: `l${i}`, text: rel.label, width: label.w + pad, height: label.h + pad, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
     });
     // Model order keeps the layout close to the order the spec lists things in.
     // ELK rejects it on some nested graphs, so the second attempt runs without it.
@@ -299,7 +505,10 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
     const place = (node: any): void => {
       for (const child of node.children ?? []) {
-        Object.assign(boxes.get(child.id)!, { x: child.x, y: child.y, w: child.width, h: child.height });
+        const b = boxes.get(child.id)!;
+        // The card starts under the name of its group.
+        const cap = b.card?.lane ? LANE_CAP : 0;
+        Object.assign(b, { x: child.x, y: child.y + cap, w: child.width, h: child.height - cap });
         place(child);
       }
     };
@@ -325,8 +534,12 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     };
     walk(done);
     for (const { path, placed } of loops) growLoop(path, boxes.get(path.rel.from)!, placed, paths.filter((p) => p !== path));
+    if (opts.wrap) for (const path of paths) shortenWrap(path, boxes, paths.filter((p) => p !== path), direction);
     for (const path of paths) {
       if (path.points.length < 2) continue;
+      // ELK ends a line on the room kept for a group name above a card. It goes on to the card.
+      const onto = boxes.get(path.rel.to)!, tip = path.points.at(-1)!;
+      if (onto.card?.lane && Math.abs(tip.y - (onto.y - LANE_CAP)) < 0.5) tip.y = onto.y;
       snap(path.points[0]!, boxes.get(path.rel.from)!);
       snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
     }
@@ -349,7 +562,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const gained = new Map<string | undefined, number>();
     for (const b of groups) {
       const inside = gained.get(b.el.id) ?? 0;
-      const missing = Math.max(0, Math.ceil(groupMinWidth(b.el) - b.w - inside));
+      const missing = Math.max(0, Math.ceil(groupMinWidth(b.el, b.light) - b.w - inside));
       if (missing > 0) { widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + missing); again = true; }
       gained.set(b.el.parent, Math.max(gained.get(b.el.parent) ?? 0, inside + missing));
     }
@@ -364,6 +577,24 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     }
     if (!again) break;
   }
+  let width: number = done.width ?? 0, height: number = done.height ?? 0;
+  if (opts.wrap) {
+    // A shortened line leaves the channel ELK kept for it at the edge of the drawing empty.
+    const rects: Rect[] = [...boxes.values(), ...paths.flatMap((p) => [...p.points.map((q) => ({ x: q.x, y: q.y, w: 0, h: 0 })), ...(p.label ? [p.label] : [])])];
+    const left = Math.min(...rects.map((r) => r.x)), top = Math.min(...rects.map((r) => r.y));
+    width = Math.max(...rects.map((r) => r.x + r.w)) - left;
+    height = Math.max(...rects.map((r) => r.y + r.h)) - top;
+    for (const b of boxes.values()) { b.x -= left; b.y -= top; }
+    for (const p of paths) {
+      for (const q of p.points) { q.x -= left; q.y -= top; }
+      if (p.label) { p.label.x -= left; p.label.y -= top; }
+    }
+  }
   for (const b of boxes.values()) b.badge = b.group ? groupBadge(b, paths)?.rect : leafBadge(b);
-  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact };
+  // A wrap that cut nothing gives the same drawing as no wrap.
+  const wrapped = Boolean(opts.wrap) && paths.some((p) => {
+    const a = boxes.get(p.rel.from)!, z = boxes.get(p.rel.to)!;
+    return a !== z && (direction === 'RIGHT' ? z.y >= a.y + a.h && z.x < a.x : z.x >= a.x + a.w && z.y < a.y);
+  });
+  return { width, height, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, flat };
 }

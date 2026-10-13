@@ -428,7 +428,7 @@ Links read
       </dl>
       <h3>Shape a graph (diagram spec in, diagram spec out)</h3>
       <dl>
-        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status.</dd></div>
+        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status. --level file gives a code diagram: files as cards, changed symbols as rows.</dd></div>
         <div><dt>graph from-config</dt><dd>A diagram spec of the whole architecture map in the repository's config.</dd></div>
         <div><dt>graph focus</dt><dd>Keep some elements, their neighbours within N hops, and every ancestor.</dd></div>
         <div><dt>graph collapse</dt><dd>Fold everything inside an element into it and merge the relationships.</dd></div>
@@ -443,7 +443,7 @@ Links read
       </dl>
       <h3>Render</h3>
       <dl>
-        <div><dt>diagram</dt><dd>Lint a diagram spec and draw it as an SVG fitted to GitHub's width. --png adds a PNG to look at. <i>writes local files</i></dd></div>
+        <div><dt>diagram</dt><dd>Lint a diagram spec and draw it as an SVG fitted to GitHub's width, in the layout whose lines read best. --png adds a PNG to look at. --report prints the judgement as JSON. <i>writes local files</i></dd></div>
         <div><dt>legend</dt><dd>A spec's relationships as a Markdown table, to sit under a diagram with numbered lines.</dd></div>
         <div><dt>blast</dt><dd>Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.</dd></div>
       </dl>
@@ -462,7 +462,7 @@ Links read
     <h2 id="diagrams" style="margin:16px 0;max-width:880px">A system diagram in the issue, drawn to fit GitHub’s 860-pixel column.</h2>
     <p class="lead">A JSON spec goes in and an SVG comes out. A diagram can show services, or the inside of one browser tab: threads, workers, WASM modules and the protocols between them. Each status has its own border and badge, so colour is never the only signal.</p>
     <div class="gallery">
-      <figure><img src="assets/dynamic.svg" width="776" height="540" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps run left to right and wrap to fit. A table under the image holds the words.</figcaption></figure>
+      <figure><img src="assets/dynamic.svg" width="686" height="540" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps run left to right and wrap to fit. A table under the image holds the words.</figcaption></figure>
       <figure><img src="assets/change-impact.svg" width="750" height="1022" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
       <figure><img src="assets/in-process.svg" width="707" height="1283" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
     </div>

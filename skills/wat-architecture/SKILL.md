@@ -153,7 +153,7 @@ The numbers point at where to look. The test decides.
 
 **The test:** say what is different in the structure or the flow. If the answer names three or more parts and how they connect, or an order of steps, draw it. If one plain sentence covers it ("adds a flag to `lint`", "renames the field everywhere"), write the sentence and skip the diagram.
 
-Draw at the level where the difficulty sits. For a hard change inside one module, that is a component or dynamic diagram of that module's own parts, not a container diagram with one changed box.
+Draw at the level where the difficulty sits. For a hard change inside one module or a few, that is a code diagram: the files as cards, each with the symbols the change added, changed or removed, and lines from the files that import them. One command writes it from the facts: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/code.json`. A container diagram with one changed box tells the reviewer nothing.
 
 ## Choose what to show
 
@@ -165,7 +165,11 @@ Draw at the level where the difficulty sits. For a hard change inside one module
 | Moves work across a thread, worker or WASM boundary, or changes an ABI or message format | Component, with the execution contexts as nested boundaries |
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
-| Reworks the flow or state inside one component or file | Component or dynamic, with that component's own parts as the boxes |
+| A hard change inside one module or a few, or a change whose point is which functions moved, split, appeared or went away | Code: `graph from-facts --level file`. Files as cards, changed symbols as rows |
+| Changes an exported signature that other files import | Code: the lines show who imports the symbol |
+| Reworks the order of steps or the state inside one component or file | Dynamic, with that component's own parts as the boxes |
 | Passes none of the tests above, whatever its size | None. Use a sentence, a `diff` block or a table. |
 
-Show the changed elements plus one hop of neighbours. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.
+Show the changed elements and what the change reaches. `graph from-facts` scopes the spec that way, so it needs no `focus` step. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.
+
+A change can earn two diagrams: a container or component diagram for the relationship it adds, and a code diagram for the hard part inside one module. Draw the second only when the body would otherwise need a paragraph to say which functions changed.

@@ -1,13 +1,16 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec } from '../spec.ts';
-import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, GROUP_PAD_X, PIPE_RX, groupLabelWidth } from './layout.ts';
+import {
+  BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, GROUP_PAD_X,
+  LANE_NAME_PX, PIPE_RX, groupLabelWidth,
+} from './layout.ts';
 import type { EdgePath, NodeBox, Pt, Rect } from './layout.ts';
-import { escapeXml, fit, textWidth } from './measure.ts';
-import { FONT, applyTheme } from './theme.ts';
-import { fit as fitLayout } from './fit.ts';
-import type { FitOptions } from './fit.ts';
+import { escapeXml, fit, monoWidth, textWidth } from './measure.ts';
+import { FONT, MONO, applyTheme } from './theme.ts';
+import { judge } from './fit.ts';
+import type { FitOptions, Report } from './fit.ts';
 import type { ThemeName } from './theme.ts';
-import { STATUS_BADGE, STATUS_MARK, TYPE_LABEL, active, kindLine } from './vocab.ts';
+import { STATUS_BADGE, STATUS_MARK, STATUS_WORD, TYPE_LABEL, active, kindLine, relText } from './vocab.ts';
 
 const MARGIN = 24;
 const HEADER = 62;
@@ -42,6 +45,10 @@ const CSS = [
   '.e-removed{stroke:var(--removed);stroke-width:2;stroke-dasharray:1.5 5;stroke-linecap:round}',
   '.e-affected{stroke:var(--affected);stroke-width:1.8;stroke-dasharray:12 4 2 4}',
   '.halo{fill:var(--bg);opacity:.94}.rule{stroke:var(--frame)}',
+  `.fd{font-size:${CARD_PATH_PX}px;fill:var(--muted)}.fs{font-size:${CARD_DIR_PX}px;fill:var(--muted)}.fb{font-size:${CARD_PATH_PX}px;font-weight:600;fill:var(--fg)}.fn{font-size:11px;fill:var(--muted)}`,
+  `.sy{font-family:${MONO};font-size:${CARD_SYMBOL_PX}px}.sk{font-size:${CARD_KIND_PX}px;fill:var(--muted);text-anchor:end}`,
+  '.sm{font-size:13px;text-anchor:middle}.card{stroke:var(--stroke);stroke-width:1}',
+  `.lane{fill:var(--group)}.ln{font-size:${LANE_NAME_PX}px;font-weight:600;letter-spacing:.06em;fill:var(--muted)}`,
   '.num{fill:var(--bg);stroke:var(--line);stroke-width:1.2}.en{font-size:11px;font-weight:700;text-anchor:middle}',
   '.n-added{stroke:var(--added);stroke-width:2}.n-changed{stroke:var(--changed);stroke-width:2}.n-removed{stroke:var(--removed);stroke-width:2}.n-affected{stroke:var(--affected);stroke-width:2}',
 ].join('');
@@ -77,6 +84,7 @@ function badge(status: string, r: Rect | undefined): string {
 }
 
 function drawGroup(b: NodeBox): string {
+  if (b.light) return `<rect class="lane" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="8"/>`;
   const status = active(b.el.status);
   let out = `<rect class="sh grp f-${b.depth % 2 ? 'bg' : 'group'}${status ? ` s-${status}` : ''}" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="9"/>`;
   if (status === 'affected') out += `<rect class="ring" x="${n(b.x - 4)}" y="${n(b.y - 4)}" width="${n(b.w + 8)}" height="${n(b.h + 8)}" rx="12"/>`;
@@ -85,6 +93,7 @@ function drawGroup(b: NodeBox): string {
 
 /** Drawn above the edges, on a patch of the group's own fill, so a line that enters the group never strikes the text. */
 function drawGroupLabel(b: NodeBox): string {
+  if (b.light) return `<text class="ln" x="${n(b.x + 10)}" y="${n(b.y + 18)}">${escapeXml(fit(b.el.name, LANE_NAME_PX, (b.w - 20) / 1.06, true).toUpperCase())}</text>`;
   const status = active(b.el.status);
   // `layout` makes a group wide enough for its label, so the two-line and cut forms are a last resort.
   const x = b.x + GROUP_PAD_X, room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w + 10 : 0);
@@ -99,7 +108,36 @@ function drawGroupLabel(b: NodeBox): string {
   return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.badge) : '');
 }
 
+/** A status mark: the same sign in the same colour on a file, on a symbol and in the key. */
+const mark = (status: string, x: number, y: number): string =>
+  `<text class="sm m-${status}" x="${n(x)}" y="${n(y)}">${escapeXml(STATUS_MARK[status]!)}</text>`;
+
+/** A file card: the path, a rule, then one row for each symbol with its mark, its name and its kind. */
+function drawFile(b: NodeBox): string {
+  const card = b.card!;
+  const status = active(b.el.status);
+  const x = b.x + CARD_PAD + (status ? 15 : 0), headY = b.y + (card.stacked ? card.head - 11 : card.head / 2 + 4);
+  let out = `<rect class="card f-bg" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="6"/>`;
+  if (card.lane) out += `<text class="ln" x="${n(b.x + 2)}" y="${n(b.y - 6)}">${escapeXml(fit(card.lane, LANE_NAME_PX, b.w / 1.06 - 4, true).toUpperCase())}</text>`;
+  if (status) out += mark(status, b.x + CARD_PAD + 4, headY + 0.5);
+  out += card.stacked
+    ? `<text class="fs" x="${n(x)}" y="${n(headY - 15)}">${escapeXml(card.dir)}</text><text class="fb" x="${n(x)}" y="${n(headY)}">${escapeXml(card.base)}</text>`
+    : `<text class="fd" x="${n(x)}" y="${n(headY)}">${escapeXml(card.dir)}<tspan class="fb">${escapeXml(card.base)}</tspan></text>`;
+  if (status === 'removed') out += `<path class="strike" d="M${n(x)} ${n(headY - 4)}h${n(((card.stacked ? 0 : textWidth(card.dir, CARD_PATH_PX)) + textWidth(card.base, CARD_PATH_PX, true)) / 1.08)}"/>`;
+  if (card.rows.length || card.note) out += `<path class="rule" d="M${n(b.x)} ${n(b.y + card.head)}h${n(b.w)}"/>`;
+  for (const row of card.rows) {
+    const y = b.y + row.dy + 4;
+    let line = `<text class="sy" x="${n(b.x + CARD_NAME_X)}" y="${n(y)}">${escapeXml(row.name)}</text>`;
+    if (row.kind) line += `<text class="sk" x="${n(b.x + b.w - CARD_PAD)}" y="${n(y)}">${escapeXml(row.kind)}</text>`;
+    if (row.status === 'removed') line = `<g class="gone">${line}<path class="strike" d="M${n(b.x + CARD_NAME_X)} ${n(y - 4)}h${n(monoWidth(row.name, CARD_SYMBOL_PX) / 1.08)}"/></g>`;
+    out += (row.status ? mark(row.status, b.x + CARD_PAD + 4, y + 0.5) : '') + line;
+  }
+  if (card.note) out += `<text class="fn" x="${n(b.x + CARD_PAD)}" y="${n(b.y + card.note.dy + 4)}">${escapeXml(card.note.text)}</text>`;
+  return out;
+}
+
 function drawLeaf(b: NodeBox): string {
+  if (b.card) return drawFile(b);
   const { el } = b;
   const status = active(el.status);
   const cx = b.x + b.w / 2;
@@ -173,6 +211,10 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
     drawEdge({ rel: { from: '', to: '', label: '' }, points: [{ x, y: y + 8 }, { x: x + 30, y: y + 8 }] }, status);
   for (const type of ELEMENT_TYPES) {
     if (!leaves.some((b) => b.el.type === type && !b.el.external)) continue;
+    if (type === 'file') {
+      items.push({ w: 26, label: 'File', draw: (x, y) => `<rect class="card f-bg" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/><path class="rule" d="M${n(x)} ${n(y + 6)}h26"/>` });
+      continue;
+    }
     items.push({
       w: 26, label: TYPE_LABEL[type]!,
       draw: (x, y) => shape(type, x, y, 26, 16, `sh f-${FILL[type] ?? 'container'}`, true) + (type === 'person' ? figure(x + 13, y + 3, 0.42) : ''),
@@ -181,14 +223,27 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
   if (leaves.some((b) => b.el.external)) {
     items.push({ w: 26, label: 'External', draw: (x, y) => shape('system', x, y, 26, 16, 'sh f-external', true) });
   }
-  if (boxes.some((b) => b.group)) {
+  if (boxes.some((b) => b.group && !b.light)) {
     items.push({ w: 26, label: 'Boundary', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
-  if (edges.length) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : numbered ? 'Relationship, numbered in the table' : 'Relationship', draw: (x, y) => sample(x, y) });
+  if (boxes.some((b) => b.light)) {
+    items.push({ w: 26, label: 'Part of the system', draw: (x, y) => `<rect class="lane" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
+  }
+  if (boxes.some((b) => b.card?.lane)) {
+    items.push({ w: 36, label: 'Part of the system', draw: (x, y) => `<text class="ln" x="${n(x)}" y="${n(y + 12)}">NAME</text>` });
+  }
+  const imports = edges.some((e) => !e.rel.label?.trim());
+  if (edges.some((e) => e.rel.label?.trim())) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : numbered ? 'Relationship, numbered in the table' : 'Relationship', draw: (x, y) => sample(x, y) });
+  if (imports) items.push({ w: 30, label: 'Imports', draw: (x, y) => sample(x, y) });
   for (const status of STATUSES) {
     if (status === 'unchanged') continue;
-    const onNode = boxes.some((b) => b.el.status === status);
+    const onNode = boxes.some((b) => !b.card && b.el.status === status);
     const onEdge = edges.some((e) => e.rel.status === status);
+    // A file and its symbols carry the status as a mark, so the key shows the mark.
+    if (!onNode && !onEdge && boxes.some((b) => b.card && (b.el.status === status || b.card.rows.some((r) => r.status === status)))) {
+      items.push({ w: 10, label: STATUS_WORD[status]!, draw: (x, y) => mark(status, x + 5, y + 12.5) });
+      continue;
+    }
     if (!onNode && !onEdge) continue;
     const title = STATUS_BADGE[status]!;
     items.push({
@@ -211,24 +266,25 @@ function describe(spec: DiagramSpec, subtitle: string): string {
   const name = new Map(spec.elements.map((e) => [e.id, e.name]));
   const els = spec.elements.map((e) => {
     const status = active(e.status);
-    return `${e.name} (${e.external ? 'external ' : ''}${(TYPE_LABEL[e.type] ?? e.type).toLowerCase()}${status ? `, ${status}` : ''})`;
+    const symbols = (e.symbols ?? []).map((s) => `${active(s.status) ? `${active(s.status)} ` : ''}${s.name}`);
+    return `${e.name} (${e.external ? 'external ' : ''}${(TYPE_LABEL[e.type] ?? e.type).toLowerCase()}${status ? `, ${status}` : ''}${symbols.length ? `: ${symbols.join(', ')}` : ''})`;
   });
   const rels = spec.relationships.map((r) => {
     const status = active(r.status);
-    return `${name.get(r.from) ?? r.from} to ${name.get(r.to) ?? r.to}: ${r.order !== undefined ? `${r.order}. ` : ''}${r.label}${status ? ` (${status})` : ''}`;
+    return `${name.get(r.from) ?? r.from} to ${name.get(r.to) ?? r.to}: ${r.order !== undefined ? `${r.order}. ` : ''}${relText(r)}${status ? ` (${status})` : ''}`;
   });
   return `${subtitle}. ${els.length} elements: ${els.join(', ')}. ${rels.length} relationships: ${rels.join('; ')}.`;
 }
 
 export interface RenderOptions extends FitOptions { theme?: ThemeName }
-export interface Rendered { svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean }
+export interface Rendered { svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean; report: Report }
 
 export async function renderSvg(spec: DiagramSpec, opts: RenderOptions = {}): Promise<string> {
   return (await render(spec, opts)).svg;
 }
 
 export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promise<Rendered> {
-  const g = await fitLayout(spec, opts);
+  const { layout: g, report } = await judge(spec, opts);
   const kind = spec.type[0]!.toUpperCase() + spec.type.slice(1);
   const subtitle = `${kind} diagram${spec.scope ? ` for ${spec.scope}` : ''}`;
   const width = Math.ceil(Math.max(g.width, textWidth(spec.title, 18, true), textWidth(subtitle, 12.5), MIN_WIDTH) + 2 * MARGIN);
@@ -264,5 +320,5 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
     + `<path class="rule" d="M${MARGIN} ${n(keyTop)}H${width - MARGIN}"/>`
     + `<text class="kh" x="${MARGIN}" y="${n(keyTop + 18)}">KEY</text>${key}`
     + '</svg>\n';
-  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact };
+  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact, report };
 }

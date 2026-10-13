@@ -1,6 +1,6 @@
 import type { DiagramSpec } from '../spec.ts';
 import { relNumber } from './layout.ts';
-import { STATUS_MARK, active } from './vocab.ts';
+import { STATUS_MARK, active, relText } from './vocab.ts';
 
 const cell = (s: string): string => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
@@ -16,7 +16,7 @@ export function toLegend(spec: DiagramSpec): string {
         String(relNumber(spec, r)),
         cell(name.get(r.from) ?? r.from),
         cell(name.get(r.to) ?? r.to),
-        cell(r.label),
+        cell(relText(r)),
         r.technology ? `\`${cell(r.technology)}\`` : '',
         ...(anyStatus ? [status ? `${STATUS_MARK[status]} ${status}` : ''] : []),
       ];

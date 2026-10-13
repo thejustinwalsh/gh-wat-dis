@@ -30,7 +30,7 @@ const lint = (edit: (s: any) => void): { errors: string; warnings: string } => {
 
 test('a clean spec and every shipped example lint without errors', () => {
   assert.deepEqual(lintSpec(base()), { errors: [], warnings: [] });
-  for (const name of ['context', 'container', 'change-impact', 'dynamic', 'whole-system', 'focused']) {
+  for (const name of ['context', 'container', 'change-impact', 'dynamic', 'whole-system', 'focused', 'code']) {
     assert.deepEqual(lintSpec(example(name)).errors, [], name);
   }
   assert.deepEqual(lintSpec(example('container')).warnings, []);
@@ -383,4 +383,185 @@ test('png: the check tells a drawing with its text from one without, and a blank
   assert.match(checkPng('dynamic', svg, blank.png).problems.join('\n'), /the PNG is blank: it holds 1 colour/);
   assert.match(checkPng('dynamic', svg.replace(/viewBox="0 0 \d+/, 'viewBox="0 0 10'), image.png).problems.join('\n'), /twice the SVG viewBox/);
   assert.match(checkPng('dynamic', svg, new TextEncoder().encode('<svg/>')).problems.join('\n'), /not a PNG/);
+});
+
+const fixture = (name: string): DiagramSpec =>
+  JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8')) as DiagramSpec;
+
+test('judge: every example keeps short lines, few corners, clear boxes and clear labels', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  const specs: [string, DiagramSpec][] = [
+    ...['context', 'container', 'change-impact', 'dynamic', 'focused', 'in-process', 'code', 'whole-system'].map((n): [string, DiagramSpec] => [n, example(n)]),
+    ['three groups', fixture('diagram-three-groups')], ['five components', fixture('diagram-five-components')], ['containers', fixture('diagram-containers')],
+  ];
+  for (const [name, spec] of specs) {
+    const { report } = await judge(spec);
+    const c = report.candidates.find((k) => k.chosen)!;
+    assert.ok(c.longest <= 1.2, `${name}: a line is ${c.longest} times the diagonal`);
+    assert.ok(c.maxBends <= (name === 'in-process' ? 8 : 4), `${name}: a line has ${c.maxBends} corners`);
+    assert.ok(c.bends <= c.lines * 3, `${name}: ${c.bends} corners on ${c.lines} lines`);
+    assert.ok(c.detour <= c.lines * 160, `${name}: ${c.detour}px of detour on ${c.lines} lines`);
+    assert.ok(c.crossings <= Math.max(1, c.lines / 4), `${name}: ${c.crossings} crossings on ${c.lines} lines`);
+    assert.equal(c.through, 0, `${name}: a line runs through a box`);
+    assert.equal(c.overlaps, 0, `${name}: a label lies on a line or a box`);
+    // The examples are the good cases: none draws a warning about its lines. Two are a little too wide, and say so.
+    assert.deepEqual(report.warnings.filter((w) => !w.includes('is wider than')), [], name);
+  }
+});
+
+test('judge: a small change never gets wrap-around lines to save height or width', async () => {
+  const { render } = await import('../src/diagram/svg.ts');
+  for (const name of ['diagram-three-groups', 'diagram-five-components']) {
+    const out = await render(fixture(name));
+    const c = out.report.candidates.find((k) => k.chosen)!;
+    assert.ok(out.width <= 860, `${name}: ${out.width}px wide`);
+    assert.ok(c.detour <= 60, `${name}: ${c.detour}px of detour`);
+    assert.ok(c.maxBends <= 4 && c.longest < 0.6, `${name}: ${c.maxBends} corners, ${c.longest} of the diagonal`);
+    assert.ok(out.report.why.startsWith('kept top down, words on the lines'), out.report.why);
+  }
+  // The spec asks for left to right, which is far too wide here. The report says why it was turned.
+  const turned = await render(fixture('diagram-three-groups'));
+  assert.match(turned.report.why, /left to right is \d+px (wide|taller)/);
+  // The container view of this repository, both ways: no line leaves by the far edge to come back in.
+  for (const direction of [undefined, 'RIGHT', 'DOWN'] as const) {
+    const out = await render(fixture('diagram-containers'), direction ? { direction } : {});
+    const c = out.report.candidates.find((k) => k.chosen)!;
+    assert.ok(c.worst === undefined && c.longest <= 0.9 && c.maxBends <= 6, `containers ${direction ?? 'auto'}: ${JSON.stringify(c.worst)} ${c.longest} ${c.maxBends}`);
+  }
+  // On the command line a direction is an order.
+  const forced = await render(fixture('diagram-three-groups'), { direction: 'RIGHT' });
+  assert.equal(forced.direction, 'RIGHT');
+  assert.ok(forced.report.candidates.every((k) => k.direction === 'RIGHT'));
+});
+
+test('judge: a detour, a crossing and a covered label each cost more than the height they save', async () => {
+  const { lineCost, faults } = await import('../src/diagram/judge.ts');
+  const calm = { lines: 4, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, overlaps: 0 };
+  assert.equal(lineCost(calm), 0);
+  assert.ok(lineCost({ ...calm, detour: 2000 }) > 1000);
+  assert.ok(lineCost({ ...calm, through: 1 }) >= 300 && lineCost({ ...calm, overlaps: 1 }) >= 200);
+  assert.deepEqual(faults(calm, (id) => id), []);
+  const poor = faults({ ...calm, crossings: 6, through: 1, overlaps: 2, worst: { from: 'a', to: 'b', length: 1900, direct: 300 } }, (id) => id.toUpperCase());
+  assert.equal(poor.length, 4);
+  assert.match(poor[0]!, /from "A" to "B" runs 1900px where 300px would join them.*graph collapse/);
+  assert.match(poor.join('\n'), /graph focus[\s\S]*--labels numbered/);
+});
+
+test('legend: the table rows carry the numbers drawn on the lines, in the same order', async () => {
+  const { render, toLegend } = await import('../src/diagram/index.ts');
+  const drawn = (svg: string): number[] => [...svg.matchAll(/<text class="en"[^>]*>(\d+)<\/text>/g)].map((m) => Number(m[1]));
+  const rows = (spec: DiagramSpec): string[][] => toLegend(spec).trim().split('\n').slice(2).map((line) => line.split(' | ').map((c) => c.replace(/^\| | \|$/g, '')));
+  // A structure diagram: lines are numbered in the order the spec lists them, and row n is relationship n.
+  const structure = fixture('diagram-containers');
+  const out = await render(structure, { labels: 'numbered' });
+  assert.equal(out.numbered, true);
+  const count = structure.relationships.length;
+  assert.deepEqual(drawn(out.svg), Array.from({ length: count }, (_, i) => i + 1));
+  const name = new Map(structure.elements.map((e) => [e.id, e.name]));
+  assert.deepEqual(rows(structure).map((r) => [Number(r[0]), r[1], r[2], r[3]]),
+    structure.relationships.map((r, i) => [i + 1, name.get(r.from), name.get(r.to), r.label]));
+  // A flow: each line carries its `order`, and the table is sorted by it even when the spec is not.
+  const flow = example('dynamic');
+  flow.relationships.reverse();
+  const steps = await render(flow);
+  assert.equal(steps.numbered, true);
+  assert.deepEqual(drawn(steps.svg), flow.relationships.map((r) => r.order));
+  assert.deepEqual(rows(flow).map((r) => Number(r[0])), [1, 2, 3, 4, 5, 6, 7]);
+  const names = new Map(flow.elements.map((e) => [e.id, e.name]));
+  for (const r of flow.relationships) assert.deepEqual(rows(flow)[r.order! - 1]!.slice(1, 4), [names.get(r.from), names.get(r.to), r.label]);
+});
+
+test('code: a file is a card with a row per symbol, and a line ends on the row it names', async () => {
+  const spec = example('code');
+  assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] });
+  const l = await layout(spec, { direction: 'RIGHT', flat: true });
+  for (const b of l.nodes) {
+    if (b.el.type !== 'file') continue;
+    assert.ok(b.card && b.badge === undefined, b.el.id);
+    assert.deepEqual(b.card.rows.map((r) => r.name), (b.el.symbols ?? []).map((s) => s.name));
+    // Rows lie inside the card, one under the other, below the header.
+    b.card.rows.forEach((r, i) => assert.ok(r.dy > b.card!.head && r.dy < b.h && (i === 0 || r.dy > b.card!.rows[i - 1]!.dy), `${b.el.id} row ${r.name}`));
+  }
+  for (const e of l.edges) {
+    const to = box(l, e.rel.to), from = box(l, e.rel.from), tip = e.points.at(-1)!, tail = e.points[0]!;
+    const row = to.card!.rows.find((r) => r.name === e.rel.toSymbol);
+    // The line ends on the left edge of the card, level with its row, or with the header when it names no symbol.
+    assert.ok(Math.abs(tip.x - to.x) < 0.5, `${e.rel.from} -> ${e.rel.to} ends on the left edge`);
+    assert.ok(Math.abs(tip.y - (to.y + (row ? row.dy : to.card!.head / 2))) < 0.5, `${e.rel.from} -> ${e.rel.to}#${e.rel.toSymbol ?? ''}`);
+    assert.ok(Math.abs(tail.x - (from.x + from.w)) < 0.5 && Math.abs(tail.y - (from.y + from.card!.head / 2)) < 0.5);
+    assert.equal(e.label, undefined);
+    for (const b of l.nodes) if (b !== to && b !== from && !b.group) assert.ok(!crossesRect(e.points, b, -1), `${e.rel.from} -> ${e.rel.to} crosses ${b.el.id}`);
+  }
+  const files = l.nodes.filter((b) => b.card);
+  for (const a of files) for (const b of files) if (a !== b) assert.ok(!overlap(a, b), `${a.el.id} overlaps ${b.el.id}`);
+
+  const { render } = await import('../src/diagram/svg.ts');
+  const out = await render(spec);
+  // Five files fit the page with room to spare, left to right, with no words to number.
+  assert.ok(out.width <= 760 && out.height <= 460, `${out.width} x ${out.height}`);
+  assert.deepEqual([out.direction, out.numbered], ['RIGHT', false]);
+  assertWellFormed(out.svg);
+  assert.match(out.svg, /^<svg[^>]*><title[^>]*>Payment retries move to idempotency keys: Code diagram for/);
+  // Path, symbol names, kinds, and the same marks the lines use. A removed symbol is struck through.
+  for (const text of ['>idempotency.rs<', '>services/payments/src/<', '>retry_authorisation<', '>struct<', 'class="sm m-added"', 'class="sm m-changed"', 'class="sm m-removed"', 'class="sm m-affected"']) {
+    assert.ok(out.svg.includes(text), text);
+  }
+  assert.match(out.svg, /<g class="gone"><text class="sy"[^>]*>backoff_schedule<\/text>.*?class="strike"/);
+  const key = out.svg.slice(out.svg.indexOf('>KEY<'));
+  assert.match(key, />File<.*>Part of the system<.*>Imports<.*>Added<.*>Changed<.*>Removed<.*>Affected</);
+  assert.doesNotMatch(key, /Boundary|Relationship|ADDED/);
+  for (const theme of ['light', 'dark'] as const) assert.doesNotMatch(await renderSvg(spec, { theme }), /var\(--/);
+
+  // Top down there are no rows to end on, so the judge turns to it only when it must.
+  const down = await render(spec, { direction: 'DOWN' });
+  assert.equal(down.direction, 'DOWN');
+  assertWellFormed(down.svg);
+});
+
+test('code: lint checks symbols and symbol ends; Mermaid and the legend say what an unlabelled line means', async () => {
+  const spec = example('code');
+  const edit = (change: (s: any) => void): string => { const s = structuredClone(spec); change(s); const r = lintSpec(s); return [...r.errors, ...r.warnings].join('\n'); };
+  assert.match(edit((s) => { s.relationships[0].toSymbol = 'nope'; }), /toSymbol "nope" is not a symbol of "authorise"/);
+  assert.match(edit((s) => { s.relationships[0].fromSymbol = 'x'; }), /fromSymbol "x" is not a symbol of "checkout"/);
+  assert.match(edit((s) => { s.elements[3].symbols.push({ name: 'authorise' }); }), /lists the symbol "authorise" more than once/);
+  assert.match(edit((s) => { s.elements[3].symbols[0].status = 'new'; }), /symbol "authorise" has unknown status "new"/);
+  assert.match(edit((s) => { s.elements[3].symbols = 'authorise'; }), /symbols must be an array/);
+  assert.match(edit((s) => { s.elements[3].symbols = Array.from({ length: 9 }, (_, i) => ({ name: `f${i}` })); }), /lists 9 symbols and draws the first 8/);
+  assert.match(edit((s) => { s.elements[2].type = 'component'; }), /code diagrams show files.*"checkout" is a component/);
+  // Only a line between two files may go without words.
+  assert.match(edit((s) => { s.elements[2].type = 'component'; }), /checkout -> authorise has no label/);
+  const mermaid = toMermaid(spec);
+  assert.match(mermaid, /subgraph payments\["Payment service"\]/);
+  assert.match(mermaid, /keys\["\+ ADDED<br\/>services\/payments\/src\/idempotency\.rs<br\/>\+ IdempotencyKey<br\/>\+ reserve<br\/>\+ release"\]/);
+  assert.match(mermaid, /checkout -->\|"Imports authorise"\| authorise/);
+  assert.match(mermaid, /lib -->\|"Imports"\| keys/);
+  const { toLegend } = await import('../src/diagram/index.ts');
+  assert.match(toLegend(spec), /\| services\/orders\/src\/checkout\.rs \| services\/payments\/src\/authorise\.rs \| Imports authorise \|/);
+});
+
+test('cli: stderr says what layout was kept, and --report prints the judgement as JSON', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'wat-report-'));
+  const run = (...args: string[]) => spawnSync(process.execPath, [fileURLToPath(new URL('./diagram-run.ts', import.meta.url)), ...args], { encoding: 'utf8' });
+  const spec = fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url));
+  const plain = run(spec, '-o', join(dir, 'a.svg'));
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.equal(plain.stdout.trim(), join(dir, 'a.svg'));
+  assert.match(plain.stderr, /^\d+ x \d+px, top down$/m);
+  assert.match(plain.stderr, /^layout: kept top down, words on the lines, two rows, the best of \d+ layouts: left to right is \d+px/m);
+  const out = run(spec, '-o', join(dir, 'b.svg'), '--png', join(dir, 'b.png'), '--report');
+  assert.equal(out.status, 0, out.stderr);
+  const report = JSON.parse(out.stdout) as { svg: string; png: string; width: number; direction: string; labels: string; why: string; warnings: string[]; candidates: { chosen: boolean; direction: string; score: number; detour: number }[] };
+  assert.deepEqual([report.svg, report.png, report.direction, report.labels], [join(dir, 'b.svg'), join(dir, 'b.png'), 'DOWN', 'text']);
+  assert.ok(report.width <= 860 && report.why.startsWith('kept top down'));
+  assert.deepEqual(report.warnings, []);
+  const kept = report.candidates.filter((c) => c.chosen);
+  assert.equal(kept.length, 1);
+  assert.ok(report.candidates.every((c) => c.score >= kept[0]!.score));
+  assert.ok(report.candidates.some((c) => c.direction === 'RIGHT' && c.detour > 0), 'the wrap-around layouts are in the list, with their detours');
+  assert.equal(run(spec, '--report', '-o', '-').status, 2);
 });

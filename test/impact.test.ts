@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { analyze, listElements, reachOf, resolveOwners, toDiagramSpec, toMarkdown } from '../src/impact/index.ts';
+import { analyze, listElements, reachOf, resolveOwners, toCodeSpec, toDiagramSpec, toMarkdown } from '../src/impact/index.ts';
+import { lintSpec } from '../src/diagram/lint.ts';
 import type { Facts } from '../src/impact/index.ts';
 import { ELEMENT_TYPES, PROVENANCE, STATUSES } from '../src/spec.ts';
 import type { DiagramSpec } from '../src/spec.ts';
@@ -307,6 +308,46 @@ test('ts: elements, edges, markdown and spec', async () => {
   assert.equal(all.relationships.length, facts.edges.length);
 });
 
+test('ts: file level spec has a card per file with changed symbols and per importer, and lines to symbol rows', async () => {
+  const { facts } = await tsFixture();
+  const { spec, drawn, changedLeftOut, dependentsLeftOut } = toCodeSpec(facts);
+  assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] });
+  assert.equal(spec.type, 'code');
+  const files = spec.elements.filter((e) => e.type === 'file');
+  assert.equal(files.length, drawn);
+  const price = files.find((e) => e.id === 'packages/shared/src/price.ts')!;
+  assert.equal(price.status, 'changed');
+  assert.ok(price.symbols!.length > 0 && price.symbols!.every((s) => s.kind && ['added', 'changed', 'removed'].includes(s.status!)));
+  assert.equal(price.symbols!.find((s) => s.name === 'formatPrice')!.status, 'changed');
+  // Every changed symbol the card lists is a fact, and the card says when it lists only some.
+  for (const s of price.symbols!) assert.ok(facts.symbols.some((f) => f.file === price.id && f.name === s.name), s.name);
+  // An importer outside the diff is a card with no rows. It is affected when a symbol it names changed its signature.
+  const server = files.find((e) => e.id === 'packages/api/src/server.ts')!;
+  assert.deepEqual([server.symbols, server.status], [undefined, 'affected']);
+  assert.ok(spec.relationships.some((r) => r.from === server.id && r.to === price.id && r.toSymbol === 'formatPrice' && r.label === ''));
+  for (const r of spec.relationships) {
+    if (r.toSymbol !== undefined) assert.ok(files.find((e) => e.id === r.to)!.symbols!.some((s) => s.name === r.toSymbol), `${r.to}#${r.toSymbol}`);
+  }
+  // Groups are the architecture elements, one level deep, and only when there is more than one.
+  const groups = spec.elements.filter((e) => e.type === 'boundary');
+  assert.ok(groups.length > 1 && groups.every((g) => g.parent === undefined));
+  assert.ok(files.every((e) => e.parent === undefined || groups.some((g) => g.id === e.parent)));
+  // A changed file with no changed symbol is counted, not drawn.
+  assert.ok(changedLeftOut.includes('docs/pricing.md') || changedLeftOut.length > 0);
+  assert.ok(changedLeftOut.every((f) => !files.some((e) => e.id === f)));
+  assert.match(spec.scope!, new RegExp(`${drawn} files drawn, ${changedLeftOut.length} more changed files? not drawn`));
+  assert.deepEqual(dependentsLeftOut, []);
+
+  // Past the budget, files with changed exported symbols stay and importers go first.
+  const two = toCodeSpec(facts, { maxFiles: 2, title: 'Two' });
+  assert.equal(two.spec.title, 'Two');
+  assert.equal(two.drawn, 2);
+  assert.ok(two.spec.elements.some((e) => e.id === price.id));
+  assert.ok(two.dependentsLeftOut.length > 0);
+  assert.match(two.spec.scope!, /more importers? not drawn/);
+  assert.deepEqual(lintSpec(two.spec).errors, []);
+});
+
 test('ts: working tree picks up staged, unstaged and untracked files', async () => {
   const r = repo();
   r.commit({ 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': "import { a } from './a';\nexport const b = a;\n", 'src/c.ts': 'export const c = 1;\n' }, 5);
@@ -386,10 +427,15 @@ test('cli: impact | blast, graph from-facts, owners from stdin, reach, elements,
   assert.equal((JSON.parse(cli(['elements', '--cwd', dir])) as { mapping: string }).mapping, 'workspace');
   for (const cmd of ['impact', 'blast', 'reach', 'owners', 'elements']) assert.match(cli([cmd, '--help']), /^Usage: gh-wat-dis /);
   assert.match(cli(['graph', 'from-facts', '--help']), /^Usage: gh-wat-dis graph from-facts/);
+  const code = JSON.parse(cli(['graph', 'from-facts', '-', '--level', 'file', '--max-files', '3'], out)) as DiagramSpec;
+  assert.deepEqual([code.type, code.elements.filter((e) => e.type === 'file').length], ['code', 3]);
   const fails = (args: string[], input = ''): number => {
     try { cli(args, input); return 0; } catch (e) { return (e as { status: number }).status; }
   };
   assert.equal(fails(['impact', '--nope']), 2);
+  assert.equal(fails(['graph', 'from-facts', '-', '--level', 'line'], out), 2);
+  assert.equal(fails(['graph', 'from-facts', '-', '--max-files', '3'], out), 2);
+  assert.equal(fails(['graph', 'from-facts', '-', '--level', 'file', '--all'], out), 2);
   assert.equal(fails(['blast'], '{"not":"facts"}'), 2);
   assert.equal(fails(['reach', '--cwd', dir]), 2);
   assert.equal(fails(['reach', 'doesNotExist', '--cwd', dir]), 1);
@@ -587,7 +633,9 @@ test('config: architecture map drives elements, edges and labels', async () => {
 
   const spec = toDiagramSpec(facts);
   assertSpecValid(spec);
-  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['client', 'db', 'mail', 'platform', 'server']);
+  // `mail` is an unchanged neighbour the change does not reach, so only --all draws it.
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['client', 'db', 'lib', 'platform', 'server']);
+  assert.ok(toDiagramSpec(facts, { all: true }).elements.some((e) => e.id === 'mail'));
   const rel = spec.relationships.find((x) => x.from === 'client' && x.to === 'server')!;
   assert.deepEqual([rel.label, rel.technology, rel.meta], ['calls API', 'HTTPS', { weight: 1, provenance: 'exact', source: 'config' }]);
   assert.equal(spec.elements.find((e) => e.id === 'server')!.description, 'Serves requests');

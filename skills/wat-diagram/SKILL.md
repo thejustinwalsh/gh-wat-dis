@@ -1,6 +1,6 @@
 ---
 name: wat-diagram
-description: Make a system design diagram as an SVG and attach it to a GitHub issue, PR or comment. Writes a small JSON spec of C4 elements and relationships with optional change status (added, changed, removed, affected), lints it against C4 notation, renders it with ELK layout, and uploads it with gh --attach. Use when the user asks for an architecture, context, container, component, sequence or before/after diagram, or when another wat skill calls for one.
+description: Make a system design diagram as an SVG and attach it to a GitHub issue, PR or comment. Writes a small JSON spec of C4 elements and relationships with optional change status (added, changed, removed, affected), lints it against C4 notation, renders it with ELK layout, and uploads it with gh --attach. Use when the user asks for an architecture, context, container, component, code, sequence or before/after diagram, or when another wat skill calls for one.
 license: MIT
 ---
 
@@ -12,16 +12,17 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 
 ## Steps
 
-1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment. A container diagram keeps the people and the external systems that have a line to a container: they show who and what the system talks to.
+1. **Pick the type and scope.** One level per diagram: context, container, component, code, dynamic or deployment. A code diagram shows files and the symbols a change touched: see "Code level" below. A container diagram keeps the people and the external systems that have a line to a container: they show who and what the system talks to.
 2. **Get the elements.**
-   - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`.
+   - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`. The spec holds the elements the change touched, the ones it reaches, and both ends of each relationship it added or removed. It is scoped already: do not run `focus` on it. `--all` gives the whole map with the statuses on it.
+   - From a change, at code level: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/code.json`.
    - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`. That spec holds every element, components included. For the container view of the whole system, pipe it through `collapse`, which folds the components into their containers: `npx gh-wat-dis graph from-config --type container --title "<System>: containers" | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/containers.json`. `--type` and `--title` label the diagram. A whole-system view shows the map as it is: keep every relationship and its label. Do not drop or reword one to tidy the picture; when there are many, the renderer numbers the lines and the legend table carries the words. If the map is wrong or out of date, say so in your reply and offer to correct the map, not the picture.
    - From neither: read the code. Never draw an element you did not find.
-3. **Shape the spec.** The spec is the one format every graph tool reads and writes, so shape it in steps:
+3. **Shape the spec** when it needs it. The spec is the one format every graph tool reads and writes, so shape it in steps. A spec from `from-facts` often needs none. A spec from the map, or one with more than about 8 elements, does:
    ```bash
    npx gh-wat-dis graph stats .wat-tmp/change.json     # how big is it?
-   npx gh-wat-dis graph focus .wat-tmp/change.json --on status:changed,added,removed --hops 1 \
-     | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/<name>.json
+   npx gh-wat-dis graph collapse .wat-tmp/change.json --to-type container > .wat-tmp/<name>.json
+   npx gh-wat-dis graph focus .wat-tmp/system.json --on <id,id> --hops 1 > .wat-tmp/<name>.json
    ```
    | Filter | Use it to |
    |---|---|
@@ -42,14 +43,27 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ```
    Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`. When the fact is known and the architecture map lacks it (a relationship with no `technology`), set it in the spec, tell the user, and offer to save it in `.agents/gh-wat-dis/config.json`.
    The title names the change ("Checkout: payment retries move to a worker"). For a view of the system with no change in it, name the system and the view: "Storefront: containers".
-5. **Read what the renderer reports.** It tries top-down and left-to-right, with words or numbers on the lines, and keeps the shortest layout that fits 860px. It prints the size and the layout it chose.
-   - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`.
-   - `wider than GitHub's 860px`, or taller than about 900px: split it (below) or cut elements.
+5. **Read what the renderer reports.** It lays the spec out several ways (top-down and left-to-right, words or numbers on the lines, one row or two) and judges each one: size, and also how far the lines run, how many corners and crossings they have, and whether a line or a label lies on a box. It keeps the one that reads best. Stderr has these lines:
+   - The size: `681 x 766px, top down`.
+   - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`. Row n of the table is the line that carries the number n.
+   - `layout:` what it kept and what each other choice cost. "left to right is 1449px wide" means the direction in the spec did not fit, so the drawing was turned. Leave it turned, or pass `--direction` to force yours.
+   - `warning:` one for each fault that is left. A drawing with no warning needs no reshaping. Each warning names its fix:
+
+   | Warning | Do this, then render again |
+   |---|---|
+   | `wider than GitHub's 860px body` | Fold groups: `graph collapse --to-type container`. Or keep the change and one hop: `graph focus --on <ids> --hops 1`. Or split it (below). |
+   | `the line from "A" to "B" runs ...px where ...px would join them` | A line goes the long way round a group. Fold that group with `graph collapse --into <id>`, or split the diagram. |
+   | `line crossings` | Too many relationships for one picture. `graph focus --on <ids> --hops 1`, or `graph drop --status unchanged --orphans`. |
+   | `passes through a box that is not theirs` | The same as crossings: cut the diagram down. |
+   | `labels lie on a line or a box` | Draw numbers on the lines: `--labels numbered`, with the legend table. |
+
+   Taller than about 900px with no warning: split it or cut elements all the same.
+   To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `warnings`, and `candidates`, the metrics of every layout tried (`detour`, `bends`, `crossings`, `through`, `overlaps`, `score`, and `chosen`).
 6. **Look at it.** Draw a PNG beside the SVG and open it with your image tool:
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg --png .wat-tmp/<name>.png
    ```
-   Check that no label overlaps a box, that nothing is cut at an edge, and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram. This command is the way to see a diagram: it draws the whole image at twice its size, which a preview or thumbnail tool does not promise. The PNG is for you to inspect. GitHub gets the SVG. The PNG shows the light colours, and both colour schemes share one layout, so one look covers both.
+   Check that no label overlaps a box, that nothing is cut at an edge, that no line takes a route you would not draw by hand, and that the changed elements stand out. The report catches most of this, and your eyes catch the rest. If it reads as a hairball, cut elements or split the diagram. This command is the way to see a diagram: it draws the whole image at twice its size, which a preview or thumbnail tool does not promise. The PNG is for you to inspect. GitHub gets the SVG. The PNG shows the light colours, and both colour schemes share one layout, so one look covers both.
 7. **No issue or PR to put it in?** When the user asked only for the diagram, stop here: give the path of the SVG and print the legend table when the lines are numbered. Do not attach it anywhere.
 8. **Reference it** in the body by its local path, centred. The alt text is the diagram title:
    ```markdown
@@ -93,15 +107,17 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 
 | Field | Values |
 |---|---|
-| `type` | `context`, `container`, `component`, `dynamic`, `deployment`, `landscape` |
-| `direction` | `DOWN` (default), `RIGHT` for pipelines and sequences |
-| element `type` | `person`, `system`, `container`, `component`, `datastore`, `queue`, `boundary`, `node` |
+| `type` | `context`, `container`, `component`, `code`, `dynamic`, `deployment`, `landscape` |
+| `direction` | `DOWN` or `RIGHT`. A wish: the renderer turns the drawing when the other way reads much better. Omit it to let the renderer choose. |
+| element `type` | `person`, `system`, `container`, `component`, `datastore`, `queue`, `boundary`, `node`, and `file` in a code diagram |
 | `kind` | Free text that replaces the type label: `Web Worker`, `WASM module`, `Thread`, `npm package`, `Rust crate`, `Shared memory` |
 | `parent` | id of a `boundary`, `node` or `system` element: nests the element inside it |
 | `detail` | `auto` (default), `full`, `compact`. Compact shows name and technology only. `auto` goes compact above 5 elements. |
 | `external` | `true` for anything the team does not own |
 | `status` | `added`, `changed`, `removed`, `affected` (reached, not modified). Omit for unchanged. |
 | relationship `order` | Step number on a `dynamic` diagram |
+| file `symbols` | Rows of a `file` card: `{ "name", "kind", "status" }`. See "Code level". |
+| relationship `toSymbol`, `fromSymbol` | The symbol row of a `file` that the line ends on or leaves from |
 
 ## Rules
 
@@ -128,6 +144,55 @@ Not every system is services and databases. For a library, an app in one browser
 - **Draw a request and its reply as one edge** when they travel the same channel: "Posts LayoutRequest, gets glyph runs back".
 - **Leave out build-time edges** such as `import type` of a shared types package, unless the change is to that contract. Name the package in the body.
 - **Nest by where code runs, not by folder.** A package that runs in two contexts appears in the one this change touches.
+
+## Code level
+
+A code diagram is C4 level 4, for a change. A file is a card. Its header is the path. Under it is one row for each symbol the change added (`+`), changed (`~`) or removed (`−`). A line runs from a file to the symbol it imports and ends on that symbol's row. The architecture element a file belongs to is named above the card, or drawn as a light band round its files.
+
+Use it when the point of the change is inside the code:
+
+- A hard change inside one module or a few: the component diagram would show one box marked "changed".
+- A change about which functions moved, split, appeared or went away.
+- A changed signature, where the reader needs to see who imports it.
+
+Do not use it for a change that adds or removes an element or a relationship: that is a container or component diagram. A pull request may carry both.
+
+One command writes the spec from the facts:
+
+```bash
+npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/code.json
+npx gh-wat-dis diagram .wat-tmp/code.json -o .wat-tmp/code.svg --png .wat-tmp/code.png
+```
+
+It draws up to 8 files (`--max-files`): the files with changed exported symbols first, then the files that import them, then other files with changed symbols. A changed file with no changed symbol, such as a page or a manifest, is not drawn. The scope line under the title counts what was left out, and stderr lists it. Say in the body what the picture leaves out when it matters.
+
+Then open the JSON and fix what the facts cannot know. Set the `title` to name the change. Drop a card that adds nothing with `graph drop --ids <path>`. Add a line the import graph does not see, such as a script that writes a page: give it a `label`, and it is drawn with its words. To end a line on a symbol that did not change, add that symbol to the file's `symbols` with no `status`.
+
+```json
+{
+  "title": "Payment retries move to idempotency keys",
+  "type": "code",
+  "direction": "RIGHT",
+  "elements": [
+    { "id": "payments", "type": "boundary", "name": "Payment service" },
+    { "id": "retry", "type": "file", "name": "services/payments/src/retry.rs", "parent": "payments", "status": "changed",
+      "symbols": [
+        { "name": "retry_authorisation", "kind": "fn", "status": "changed" },
+        { "name": "backoff_schedule", "kind": "fn", "status": "removed" }
+      ] },
+    { "id": "keys", "type": "file", "name": "services/payments/src/idempotency.rs", "parent": "payments", "status": "added",
+      "symbols": [{ "name": "release", "kind": "fn", "status": "added" }] }
+  ],
+  "relationships": [
+    { "from": "retry", "to": "keys", "toSymbol": "release", "label": "" }
+  ]
+}
+```
+
+- A line between two files may have an empty `label`: it means an import, and the key says so.
+- A card draws 8 rows at most. List the symbols the change is about.
+- Left to right is the form that ends lines on rows. Top down, lines end on the card.
+- About five files fit in 700 by 350 pixels. Past eight, make two diagrams.
 
 ## Overview plus scoped views
 
@@ -156,7 +221,7 @@ Use a flow for behaviour over time: a request path, a retry, a migration sequenc
 
 - Above 5 elements the renderer drops descriptions. The body's `Change` table carries them.
 - A chain of more than 5 steps top to bottom reads as a scroll. Cut it with `graph focus`, or fold a side with `graph collapse`.
-- `direction: RIGHT` suits a pipeline of 4 or fewer stages. It gets wide fast.
+- `direction: RIGHT` suits a pipeline of 4 or fewer stages. It gets wide fast, and the renderer turns it top down when it does.
 - Remove an edge that the reader does not need for this change.
 
 ## Options
@@ -166,6 +231,7 @@ Use a flow for behaviour over time: a request path, a retry, a migration sequenc
 | Check a spec only | `npx gh-wat-dis diagram spec.json --lint-only` |
 | Show or hide descriptions | `--detail full` or `--detail compact` |
 | Words or numbers on the lines | `--labels text` or `--labels numbered` (default `auto`) |
+| The judgement as JSON | `--report` |
 | Force a direction | `--direction down` or `--direction right` |
 | Fit another width | `--max-width 700` |
 | Legend table for numbered lines | `npx gh-wat-dis legend spec.json` |

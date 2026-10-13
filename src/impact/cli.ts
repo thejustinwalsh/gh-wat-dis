@@ -5,6 +5,7 @@ import { locate } from '../tools/cccc.ts';
 import { toMarkdown } from './markdown.ts';
 import { listElements, reachOf, resolveOwners } from './reach.ts';
 import { toDiagramSpec } from './to-spec.ts';
+import { MAX_FILES, toCodeSpec } from './to-code-spec.ts';
 import type { Facts } from './types.ts';
 
 const ALIASES = { '-h': '--help' };
@@ -139,20 +140,44 @@ export const elements: Command = async (argv) => {
   return 0;
 };
 
-const SPEC_HELP = `Usage: gh-wat-dis graph from-facts [facts.json|-] [--title "<t>"] [--all]
+const SPEC_HELP = `Usage: gh-wat-dis graph from-facts [facts.json|-] [--title "<t>"] [--all] [--level file [--max-files <n>]]
 
 Turn impact facts into a diagram spec. Reads Facts JSON from a file or stdin, prints the spec.
 
   --title <t>   diagram title
+  --level <l>   element (default): the architecture elements the change touches and reaches.
+                file: a code diagram. One card for each file whose symbols changed and for each file
+                that imports one, a row for each changed symbol, a line from each importer to the
+                symbol it names. For a hard change inside one or a few modules.
+  --max-files <n>
+                with --level file: cards to draw (default ${MAX_FILES}). Files with changed exported
+                symbols come first, then their importers. The rest are counted in the scope line
+                and listed on stderr.
   --all         every element and edge in the facts
-                (default: changed, added and removed elements plus their direct neighbours)
+                (default: the changed, added, removed and affected elements, both ends of
+                each added or removed relationship, and their ancestors)
 
-Nothing else is pruned. Shape the result with "gh-wat-dis graph focus|collapse|drop|merge".
+Shape the result with "gh-wat-dis graph focus|collapse|drop|merge".
 `;
 
 export const factsToSpec: Command = async (argv) => {
-  const a = parseArgs(argv, { booleans: ['help', 'all'], strings: ['title'], aliases: ALIASES });
+  const a = parseArgs(argv, { booleans: ['help', 'all'], strings: ['title', 'level', 'max-files'], aliases: ALIASES });
   if (a.help) return help(SPEC_HELP);
+  const level = a.level ?? 'element';
+  if (level !== 'element' && level !== 'file') throw new UsageError('--level must be element or file');
+  if (level === 'file') {
+    const maxFiles = a['max-files'] === undefined ? MAX_FILES : Number(a['max-files']);
+    if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new UsageError('--max-files must be a whole number, 1 or more');
+    if (a.all) throw new UsageError('--all draws the whole map: it does not go with --level file');
+    const out = toCodeSpec(readFacts(a._[0]), { maxFiles, ...(a.title !== undefined ? { title: a.title } : {}) });
+    const list = (files: string[]): string => `${files.slice(0, 6).join(', ')}${files.length > 6 ? `, and ${files.length - 6} more` : ''}`;
+    if (!out.drawn) console.error('gh-wat-dis graph from-facts: no changed symbol in the facts, so there is no code to draw; use the default level');
+    if (out.changedLeftOut.length) console.error(`gh-wat-dis graph from-facts: ${out.changedLeftOut.length} changed files not drawn (no changed symbol, or past --max-files): ${list(out.changedLeftOut)}`);
+    if (out.dependentsLeftOut.length) console.error(`gh-wat-dis graph from-facts: ${out.dependentsLeftOut.length} importers not drawn (past --max-files): ${list(out.dependentsLeftOut)}`);
+    json(out.spec);
+    return 0;
+  }
+  if (a['max-files'] !== undefined) throw new UsageError('--max-files goes with --level file');
   const spec = toDiagramSpec(readFacts(a._[0]), { all: !!a.all, ...(a.title !== undefined ? { title: a.title } : {}) });
   if (!spec.elements.length) console.error('gh-wat-dis graph from-facts: no changed elements in the facts; pass --all for the whole map');
   json(spec);

@@ -1,6 +1,8 @@
 export type ThemeName = 'auto' | 'light' | 'dark';
 
 export const FONT = '-apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
+/** For symbol names. */
+export const MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
 
 /** One colour per role. Text roles are checked against every fill for WCAG AA in test/diagram.test.ts. */
 export interface Palette {

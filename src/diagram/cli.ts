@@ -24,12 +24,19 @@ Usage: npx gh-wat-dis diagram [spec.json|-] [options]
   --lint-only           check the spec and draw nothing
   --detail <level>      auto (default: descriptions only up to 5 elements), full, compact
   --labels <mode>       auto (default), text, numbered. Numbered lines need the table from "legend".
-  --direction <d>       down or right. Default: whichever fits the width better.
+  --direction <d>       down or right. Default: whichever reads better. A direction in the spec is a wish:
+                        the other one is drawn when it reads much better. This option is an order.
+  --report              print the judgement as JSON to stdout in place of the written paths: the size, the
+                        layout kept and why, the warnings, and the metrics of every layout tried
   --max-width <px>      width to fit (default 860, the GitHub issue body)
   --no-lint             draw without checking
 
 With no -o, a spec read from a file is drawn to <spec>.svg beside it and the path is printed.
 A spec read from stdin is drawn to stdout. Written paths go to stdout, lint messages to stderr.
+
+The spec is laid out several ways and the one that reads best is kept: short lines, few corners and
+crossings count as well as size. Stderr gets the size, then a "layout:" line with what was kept and why,
+then a warning for each fault that is left, with the "graph" filter that mends it.
 Exit 0 ok, 1 lint errors, 2 usage error.
 
 Shape the spec first with "npx gh-wat-dis graph --help".
@@ -40,7 +47,7 @@ type Theme = (typeof THEMES)[number];
 
 export const main: Command = async (argv) => {
   const args = parseArgs(argv, {
-    booleans: ['help', 'mermaid', 'lint-only', 'no-lint'],
+    booleans: ['help', 'mermaid', 'lint-only', 'no-lint', 'report'],
     strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png'],
     aliases: { '-o': '--output', '-h': '--help' },
   });
@@ -76,6 +83,7 @@ export const main: Command = async (argv) => {
   if (args.mermaid) { process.stdout.write(toMermaid(spec)); return 0; }
 
   const target = output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : '-');
+  if (args.report && (target === '-' || theme === 'split')) throw new UsageError('--report prints JSON to stdout: give -o <file>, and do not combine it with --theme split');
   if (args.png && theme === 'split') throw new UsageError('--png draws one image: do not combine it with --theme split');
   if (theme === 'split') {
     const base = target.replace(/\.svg$/i, '');
@@ -86,21 +94,34 @@ export const main: Command = async (argv) => {
     return 0;
   }
   const out = await render(spec, { ...opts, theme });
+  const say = (path: string): void => { if (!args.report) console.log(path); };
   if (target === '-') process.stdout.write(out.svg);
-  else { writeFileSync(target, out.svg); console.log(target); }
+  else { writeFileSync(target, out.svg); say(target); }
   console.error(`${out.width} x ${out.height}px, ${out.direction === 'RIGHT' ? 'left to right' : 'top down'}${out.compact ? ', compact' : ''}${out.numbered ? ', numbered lines' : ''}`);
   if (out.numbered && spec.type !== 'dynamic') {
     console.error(`note: lines are numbered so the diagram fits. Put the table under the image: npx gh-wat-dis legend ${file ?? '<spec.json>'}`);
   }
-  if (out.width > maxWidth) {
-    console.error(`warning: ${out.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Cut elements with "graph focus" or "graph collapse", or split into two diagrams.`);
+  console.error(`layout: ${out.report.why}`);
+  const { warnings } = out.report;
+  // The title can make the image wider than the drawing the report judged.
+  if (out.width > maxWidth && !warnings.some((w) => w.includes('is wider than'))) {
+    warnings.unshift(`${out.width}px is wider than GitHub's ${maxWidth}px body, so text will shrink. Shorten the title.`);
   }
+  for (const w of warnings) console.error(`warning: ${w}`);
   if (args.png) {
     // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
     const { toPng } = await import('../tools/raster.ts');
     const image = toPng(theme === 'auto' ? await renderSvg(spec, { ...opts, theme: 'light' }) : out.svg);
     writeFileSync(args.png, image.png);
-    if (target !== '-') console.log(args.png); else console.error(args.png);
+    if (target !== '-') say(args.png); else console.error(args.png);
+  }
+  if (args.report) {
+    const { width, height } = out;
+    console.log(JSON.stringify({
+      svg: target, ...(args.png ? { png: args.png } : {}), width, height, maxWidth,
+      direction: out.direction, labels: out.numbered ? 'numbered' : 'text', compact: out.compact,
+      why: out.report.why, warnings, candidates: out.report.candidates,
+    }, null, 2));
   }
   return 0;
 };

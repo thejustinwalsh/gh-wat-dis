@@ -110,7 +110,7 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 ```bash
 npx gh-wat-dis impact \
   | npx gh-wat-dis graph from-facts \
-  | npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 \
+  | npx gh-wat-dis graph collapse --to-type container \
   | npx gh-wat-dis diagram -o change.svg
 ```
 

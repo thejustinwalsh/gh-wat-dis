@@ -11,11 +11,12 @@ Each `.json` is a diagram spec (`src/spec.ts`). Each `.svg` beside it is what `d
 | `dynamic.json` | A dynamic diagram: relationships carry `order` and render as numbered steps. |
 | `whole-system.json` | 27 elements at component level. Too big to read in a pull request; `diagram` warns about it. |
 | `focused.json` | `whole-system.json` cut down to the change by the pipeline below. |
+| `code.json` | A code diagram of the same change: files as cards, a row for each symbol the change touched, lines that end on the symbol a file imports. `graph from-facts --level file` writes one from impact facts. |
 
 ## Redraw
 
 ```sh
-for f in context container change-impact dynamic whole-system focused; do
+for f in context container change-impact dynamic whole-system focused code; do
   npx gh-wat-dis diagram examples/diagrams/$f.json
 done
 ```

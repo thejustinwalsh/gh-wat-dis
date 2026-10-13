@@ -1,0 +1,149 @@
+{
+  "title": "gh-wat-dis: containers",
+  "type": "container",
+  "scope": "gh-wat-dis",
+  "elements": [
+    {
+      "id": "engineer",
+      "name": "Engineer",
+      "description": "Reads issues and PRs, approves drafts",
+      "type": "person"
+    },
+    {
+      "id": "agent",
+      "name": "Coding agent",
+      "external": true,
+      "description": "Claude Code, Codex, Cursor and others. Loads the skills and runs the tools",
+      "type": "system"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "external": true,
+      "description": "Holds issues, pull requests, milestones and attachments",
+      "type": "system"
+    },
+    {
+      "id": "cccc",
+      "name": "cccc",
+      "external": true,
+      "technology": "Rust binary",
+      "description": "Scores the complexity of each function",
+      "type": "system"
+    },
+    {
+      "id": "skills",
+      "name": "wat skills",
+      "technology": "Markdown",
+      "description": "Tell the agent what to write and which tool to run",
+      "type": "container"
+    },
+    {
+      "id": "cli",
+      "name": "gh-wat-dis CLI",
+      "technology": "TypeScript, Node",
+      "description": "Dispatches one small tool per command",
+      "type": "container",
+      "meta": {
+        "collapsed": 6
+      }
+    },
+    {
+      "id": "site",
+      "name": "Site",
+      "technology": "Static HTML, GitHub Pages",
+      "description": "Shows what the skills produce and serves llms.txt",
+      "type": "container"
+    },
+    {
+      "id": "ci",
+      "name": "CI and Pages workflows",
+      "technology": "GitHub Actions",
+      "description": "Checks each change and publishes the site",
+      "type": "container"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "engineer",
+      "to": "agent",
+      "label": "Asks for an issue, PR or milestone"
+    },
+    {
+      "from": "agent",
+      "to": "skills",
+      "label": "Loads instructions from"
+    },
+    {
+      "from": "agent",
+      "to": "cli",
+      "label": "Runs tools through",
+      "technology": "npx"
+    },
+    {
+      "from": "agent",
+      "to": "github",
+      "label": "Writes issues and PRs to",
+      "technology": "gh CLI"
+    },
+    {
+      "from": "agent",
+      "to": "github",
+      "label": "Reads threads and diffs from",
+      "technology": "GitHub MCP server"
+    },
+    {
+      "from": "cli",
+      "to": "github",
+      "label": "Searches issues and reads PR links from",
+      "technology": "gh CLI"
+    },
+    {
+      "from": "cli",
+      "to": "skills",
+      "label": "Copies into the harness",
+      "technology": "file copy"
+    },
+    {
+      "from": "engineer",
+      "to": "github",
+      "label": "Reads the result on"
+    },
+    {
+      "from": "ci",
+      "to": "site",
+      "label": "Publishes docs/ to GitHub Pages as",
+      "technology": "actions/deploy-pages"
+    },
+    {
+      "from": "ci",
+      "to": "cli",
+      "label": "Renders the example diagrams with",
+      "technology": "node src/bin.ts diagram"
+    },
+    {
+      "from": "engineer",
+      "to": "site",
+      "label": "Reads what the skills produce on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "agent",
+      "to": "site",
+      "label": "Finds the install steps in llms.txt on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cli",
+      "to": "github",
+      "label": "Downloads the pinned cccc release and checks its attestation on",
+      "technology": "gh CLI"
+    },
+    {
+      "from": "cli",
+      "to": "cccc",
+      "label": "Scores changed files on base and head with",
+      "technology": "child process, JSON"
+    }
+  ]
+}

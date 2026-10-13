@@ -7,17 +7,22 @@ function label(e: EdgeFact): string {
   return e.source === 'manifest' ? 'declares dependency' : 'imported on base (0 on head)';
 }
 
-/** Facts as a diagram spec. It does not prune or cap: the `graph` tool reshapes specs. */
+/**
+ * Facts as a diagram spec: the elements the change touched, the ones it reaches, and both ends of
+ * every relationship it added or removed, with their ancestors. An unchanged neighbour that the
+ * change does not reach is left out: next to a changed hub, that is most of the map.
+ * `all` keeps the whole map, for the `graph` tool to reshape.
+ */
 export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec {
   const byId = new Map(facts.elements.map((e) => [e.id, e]));
   const keep = new Set<string>();
   if (opts.all) for (const e of facts.elements) keep.add(e.id);
   else {
-    const core = new Set(facts.elements.filter((e) => e.status === 'changed' || e.status === 'added' || e.status === 'removed').map((e) => e.id));
-    for (const id of core) keep.add(id);
+    for (const e of facts.elements) if (e.status !== 'unchanged') keep.add(e.id);
     for (const e of facts.edges) {
-      if (core.has(e.from) && byId.has(e.to)) keep.add(e.to);
-      if (core.has(e.to) && byId.has(e.from)) keep.add(e.from);
+      if (e.status === 'unchanged' || !byId.has(e.from) || !byId.has(e.to)) continue;
+      keep.add(e.from);
+      keep.add(e.to);
     }
   }
   for (const id of [...keep]) {

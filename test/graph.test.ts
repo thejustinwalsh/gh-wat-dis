@@ -277,7 +277,7 @@ test('cli: exit codes, stdout and stderr', () => {
   assert.equal(run(`${graph} explode "${file}"`).status, 2);
   assert.equal(run(`${graph} focus "${file}"`).status, 2);
   assert.equal(run(`${graph} ids -`, 'not json').status, 2);
-  assert.match(run(`${graph} --help`).stdout, /from-facts \[facts\.json\] {2}spec from impact facts/);
+  assert.match(run(`${graph} --help`).stdout, /from-facts \[facts\.json\] \[--all\] \[--level file\]/);
   assert.match(run(`${diagram} --help`).stdout, /npx gh-wat-dis diagram/);
 
   assert.equal(run(`${graph} ids "${file}" | grep -c component`).stdout.trim(), '3');

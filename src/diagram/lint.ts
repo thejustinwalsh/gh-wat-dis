@@ -8,6 +8,8 @@ const VAGUE = new Set(['uses', 'calls', 'depends on']);
 const NEEDS_TECHNOLOGY = new Set(['container', 'component', 'datastore', 'queue']);
 const CONTAINER_LIKE = new Set(['container', 'datastore', 'queue']);
 const CONTEXT_TYPES = new Set(['person', 'system', 'boundary']);
+const CODE_TYPES = new Set(['file', 'boundary']);
+const MAX_SYMBOLS = 8;
 
 type Bag = Record<string, unknown>;
 const isBag = (v: unknown): v is Bag => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -44,12 +46,28 @@ export function lintSpec(spec: unknown): LintResult {
     const type = String(el.type);
     if (NEEDS_TECHNOLOGY.has(type) && !text(el.technology)) warnings.push(`${type} "${id}" has no technology`);
     const description = text(el.description);
-    if (!description && type !== 'boundary' && type !== 'node') warnings.push(`element "${id}" has no description`);
+    if (!description && type !== 'boundary' && type !== 'node' && type !== 'file') warnings.push(`element "${id}" has no description`);
     if (description.length > MAX_DESCRIPTION) {
       warnings.push(`element "${id}" description is ${description.length} characters; keep it under ${MAX_DESCRIPTION}`);
     }
     if (spec.type === 'context' && oneOf(ELEMENT_TYPES, type) && !CONTEXT_TYPES.has(type)) {
       warnings.push(`context diagrams show people and systems; "${id}" is a ${type}`);
+    }
+    if (spec.type === 'code' && oneOf(ELEMENT_TYPES, type) && !CODE_TYPES.has(type)) {
+      warnings.push(`code diagrams show files, grouped by boundaries; "${id}" is a ${type}`);
+    }
+    if (el.symbols === undefined) return;
+    if (!Array.isArray(el.symbols)) { errors.push(`element "${id}": symbols must be an array`); return; }
+    if (type !== 'file') warnings.push(`element "${id}" has symbols, which only a file draws`);
+    const names = new Set<string>();
+    el.symbols.forEach((sym: unknown, k) => {
+      if (!isBag(sym) || !text(sym.name)) { errors.push(`element "${id}": symbols[${k}] has no name`); return; }
+      if (names.has(sym.name as string)) errors.push(`element "${id}" lists the symbol "${sym.name as string}" more than once`);
+      names.add(sym.name as string);
+      if (sym.status !== undefined && !oneOf(STATUSES, sym.status)) errors.push(`element "${id}": symbol "${sym.name as string}" has unknown status "${String(sym.status)}"`);
+    });
+    if (el.symbols.length > MAX_SYMBOLS) {
+      warnings.push(`file "${id}" lists ${el.symbols.length} symbols and draws the first ${MAX_SYMBOLS}; keep the ones the change is about`);
     }
   });
 
@@ -77,6 +95,16 @@ export function lintSpec(spec: unknown): LintResult {
       }
     }
     const label = text(rel.label);
+    const isFile = (end: unknown): boolean => typeof end === 'string' && byId.get(end)?.type === 'file';
+    for (const [end, key] of [['from', 'fromSymbol'], ['to', 'toSymbol']] as const) {
+      if (rel[key] === undefined || dangling) continue;
+      const symbols = byId.get(rel[end] as string)!.symbols;
+      if (!Array.isArray(symbols) || !symbols.some((sym) => isBag(sym) && sym.name === rel[key])) {
+        errors.push(`${where}: ${key} "${String(rel[key])}" is not a symbol of "${String(rel[end])}"`);
+      }
+    }
+    // A line between two files with no words is an import.
+    if (!label && isFile(rel.from) && isFile(rel.to)) return;
     if (!label) errors.push(`${where} has no label; say what flows or why`);
     else if (VAGUE.has(label.toLowerCase())) errors.push(`${where} label "${label}" says nothing; name the data or intent`);
     if (rel.status !== undefined && !oneOf(STATUSES, rel.status)) {

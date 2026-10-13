@@ -1,4 +1,6 @@
-import { ELEMENT_TYPES } from '../spec.ts';
+import { MAP_ELEMENT_TYPES } from '../spec.ts';
+
+const ELEMENT_TYPES: readonly string[] = MAP_ELEMENT_TYPES;
 import type { ElementType } from '../spec.ts';
 
 export const USE = ['always', 'ask', 'never'] as const;

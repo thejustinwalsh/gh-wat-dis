@@ -36,6 +36,9 @@ function breakWord(word: string, px: number, max: number, bold: boolean): string
   return parts;
 }
 
+/** Width in a monospace font: every character advances 0.6 em. */
+export const monoWidth = (text: string, px: number): number => [...text].length * 0.602 * px * PAD;
+
 /** Greedy word wrap. A word wider than `max` is split by character. */
 export function wrap(text: string, px: number, max: number, bold = false): string[] {
   const lines: string[] = [];
