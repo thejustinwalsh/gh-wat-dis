@@ -17,15 +17,35 @@ export interface ArchElement {
 
 export interface ArchRelationship { from: string; to: string; label: string; technology?: string }
 
+/** A label for a part of the product an issue touches. */
+export interface SurfaceLabel { name: string; description: string; elements?: string[] }
+
+export const AGENTS_LABEL = { name: 'agents', description: 'Agent memory, an agentic workflow, or work managed by autonomous agents', color: '5319e7' };
+export const SURFACE_COLOR = 'c5def5';
+export const DEFAULT_TYPES = ['Task', 'Bug', 'Feature'] as const;
+/** Colour and wording for a type label on a user repository. The wording follows GitHub's own issue types. */
+export const TYPE_LABELS: Record<string, { description: string; color: string }> = {
+  task: { description: 'A specific piece of work', color: 'fbca04' },
+  bug: { description: 'An unexpected problem or behavior', color: 'd73a4a' },
+  feature: { description: 'A request, idea, or new functionality', color: '0e8a16' },
+};
+export const typeLabel = (type: string): string => type.trim().toLowerCase().replace(/\s+/g, '-');
+
 export interface Config {
   $schema?: string;
   version: 1;
   policy: { use: Use; confirmBeforeWrite: boolean };
   repo: { owner: string; name: string; defaultBranch: string };
-  issues: { types: string[]; priorities: string[]; defaultLabels: string[] };
+  /**
+   * The kinds of work. An organization repository has GitHub issue types (`issue-type`).
+   * A repository under a user account has none, so there each type is a label (`label`).
+   */
+  issues: { types: string[]; typeSource: 'issue-type' | 'label' };
+  /** Besides type labels on a user repository, labels mean two things: the agents label, and the product surface an issue touches. */
+  labels: { agents: string; surfaces: SurfaceLabel[] };
   pulls: { draft: boolean; closingKeyword: string };
   milestones: { naming: string; capacity: number | null };
-  triage: { staleIssueDays: number; stalePrDays: number; needsInfoLabel: string };
+  triage: { staleIssueDays: number; stalePrDays: number };
   architecture: { system: { name: string; description: string }; elements: ArchElement[]; relationships: ArchRelationship[] };
 }
 
@@ -34,25 +54,21 @@ export interface ConfigSeed {
   name?: string;
   defaultBranch?: string;
   use?: Use;
-  labels?: string[];
+  issueTypes?: string[];
   milestones?: string[];
 }
 
-export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', use = 'always', labels = [], milestones = [] }: ConfigSeed = {}): Config {
-  const pick = (re: RegExp): string[] => labels.filter((l) => re.test(l));
+export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', use = 'always', issueTypes = [], milestones = [] }: ConfigSeed = {}): Config {
   return {
     $schema: 'https://tjw.dev/gh-wat-dis/config.schema.json',
     version: 1,
     policy: { use, confirmBeforeWrite: true },
     repo: { owner, name, defaultBranch },
-    issues: {
-      types: pick(/^(type[:/ ]|bug$|feature$|enhancement$|task$|chore$|spike$|epic$|question$|documentation$)/i),
-      priorities: pick(/^(p[0-4]$|priority[:/ ])/i),
-      defaultLabels: [],
-    },
+    issues: issueTypes.length ? { types: issueTypes, typeSource: 'issue-type' } : { types: [...DEFAULT_TYPES], typeSource: 'label' },
+    labels: { agents: AGENTS_LABEL.name, surfaces: [] },
     pulls: { draft: false, closingKeyword: 'Closes' },
     milestones: { naming: milestones[0] ? `like "${milestones[0]}"` : '', capacity: null },
-    triage: { staleIssueDays: 60, stalePrDays: 14, needsInfoLabel: pick(/needs[- ]?(info|repro|more)/i)[0] ?? '' },
+    triage: { staleIssueDays: 60, stalePrDays: 14 },
     architecture: { system: { name, description: '' }, elements: [], relationships: [] },
   };
 }
@@ -77,5 +93,16 @@ export function validateConfig(input: unknown): string[] {
     if (!ids.has(r.from) || !ids.has(r.to)) errors.push(`relationship ${r.from} -> ${r.to} names an unknown element`);
     if (!r.label) errors.push(`relationship ${r.from} -> ${r.to} needs a label`);
   }
+  for (const l of cfg.labels?.surfaces ?? []) {
+    if (!l.name) errors.push('a surface label needs a name');
+    for (const e of l.elements ?? []) if (!ids.has(e)) errors.push(`surface label "${l.name}" names an unknown element "${e}"`);
+  }
   return errors;
+}
+
+/** Surface labels to offer when the config has none: one for each part of the system that holds files. */
+export function proposeSurfaces(cfg: Config): SurfaceLabel[] {
+  return (cfg.architecture?.elements ?? [])
+    .filter((e) => !e.external && e.type !== 'person' && e.type !== 'boundary' && e.type !== 'node' && (e.paths?.length ?? 0) > 0)
+    .map((e) => ({ name: e.id, description: `${e.name}${e.description ? `: ${e.description}` : ''}`.slice(0, 100), elements: [e.id] }));
 }

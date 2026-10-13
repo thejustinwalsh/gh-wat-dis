@@ -12,13 +12,11 @@
   },
   "issues": {
     "types": [
-      "bug",
-      "enhancement",
-      "documentation",
-      "question"
+      "Task",
+      "Bug",
+      "Feature"
     ],
-    "priorities": [],
-    "defaultLabels": []
+    "typeSource": "label"
   },
   "pulls": {
     "draft": false,
@@ -30,8 +28,7 @@
   },
   "triage": {
     "staleIssueDays": 60,
-    "stalePrDays": 14,
-    "needsInfoLabel": ""
+    "stalePrDays": 14
   },
   "architecture": {
     "system": {
@@ -253,6 +250,75 @@
         "to": "site",
         "label": "Finds the install steps in llms.txt on",
         "technology": "HTTPS"
+      }
+    ]
+  },
+  "labels": {
+    "agents": "agents",
+    "surfaces": [
+      {
+        "name": "skills",
+        "description": "The wat skills and their reference files",
+        "elements": [
+          "skills"
+        ]
+      },
+      {
+        "name": "setup",
+        "description": "install, init, mcp, doctor",
+        "elements": [
+          "setup",
+          "cli"
+        ]
+      },
+      {
+        "name": "facts",
+        "description": "impact, reach, owners, elements, blast",
+        "elements": [
+          "facts"
+        ]
+      },
+      {
+        "name": "graph",
+        "description": "Graph filters that reshape a diagram spec",
+        "elements": [
+          "graph"
+        ]
+      },
+      {
+        "name": "diagram",
+        "description": "The diagram renderer and its examples",
+        "elements": [
+          "diagram"
+        ]
+      },
+      {
+        "name": "github-tools",
+        "description": "related, links, relations, labels",
+        "elements": [
+          "ghtools"
+        ]
+      },
+      {
+        "name": "body-check",
+        "description": "The lint backstop for issue and PR bodies",
+        "elements": [
+          "lint"
+        ]
+      },
+      {
+        "name": "site",
+        "description": "The landing page and llms.txt",
+        "elements": [
+          "site"
+        ]
+      },
+      {
+        "name": "ci",
+        "description": "CI, Pages and release workflows",
+        "elements": [
+          "ci"
+        ]
       }
     ]
   }

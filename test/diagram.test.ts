@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import { lintSpec, renderSvg, toMermaid } from '../src/diagram/index.ts';
 import { fit, textWidth, wrap } from '../src/diagram/measure.ts';
 import { DARK, FILLS, LIGHT, STATUS_COLOURS, contrast } from '../src/diagram/theme.ts';
+import { fit as fitLayout } from '../src/diagram/fit.ts';
+import { GROUP_PAD_X, crossesRect, groupLabelWidth, layout } from '../src/diagram/layout.ts';
+import type { Layout, NodeBox, Rect } from '../src/diagram/layout.ts';
 import type { DiagramSpec } from '../src/spec.ts';
 
 const example = (name: string): DiagramSpec =>
@@ -206,4 +209,137 @@ test('fit: a flow draws left to right with numbered steps inside the page width'
   const forced = await render(example('dynamic'), { labels: 'text', direction: 'DOWN' });
   assert.equal(forced.numbered, false);
   assert.equal(forced.direction, 'DOWN');
+});
+
+const stress = (): DiagramSpec =>
+  JSON.parse(readFileSync(new URL('./fixtures/diagram-stress.json', import.meta.url), 'utf8')) as DiagramSpec;
+const box = (l: Layout, id: string): NodeBox => l.nodes.find((b) => b.el.id === id)!;
+const overlap = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const inside = (inner: Rect, outer: Rect): boolean =>
+  inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+/** Every way `fit` may lay a spec out. */
+async function layouts(spec: DiagramSpec): Promise<Layout[]> {
+  const all: Layout[] = [];
+  for (const direction of ['DOWN', 'RIGHT'] as const) {
+    for (const numbered of [false, true]) all.push(await layout(spec, { direction, numbered }));
+  }
+  return all;
+}
+
+test('layout: a group is as wide as its label, so the label is never cut', async () => {
+  const name = 'Payments and settlement reconciliation platform for the European region';
+  const spec: DiagramSpec = {
+    title: 'Long group', type: 'container',
+    elements: [
+      { id: 'g', type: 'system', name, kind: 'Bounded context, team Ledger' },
+      { id: 'in', type: 'node', name: 'Primary database cluster node group in Frankfurt', parent: 'g', status: 'changed' },
+      { id: 'c', type: 'container', name: 'Job', technology: 'Rust', parent: 'in' },
+      { id: 'empty', type: 'boundary', name: 'An empty zone with a rather long name as well', status: 'added' },
+    ],
+    relationships: [{ from: 'c', to: 'empty', label: 'Writes the audit trail' }],
+  };
+  for (const l of await layouts(spec)) {
+    for (const id of ['g', 'in', 'empty']) {
+      const b = box(l, id);
+      const room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w : 0);
+      assert.ok(room >= groupLabelWidth(b.el), `${l.direction} ${id}: ${b.w}px for a ${Math.ceil(groupLabelWidth(b.el))}px label`);
+      if (b.badge) {
+        assert.ok(inside(b.badge, b), `${id} badge is inside the group`);
+        assert.ok(b.badge.x >= b.x + GROUP_PAD_X + groupLabelWidth(b.el), `${id} badge is clear of the label`);
+      }
+    }
+    assert.ok(inside(box(l, 'in'), box(l, 'g')), 'the widened group still fits inside its parent');
+  }
+  for (const direction of ['DOWN', 'RIGHT'] as const) {
+    const svg = await renderSvg(spec, { direction });
+    assertWellFormed(svg);
+    assert.doesNotMatch(svg, /\u2026/);
+    assert.ok(svg.includes(`>${name}<tspan class="gk" dx="8">[Bounded context, team Ledger]</tspan>`), 'name and kind on one line');
+    assert.ok(svg.includes('>Primary database cluster node group in Frankfurt<'));
+    assert.ok(svg.includes('>An empty zone with a rather long name as well<'));
+  }
+  // A group whose label already fits is left alone.
+  const plain = await fitLayout(example('change-impact'));
+  const checkout = box(plain, 'checkout');
+  assert.ok(checkout.w - 2 * GROUP_PAD_X > groupLabelWidth(checkout.el) + 100);
+});
+
+test('layout: no relationship line runs under a status badge', async () => {
+  const hub: DiagramSpec = {
+    title: 'Hub', type: 'container', detail: 'compact',
+    elements: [
+      ...['a', 'b', 'c', 'd'].map((id) => ({ id, type: 'container' as const, name: `Source ${id}`, technology: 'Rust', status: 'changed' as const })),
+      { id: 'hub', type: 'container', name: 'A hub with a long name that wraps', technology: 'Rust', status: 'added' },
+      { id: 'store', type: 'datastore', name: 'Store', technology: 'PostgreSQL', status: 'removed' },
+      { id: 'bus', type: 'queue', name: 'Bus', technology: 'NATS', status: 'affected' },
+    ],
+    relationships: [
+      ...['a', 'b', 'c', 'd'].map((id) => ({ from: id, to: 'hub', label: `Sends ${id}` })),
+      { from: 'hub', to: 'store', label: 'Writes rows' },
+      { from: 'hub', to: 'bus', label: 'Publishes events' },
+      { from: 'bus', to: 'a', label: 'Feeds back' },
+    ],
+  };
+  let underOldBadge = 0, checked = 0;
+  const specs = [hub, stress(), ...['change-impact', 'in-process', 'focused', 'whole-system'].map(example)];
+  for (const spec of specs) {
+    for (const l of [...await layouts(spec), await fitLayout(spec)]) {
+      const marked = l.nodes.filter((b) => b.el.status && b.el.status !== 'unchanged');
+      for (const b of marked) {
+        assert.ok(b.badge, `${b.el.id} has a badge`);
+        assert.ok(inside(b.badge, b), `${spec.title}: ${b.el.id} badge is inside its element`);
+        for (const e of l.edges) {
+          checked++;
+          assert.ok(!crossesRect(e.points, b.badge, 2),
+            `${spec.title} (${l.direction}${l.numbered ? ', numbered' : ''}): ${e.rel.from} -> ${e.rel.to} runs under the badge of ${b.el.id}`);
+        }
+        // Where the badge used to be: across the top border, at the right.
+        if (!b.group) {
+          const old = { x: b.x + b.w - 10 - b.badge.w, y: b.y - 9, w: b.badge.w, h: 18 };
+          underOldBadge += l.edges.filter((e) => (e.rel.from === b.el.id || e.rel.to === b.el.id) && crossesRect(e.points, old)).length;
+        }
+      }
+      for (const b of l.nodes.filter((n) => !n.badge)) assert.ok(!b.el.status || b.el.status === 'unchanged');
+      // A leaf badge never covers the element's own text.
+      for (const b of marked.filter((n) => !n.group)) {
+        for (const line of b.lines) {
+          const w = textWidth(line.text, 14, true);
+          const text = { x: b.x + b.w / 2 - w / 2, y: b.y + line.dy - 10.5, w, h: 12 };
+          assert.ok(!overlap(text, b.badge!), `${spec.title}: ${b.el.id} badge covers "${line.text}"`);
+        }
+      }
+    }
+  }
+  assert.ok(checked > 500);
+  assert.ok(underOldBadge > 0, 'the specs include lines that enter a marked element at its top right');
+  const svg = await renderSvg(hub);
+  for (const words of ['+ ADDED', '~ CHANGED', '\u2212 REMOVED', 'AFFECTED']) assert.ok(svg.includes(`>${words}<`), words);
+});
+
+test('layout: a self-relationship draws a loop large enough to read, with its label beside it', async () => {
+  const spec = stress();
+  const loops = spec.relationships.filter((r) => r.from === r.to);
+  assert.equal(loops.length, 2);
+  for (const l of await layouts(spec)) {
+    for (const e of l.edges.filter((p) => p.rel.from === p.rel.to)) {
+      const where = `${l.direction}${l.numbered ? ', numbered' : ''}: ${e.rel.from}`;
+      const xs = e.points.map((p) => p.x), ys = e.points.map((p) => p.y);
+      const bounds = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      assert.ok(bounds.w >= 24 && bounds.h >= 24, `${where} loop is ${bounds.w} x ${bounds.h}`);
+      const node = box(l, e.rel.from);
+      assert.ok(e.label, `${where} has a label`);
+      assert.ok(!overlap(e.label, node), `${where} label overlaps its element`);
+      assert.ok(!crossesRect(e.points, e.label), `${where} loop runs through its label`);
+      // The loop leaves the element: its far side is outside the box.
+      assert.ok(!inside(bounds, node), where);
+      for (const other of l.edges) {
+        if (other !== e && other.label) assert.ok(!overlap(e.label, other.label), `${where} label overlaps the label of ${other.rel.from} -> ${other.rel.to}`);
+      }
+    }
+  }
+  const text = await renderSvg(spec, { labels: 'text' });
+  assertWellFormed(text);
+  assert.ok(text.includes('Retries with backoff') && text.includes('>Compacts the topic<'));
+  assert.equal(await renderSvg(stress(), { labels: 'text' }), text);
+  assert.match(await renderSvg(spec, { labels: 'numbered' }), /class="en"[^>]*>6</);
 });

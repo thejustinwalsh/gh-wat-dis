@@ -1,6 +1,12 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { UsageError, parseArgs, readInput, run } from '../cli/util.ts';
+import { join } from 'node:path';
+import type { Config } from '../cli/config.ts';
+import { CONFIG_REL, UsageError, parseArgs, readInput, readJson, repoRoot, run } from '../cli/util.ts';
+import { planLabels } from './labels.ts';
+import type { LiveLabel } from './labels.ts';
+import { readRelations, relate } from './relations.ts';
+import type { Api } from './relations.ts';
 import { analyzeLinks } from './links.ts';
 import type { Closure, Commit, Mention, Ref } from './links.ts';
 import { findRelated, toMarkdown } from './related.ts';
@@ -58,9 +64,10 @@ export async function related(argv: string[]): Promise<number> {
     title, body, self, search, limit: Number(args.limit ?? 10),
     paths: args.paths ? args.paths.split(',').map((s) => s.trim()).filter(Boolean) : [],
   });
-  for (const f of res.failed) console.error(`query failed (${f.why}): ${f.error}`);
+  for (const f of res.failed) console.error(`search failed (${f.why}): ${f.error}`);
   process.stdout.write(args.md ? toMarkdown(res) : JSON.stringify(res, null, 2) + '\n');
-  return 0;
+  // A search that could not run is not a clean result.
+  return res.queries.length && res.failed.length === res.queries.length ? 1 : 0;
 }
 
 interface PrView {
@@ -152,4 +159,80 @@ export async function links(argv: string[]): Promise<number> {
     console.log(`\nConfirm the list with the user, then check it: --closes ${res.willClose.map((c) => c.number).join(',')}`);
   }
   return code;
+}
+
+function loadConfig(): Config {
+  const cfg = readJson<Config>(join(repoRoot(), CONFIG_REL));
+  if (!cfg) throw new UsageError(`no ${CONFIG_REL} here. Create it: npx gh-wat-dis init`);
+  return cfg;
+}
+
+const LABELS_USAGE = `Usage: npx gh-wat-dis labels [--text]                 compare the labels the config wants with GitHub
+       npx gh-wat-dis labels apply [--prune] [--dry-run]  create and update them. --prune also deletes the rest.
+Labels mean two things: "agents", and the product surface an issue touches (labels.surfaces in the config,
+or one for each mapped architecture element when that list is empty). A repository under a user account
+has no GitHub issue types, so there the types (task, bug, feature) are labels too.`;
+
+export async function labels(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['text', 'prune', 'dry-run', 'help'], aliases: { '-h': '--help', '-n': '--dry-run' } });
+  if (args.help) { console.log(LABELS_USAGE); return 0; }
+  const apply = args._[0] === 'apply';
+  if (args._[0] && args._[0] !== 'plan' && !apply) throw new UsageError(LABELS_USAGE);
+  const live = await gh<LiveLabel[]>(['label', 'list', '--limit', '300', '--json', 'name,description,color']);
+  const plan = planLabels(loadConfig(), live);
+  if (!apply) {
+    if (!args.text) { console.log(JSON.stringify(plan, null, 2)); return 0; }
+    console.log(`Surface labels come from: ${plan.surfacesFrom === 'config' ? 'labels.surfaces in the config' : plan.surfacesFrom === 'architecture' ? 'the architecture map (labels.surfaces is empty)' : 'nowhere yet. Map the architecture or fill labels.surfaces.'}`);
+    for (const l of plan.create) console.log(`create  ${l.name.padEnd(16)} ${l.description}`);
+    for (const l of plan.update) console.log(`update  ${l.name.padEnd(16)} ${l.description}`);
+    for (const n of plan.keep) console.log(`keep    ${n}`);
+    for (const l of plan.extra) console.log(`extra   ${l.name.padEnd(16)} not in the plan. "labels apply --prune" deletes it from every issue.`);
+    return 0;
+  }
+  const act = async (verb: string, l: { name: string }, cmd: string[]): Promise<boolean> => {
+    console.log(`${verb.padEnd(7)} ${l.name}`);
+    if (args['dry-run']) return true;
+    try { await exec('gh', cmd); return true; } catch (e) { console.error(`  failed: ${(e instanceof Error ? e.message : String(e)).split('\n')[1] ?? e}`); return false; }
+  };
+  let ok = true;
+  for (const l of plan.create) ok = await act('create', l, ['label', 'create', l.name, '--color', l.color, '--description', l.description]) && ok;
+  for (const l of plan.update) ok = await act('update', l, ['label', 'edit', l.name, '--color', l.color, '--description', l.description]) && ok;
+  if (args.prune) for (const l of plan.extra) ok = await act('delete', l, ['label', 'delete', l.name, '--yes']) && ok;
+  else if (plan.extra.length) console.log(`${plan.extra.length} other labels left in place: ${plan.extra.map((l) => l.name).join(', ')}`);
+  if (args['dry-run']) console.log('Dry run. Nothing changed.');
+  return ok ? 0 : 1;
+}
+
+const RELATIONS_USAGE = `Usage: npx gh-wat-dis relations <issue>                                   parent, sub-issues, blocked by, blocking (JSON)
+       npx gh-wat-dis relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]
+These are GitHub's own relations. They show in the issue sidebar and in filters such as is:blocked.`;
+
+const api: Api = async <T>(args: string[]): Promise<T> => {
+  const { stdout } = await exec('gh', ['api', ...args], { maxBuffer: 32 * 1024 * 1024 });
+  return (stdout.trim() ? JSON.parse(stdout) : null) as T;
+};
+const issueNumber = (s: string | undefined): number => {
+  const n = Number((s ?? '').replace(/^#/, ''));
+  if (!Number.isInteger(n) || n <= 0) throw new UsageError(RELATIONS_USAGE);
+  return n;
+};
+const numbers = (s: string | undefined): number[] => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean).map(issueNumber);
+
+export async function relations(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['help'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(RELATIONS_USAGE); return 0; }
+  console.log(JSON.stringify(await readRelations(api, repoInfo().repo, issueNumber(args._[0])), null, 2));
+  return 0;
+}
+
+export async function relateCmd(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['remove', 'help'], strings: ['parent', 'blocked-by', 'blocks'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(RELATIONS_USAGE); return 0; }
+  const n = issueNumber(args._[0]);
+  if (!args.parent && !args['blocked-by'] && !args.blocks) throw new UsageError(RELATIONS_USAGE);
+  const results = await relate(api, repoInfo().repo, n, {
+    parent: args.parent ? issueNumber(args.parent) : undefined, blockedBy: numbers(args['blocked-by']), blocks: numbers(args.blocks), remove: args.remove,
+  });
+  for (const r of results) console.log(`${r.ok ? 'ok    ' : 'FAIL  '} ${r.action}${r.detail ? `  (${r.detail})` : ''}`);
+  return results.every((r) => r.ok) ? 0 : 1;
 }

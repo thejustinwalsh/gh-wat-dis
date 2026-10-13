@@ -1,7 +1,7 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec } from '../spec.ts';
-import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, PIPE_RX, badgeWidth } from './layout.ts';
-import type { EdgePath, NodeBox, Pt } from './layout.ts';
+import { BADGE_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, GROUP_PAD_X, PIPE_RX, groupLabelWidth } from './layout.ts';
+import type { EdgePath, NodeBox, Pt, Rect } from './layout.ts';
 import { escapeXml, fit, textWidth } from './measure.ts';
 import { FONT, applyTheme } from './theme.ts';
 import { fit as fitLayout } from './fit.ts';
@@ -69,10 +69,11 @@ const figure = (cx: number, top: number, s = 1): string =>
   `<circle class="glyph" cx="${n(cx)}" cy="${n(top + 6.5 * s)}" r="${n(6.5 * s)}"/>`
   + `<path class="glyph" d="M${n(cx - 11 * s)} ${n(top + 25 * s)}a${n(11 * s)} ${n(10 * s)} 0 0 1 ${n(22 * s)} 0z"/>`;
 
-function badge(status: string, right: number, top: number): string {
-  const w = badgeWidth(status);
-  return `<rect class="b-${status}" x="${n(right - w)}" y="${n(top - 9)}" width="${n(w)}" height="18" rx="9"/>`
-    + `<text class="bt" x="${n(right - w / 2)}" y="${n(top + 3.5)}">${escapeXml(STATUS_BADGE[status]!)}</text>`;
+/** The status in words, inside the element, where `layout` found room for it. */
+function badge(status: string, r: Rect | undefined): string {
+  if (!r) return '';
+  return `<rect class="b-${status}" x="${n(r.x)}" y="${n(r.y)}" width="${n(r.w)}" height="${n(r.h)}" rx="${n(r.h / 2)}"/>`
+    + `<text class="bt" x="${n(r.x + r.w / 2)}" y="${n(r.y + r.h / 2 + 3.4)}">${escapeXml(STATUS_BADGE[status]!)}</text>`;
 }
 
 function drawGroup(b: NodeBox): string {
@@ -85,17 +86,17 @@ function drawGroup(b: NodeBox): string {
 /** Drawn above the edges, on a patch of the group's own fill, so a line that enters the group never strikes the text. */
 function drawGroupLabel(b: NodeBox): string {
   const status = active(b.el.status);
-  const x = b.x + 14, room = b.w - 28;
-  const nameW = textWidth(b.el.name, GROUP_NAME_PX, true), kindW = textWidth(kindLine(b.el), GROUP_KIND_PX);
-  const oneLine = nameW + 8 + kindW <= room;
+  // `layout` makes a group wide enough for its label, so the two-line and cut forms are a last resort.
+  const x = b.x + GROUP_PAD_X, room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w + 10 : 0);
+  const oneLine = groupLabelWidth(b.el) <= room;
   const name = fit(b.el.name, GROUP_NAME_PX, room, true), kind = fit(kindLine(b.el), GROUP_KIND_PX, room);
   const nameY = b.y + (oneLine ? 26 : 21);
-  const w = oneLine ? nameW + 8 + kindW : Math.max(textWidth(name, GROUP_NAME_PX, true), textWidth(kind, GROUP_KIND_PX));
+  const w = oneLine ? groupLabelWidth(b.el) : Math.max(textWidth(name, GROUP_NAME_PX, true), textWidth(kind, GROUP_KIND_PX));
   let out = `<rect class="f-${b.depth % 2 ? 'bg' : 'group'}" x="${n(x - 4)}" y="${n(nameY - 14)}" width="${n(w + 8)}" height="${oneLine ? 20 : 31}" rx="3"/>`
     + `<text class="gn" x="${n(x)}" y="${n(nameY)}">${escapeXml(name)}`
     + (oneLine ? `<tspan class="gk" dx="8">${escapeXml(kind)}</tspan></text>` : `</text><text class="gk" x="${n(x)}" y="${n(nameY + 15)}">${escapeXml(kind)}</text>`);
   if (status === 'removed') out += `<path class="strike" d="M${n(x)} ${n(nameY - 4.5)}h${n(textWidth(name, GROUP_NAME_PX, true) / 1.08)}"/>`;
-  return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.x + b.w - 12, b.y) : '');
+  return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.badge) : '');
 }
 
 function drawLeaf(b: NodeBox): string {
@@ -105,7 +106,8 @@ function drawLeaf(b: NodeBox): string {
   const fill = el.external ? 'external' : FILL[el.type] ?? 'container';
   let out = shape(el.type, b.x, b.y, b.w, b.h, `sh f-${fill}${status ? ` s-${status}` : ''}`);
   if (status === 'affected') out += `<rect class="ring" x="${n(b.x - 4)}" y="${n(b.y - 4)}" width="${n(b.w + 8)}" height="${n(b.h + 8)}" rx="${el.type === 'person' ? 24 : 11}"/>`;
-  if (el.type === 'person') out += figure(cx, b.y + 9);
+  // In a narrow box the figure moves left to leave the corner to the badge.
+  if (el.type === 'person') out += figure(b.badge ? Math.min(cx, b.badge.x - 19) : cx, b.y + 9);
   for (const line of b.lines) {
     out += `<text class="${line.cls}" x="${n(cx)}" y="${n(b.y + line.dy)}">${escapeXml(line.text)}</text>`;
     if (status === 'removed' && line.cls === 'nm') {
@@ -113,7 +115,7 @@ function drawLeaf(b: NodeBox): string {
       out += `<path class="strike" d="M${n(cx - half)} ${n(b.y + line.dy - 4.5)}h${n(half * 2)}"/>`;
     }
   }
-  return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.x + b.w - 10, b.y) : '');
+  return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.badge) : '');
 }
 
 const HEAD = 9;

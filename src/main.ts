@@ -12,6 +12,9 @@ const COMMANDS: Record<string, Loader> = {
   mcp: async () => (await import('./cli/mcp.ts')).main,
   related: async () => (await import('./gh/cli.ts')).related,
   links: async () => (await import('./gh/cli.ts')).links,
+  labels: async () => (await import('./gh/cli.ts')).labels,
+  relations: async () => (await import('./gh/cli.ts')).relations,
+  relate: async () => (await import('./gh/cli.ts')).relateCmd,
   impact: async () => (await import('./impact/cli.ts')).impact,
   blast: async () => (await import('./impact/cli.ts')).blast,
   reach: async () => (await import('./impact/cli.ts')).reach,
@@ -46,6 +49,12 @@ Collect facts (JSON out)
   elements                                    architecture elements and the files they map
   related (--issue <n> | --title "<t>")       issues and PRs that share signals with a draft
   links (--pr <n> | --body-file <f>)          what a PR closes on merge, what it only mentions
+  relations <issue>                           parent, sub-issues, blocked by, blocking
+  labels                                      the agents and surface labels the config wants vs GitHub
+
+Change GitHub
+  relate <issue> --parent <n> | --blocked-by <n> | --blocks <n>   set a native relation
+  labels apply [--prune]                      create and update the labels
 
 Shape a graph (diagram spec in, diagram spec out)
   graph from-facts [facts.json]               spec from impact facts

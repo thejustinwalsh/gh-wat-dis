@@ -52,7 +52,14 @@ export interface Candidate {
   matchedQueries: string[];
 }
 
-export interface RelatedResult { signals: Signals; queries: Query[]; failed: (Query & { error: string })[]; candidates: Candidate[] }
+export interface RelatedResult {
+  signals: Signals;
+  queries: Query[];
+  failed: (Query & { error: string })[];
+  /** False when a query failed: the candidate list may miss issues. */
+  complete: boolean;
+  candidates: Candidate[];
+}
 
 const uniq = <T>(a: T[]): T[] => [...new Set(a)];
 
@@ -78,15 +85,16 @@ export function extractSignals({ title = '', body = '', paths = [] }: Draft): Si
 
 const quote = (s: string): string => `"${s.replace(/["\\]/g, ' ').trim()}"`;
 
-export function buildQueries(sig: Signals, { max = 8 }: { max?: number } = {}): Query[] {
+export function buildQueries(sig: Signals, { max = 6 }: { max?: number } = {}): Query[] {
+  // Exact signals first: GitHub limits searches, and these find duplicates that shared words miss.
   const q: Query[] = [];
   const t = sig.terms;
+  for (const e of sig.errors.slice(0, 1)) q.push({ why: 'error text', query: quote(e.split(/\s+/).slice(0, 8).join(' ')) });
+  for (const p of sig.paths.slice(0, 2)) q.push({ why: 'file path', query: quote(p) });
+  for (const s of [...sig.idents, ...sig.spans.filter((x) => !/\s/.test(x))].slice(0, 2)) q.push({ why: 'identifier', query: quote(s) });
   if (t.length) q.push({ why: 'title terms', query: `${t.slice(0, 4).join(' ')} in:title` });
   if (t.length > 2) q.push({ why: 'title terms, any field', query: t.slice(0, 3).join(' ') });
   if (t.length > 4) q.push({ why: 'title terms', query: `${t.slice(2, 5).join(' ')} in:title` });
-  for (const e of sig.errors) q.push({ why: 'error text', query: quote(e.split(/\s+/).slice(0, 8).join(' ')) });
-  for (const s of [...sig.idents, ...sig.spans.filter((x) => !/\s/.test(x))].slice(0, 3)) q.push({ why: 'identifier', query: quote(s) });
-  for (const p of sig.paths.slice(0, 3)) q.push({ why: 'file path', query: quote(p) });
   const seen = new Set<string>();
   return q.filter((x) => !seen.has(x.query) && seen.add(x.query)).slice(0, max);
 }
@@ -107,7 +115,7 @@ export function score(sig: Signals, cand: Pick<Row, 'title' | 'body'>): { points
   const errs = sig.errors.filter((e) => lower.includes(e.toLowerCase().slice(0, 60)));
   if (errs.length) { points += 40; signals.push({ label: 'exact', kind: 'error-text', detail: `same error text: "${errs[0]}"` }); }
 
-  const ids = [...sig.idents, ...sig.spans].filter((s) => text.includes(s));
+  const ids = uniq([...sig.idents, ...sig.spans]).filter((s) => text.includes(s));
   if (ids.length) {
     points += Math.min(40, ids.length * 20);
     signals.push({ label: 'exact', kind: 'identifier', detail: `names the same identifiers: ${ids.slice(0, 4).map((s) => `\`${s}\``).join(', ')}` });
@@ -130,17 +138,30 @@ export interface RelatedInput extends Draft {
   self?: number;
   limit?: number;
   search: (query: string) => Promise<Row[]>;
+  /** Base wait before a retry after a rate-limit error. */
+  retryMs?: number;
 }
 
-export async function findRelated({ title, body, paths, self, limit = 10, search }: RelatedInput): Promise<RelatedResult> {
+const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+export async function findRelated({ title, body, paths, self, limit = 10, search, retryMs = 20000 }: RelatedInput): Promise<RelatedResult> {
   const sig = extractSignals({ title, body, paths });
   const queries = buildQueries(sig);
   const pool = new Map<number, Row & { matched: string[] }>();
   const failed: RelatedResult['failed'] = [];
   for (const q of queries) {
-    let rows: Row[];
-    try { rows = await search(q.query); }
-    catch (e) { failed.push({ ...q, error: errorMessage(e).split('\n')[0]! }); continue; }
+    let rows: Row[] | undefined;
+    let error = '';
+    // GitHub allows about 30 searches a minute. Wait and try again before giving up on a query.
+    for (let attempt = 0; attempt < 3 && !rows; attempt++) {
+      try { rows = await search(q.query); }
+      catch (e) {
+        error = errorMessage(e);
+        if (!/rate limit|secondary|403|429/i.test(error) || attempt === 2) break;
+        await wait(retryMs * (attempt + 1));
+      }
+    }
+    if (!rows) { failed.push({ ...q, error: error.split('\n').find((l) => /rate limit|HTTP|gh:/i.test(l)) ?? error.split('\n')[0]! }); continue; }
     for (const r of rows) {
       if (r.number === self) continue;
       const cur = pool.get(r.number) ?? { ...r, matched: [] };
@@ -157,12 +178,17 @@ export async function findRelated({ title, body, paths, self, limit = 10, search
       points: s.points, signals: s.signals, matchedQueries: uniq(c.matched),
     };
   }).filter((c) => c.signals.length).sort((a, b) => b.points - a.points || b.number - a.number).slice(0, limit);
-  return { signals: sig, queries, failed, candidates };
+  return { signals: sig, queries, failed, complete: failed.length === 0, candidates };
 }
 
 export function toMarkdown(res: RelatedResult): string {
+  const gap = res.failed.length
+    ? `\n**Incomplete:** ${res.failed.length} of ${res.queries.length} searches failed (${res.failed[0]!.error.slice(0, 80)}). Run it again before you rely on this list.\n`
+    : '';
   if (!res.candidates.length) {
-    return `No related issues or pull requests found. Queries run: ${res.queries.length}${res.failed.length ? `, ${res.failed.length} failed` : ''}.\n`;
+    return res.failed.length === res.queries.length && res.queries.length
+      ? `Could not search: all ${res.queries.length} searches failed (${res.failed[0]!.error.slice(0, 80)}). This is not a "no match" result.\n`
+      : `No related issues or pull requests found. Queries run: ${res.queries.length}.\n${gap}`;
   }
   const rows = res.candidates.map((c) => {
     const state = c.stateReason ? `${c.state} (${c.stateReason})` : c.state;
@@ -176,5 +202,5 @@ export function toMarkdown(res: RelatedResult): string {
     '|---|---|---|---|---|---|',
     ...rows,
     '',
-  ].join('\n');
+  ].join('\n') + gap;
 }

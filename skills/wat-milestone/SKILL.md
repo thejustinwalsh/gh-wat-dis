@@ -21,15 +21,17 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
    gh api repos/{owner}/{repo}/milestones -f title="<title>" \
      -f due_on="<YYYY-MM-DD>T00:00:00Z" -F description=@.wat-tmp/milestone.md
    ```
-6. **Create the tracking issue** with the `wat-issue` skill, type Epic, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Add member issues as sub-issues. Then put its number in the description's `Tracking` line.
+6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then put its number in the description's `Tracking` line.
 
 ## Plan scope
 
 1. List candidates: open issues with no milestone that match the goal, plus what the user names.
+   - **When the user asks what is left to do**, open issues are not the whole list. Check each done-when condition against the repository: run the check it names, read the code and docs for work that is promised and not done, and run `npx gh-wat-dis doctor`. Verify a gap before you list it: a suspected problem that the check does not confirm is not a candidate.
+   - Show each gap as a proposed issue: title, type, surface, size, and the fact that shows it. File them with the `wat-issue` skill after the user agrees.
 2. For each one, read type, labels, size, dependencies.
 3. Fill the milestone to `milestones.capacity` (issues or points, from the config). No capacity set: use the count closed in the last finished milestone.
 4. Order by dependency: blockers first. Flag any issue blocked by work outside the milestone.
-5. Show one table: `Issue | Why it belongs | Size | Blocked by`. Then a short "Not in" list with the reason. Apply after a yes: `gh issue edit <n> --milestone "<title>"`.
+5. Show one table: `Issue | Why it belongs | Size | Blocked by`. Then a short "Not in" list with the reason. Apply after a yes: `gh issue edit <n> --milestone "<title>"`, and record each blocker with `npx gh-wat-dis relate <n> --blocked-by <m>`.
 
 ## Report status
 

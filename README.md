@@ -68,7 +68,7 @@ The agent shows you the draft before it posts.
 | `never` | Do not use them |
 | no config file | Ask before the first use, and offer `init` |
 
-The file also holds issue types, priority labels, milestone naming and capacity, and the architecture map that gives every issue and PR the same names for the same parts of the system.
+The file also holds the issue types, the surface labels, milestone naming and capacity, and the architecture map that gives every issue and PR the same names for the same parts of the system.
 
 ## Tools
 
@@ -82,6 +82,8 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 | `elements` | Lists architecture elements and the files they map. |
 | `related` | Finds issues and PRs that share signals with a draft. |
 | `links` | Shows what a PR will close on merge and what it only mentions. |
+| `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. |
+| `labels` | Plans and creates the two kinds of label: `agents`, and one for each product surface. |
 | `graph <op>` | Reshapes a diagram spec: `from-facts`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `stats`, `ids`. |
 | `diagram` | Lints a C4 diagram spec and renders an SVG. |
 | `blast` | Formats impact facts as a Markdown section. |

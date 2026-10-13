@@ -1,0 +1,33 @@
+{
+  "title": "Renderer stress: group labels, badges and self-relationships",
+  "type": "container",
+  "scope": "the layout defects in issue 4",
+  "detail": "compact",
+  "labels": "text",
+  "direction": "DOWN",
+  "elements": [
+    { "id": "user", "type": "person", "name": "Operator", "description": "Runs the nightly job", "status": "affected" },
+    { "id": "edge", "type": "container", "name": "Edge proxy", "technology": "Envoy", "status": "changed" },
+    { "id": "admin", "type": "container", "name": "Admin console", "technology": "TypeScript", "status": "added" },
+    { "id": "platform", "type": "system", "name": "Payments and settlement reconciliation platform", "kind": "Bounded context, team Ledger", "status": "changed" },
+    { "id": "worker", "type": "container", "name": "Retry worker", "technology": "Rust", "parent": "platform", "status": "added" },
+    { "id": "zone", "type": "boundary", "name": "Long lived regional storage zone for audit", "kind": "Deployment zone, eu-central-1", "status": "affected" },
+    { "id": "inner", "type": "node", "name": "Primary database cluster node group", "kind": "Kubernetes StatefulSet", "parent": "zone", "status": "removed" },
+    { "id": "ledger", "type": "datastore", "name": "Ledger", "technology": "PostgreSQL 16", "parent": "inner", "status": "changed" },
+    { "id": "events", "type": "queue", "name": "Settlement events", "technology": "Kafka", "status": "removed" },
+    { "id": "sched", "type": "component", "name": "Scheduler", "technology": "Rust", "status": "affected" }
+  ],
+  "relationships": [
+    { "from": "user", "to": "edge", "label": "Starts a run", "technology": "HTTPS" },
+    { "from": "user", "to": "admin", "label": "Reviews failures", "technology": "HTTPS" },
+    { "from": "edge", "to": "worker", "label": "Queues a retry", "technology": "gRPC", "status": "added" },
+    { "from": "admin", "to": "worker", "label": "Cancels a retry", "technology": "gRPC" },
+    { "from": "sched", "to": "worker", "label": "Wakes the worker", "technology": "cron", "status": "changed" },
+    { "from": "worker", "to": "worker", "label": "Retries with backoff", "technology": "in process", "status": "changed" },
+    { "from": "worker", "to": "ledger", "label": "Writes the settlement", "technology": "SQL" },
+    { "from": "admin", "to": "ledger", "label": "Reads the audit trail", "technology": "SQL", "status": "affected" },
+    { "from": "worker", "to": "events", "label": "Publishes the outcome", "technology": "Kafka" },
+    { "from": "events", "to": "events", "label": "Compacts the topic", "technology": "Kafka" },
+    { "from": "events", "to": "sched", "label": "Reports lag", "technology": "Kafka", "status": "removed" }
+  ]
+}

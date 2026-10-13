@@ -1,6 +1,6 @@
 ---
 name: wat-triage
-description: Triage GitHub issues. Classifies type, priority, affected system element and size, finds duplicates and missing information, and proposes which milestone each issue belongs to with a reason. Use when the user asks to triage, sort, groom, prioritize or label issues, review the backlog or new issues, or asks which issues belong in a milestone.
+description: Triage GitHub issues. Sets the issue type and the product-surface labels, proposes a priority for a person to decide, finds duplicates and missing information, records parent and blocked-by relations, helps define the label set, and proposes which milestone each issue belongs to with a reason. Use when the user asks to triage, sort, groom, prioritize or label issues, review the backlog or new issues, or asks which issues belong in a milestone.
 license: MIT
 ---
 
@@ -12,8 +12,8 @@ Triage proposes. The user decides. Apply nothing until the user approves the tab
 
 ## Steps
 
-1. **Load the rules.** From `.agents/gh-wat-dis/config.json`: `issues.types`, `issues.labels`, `issues.priorities`, `triage.*`, `architecture.elements`. Load live labels (`gh label list --json name,description`) and open milestones with descriptions.
-2. **Pick the queue.** Default: open issues with no type label or no milestone, newest first, 30 at most per pass.
+1. **Load the rules.** From `.agents/gh-wat-dis/config.json`: `issues.types` and `issues.typeSource`, `labels`, `triage.*`, `architecture.elements`. Run `npx gh-wat-dis labels --text` to compare the labels the config wants with GitHub. Load open milestones with descriptions.
+2. **Pick the queue.** Default: open issues with no type (issue type or type label), no surface label or no milestone, newest first, 30 at most per pass. **If the queue is empty** and the user asked what is left to do, this is planning, not triage: use the `wat-milestone` skill, "Plan scope".
    ```bash
    gh issue list --state open --search "no:milestone sort:created-desc" --limit 30 \
      --json number,title,body,labels,author,createdAt,updatedAt,comments,reactionGroups
@@ -23,18 +23,32 @@ Triage proposes. The user decides. Apply nothing until the user approves the tab
 
    | Field | How |
    |---|---|
-   | Type | Bug, feature, task, spike, epic, question. From the config list. |
-   | Element | The architecture element it touches. Search the code for names in the issue if unclear. |
-   | Priority | Rules below, or `issues.priorities` from the config. |
+   | Type | One of `issues.types`: Task, Bug, Feature by default. Written as the GitHub issue type when `issues.typeSource` is `issue-type`, and as the type label (`task`, `bug`, `feature`) when it is `label`. Exactly one. |
+   | Surface | The surface label for the architecture element it touches. Search the code for names in the issue if unclear. |
+   | Agents | The `agents` label, only for agent memory, an agentic workflow, or work an autonomous agent manages. |
+   | Priority | A proposal for the person, by the rules below. Show it in the table. Never write it to a label. |
+   | Relations | A parent, or blocked by, when the issue text or the code shows one. |
    | Size | S under 1 day, M 1 to 3 days, L over 3 days. L means "split it". |
    | State | Ready, needs info, duplicate, not planned. |
 
-5. **Check for duplicates.** Run `npx gh-wat-dis related --issue <n> --md` for each issue. Read every candidate above 30 points and apply the test in the `wat-issue` skill, "Related, duplicate or new". Same root cause in the same element: duplicate. Same symptom, different element: link, do not close. The tool gives signals. A duplicate call needs your reading of both issues.
+5. **Check for duplicates.** Run `npx gh-wat-dis related --issue <n> --md` for each issue. For a draft that is not filed yet, use `--title` and `--body-file`. Read every candidate above 30 points and apply the test in the `wat-issue` skill, "Related, duplicate or new". Same root cause in the same element: duplicate. Same symptom, different element: link, do not close. The tool gives signals. A duplicate call needs your reading of both issues.
 6. **Match a milestone.** Rules below.
 7. **Show one table**, then the short lists. Wait for the user.
-8. **Apply the approved rows** with `gh issue edit`, `gh issue comment`, `gh issue close`. Report counts.
+8. **Apply the approved rows** with `gh issue edit --type <T> --add-label <surface> --milestone <m>` (on a user repository the type goes in `--add-label`, and any other type label comes off with `--remove-label`), `npx gh-wat-dis relate`, `gh issue comment`, `gh issue close`. Report counts.
+
+## Labels
+
+Labels mean two things: `agents`, and the product surface. On a repository under a user account the type is a label as well, because GitHub has no issue types there. Help the user define the labels, here or in `wat-setup`:
+
+1. Run `npx gh-wat-dis labels --text`. With `labels.surfaces` empty, it proposes one surface for each mapped architecture element.
+2. A surface is a part of the product a user or a team would name: "checkout", "billing", "site". Merge elements that people treat as one. 5 to 12 surfaces suit most repositories. Show the list and let the user rename.
+3. Save the agreed list in `labels.surfaces`, then `npx gh-wat-dis labels apply`.
+4. Labels outside the plan show as `extra`. Leave them unless the user asks: `labels apply --prune` deletes them from every issue, and that cannot be undone.
+5. An issue that touches a surface with no label is a signal: propose a new surface in the `Decide` list.
 
 ## Priority
+
+Priority is the user's decision. Propose it so the table can be sorted, and say what evidence moved it. Do not write it to GitHub unless the organization has a priority issue field and the user asks.
 
 | Priority | Rule |
 |---|---|
@@ -62,9 +76,9 @@ Otherwise: no milestone. Backlog is a valid answer. Flag when a proposal takes t
 ```markdown
 **Triaged <n> issues**: <a> ready, <b> need info, <c> duplicates, <d> not planned.
 
-| # | Title | Type | Element | Pri | Size | Milestone | Why |
+| # | Title | Type | Surface | Pri (proposed) | Size | Milestone | Why |
 |---|---|---|---|---|---|---|---|
-| 142 | Duplicate charge on webhook retry | Bug | Payments worker | P1 | S | v1.4 | Regression from #131 |
+| 142 | Duplicate charge on webhook retry | Bug | payments | P1 | S | v1.4 | Regression from #131 |
 
 **Needs info**
 - #150: no reproduction → ask for the request id and the response body

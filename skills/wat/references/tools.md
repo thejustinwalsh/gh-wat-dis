@@ -15,11 +15,14 @@ Always write the body to a file and pass `--body-file`. Never pass a body inline
 | Create PR | `gh pr create --title "<t>" --body-file body.md --base <branch> --draft --attach ./d.svg` |
 | Edit PR | `gh pr edit <n> --body-file body.md --add-label <l> --milestone "<title>"` |
 | Create label | `gh label create "<name>" --color <hex> --description "<d>"` |
-| Add sub-issue | `gh api repos/{owner}/{repo}/issues/<parent>/sub_issues -F sub_issue_id=<child id>` |
-| Add dependency | `gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by -F issue_id=<blocker id>` |
+| Set the type, organization repository | `gh issue create --type Bug`, `gh issue edit <n> --type Feature` |
+| Set the type, user repository | `gh issue create --label bug`, `gh issue edit <n> --add-label feature --remove-label task` |
+| Make an issue a sub-issue | `npx gh-wat-dis relate <n> --parent <parent>` |
+| Record what blocks an issue | `npx gh-wat-dis relate <n> --blocked-by <a>,<b>` · `--blocks <c>` · add `--remove` to undo |
+| Create the labels the config wants (type labels on a user repository, `agents`, surfaces) | `npx gh-wat-dis labels apply` |
 | Pin issue | `gh issue pin <n>` |
 
-Sub-issue and dependency calls take the issue **id**, not the number: `gh issue view <n> --json id --jq .id` gives a node id; for the REST id use `gh api repos/{owner}/{repo}/issues/<n> --jq .id`.
+`relate` looks up the ids that GitHub's relation calls need. You pass issue numbers.
 
 ## Milestones (REST through `gh api`)
 
@@ -72,6 +75,8 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --md` |
+| An issue's parent, sub-issues, blocked by, blocking | `npx gh-wat-dis relations <n>` |
+| Labels the config wants, compared with GitHub | `npx gh-wat-dis labels --text` |
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |
 | The same, for an open PR | `npx gh-wat-dis links --pr <n> --closes <n>,<m> --text` |
 | Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone` |
