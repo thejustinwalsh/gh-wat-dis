@@ -38,7 +38,8 @@ gh-wat-dis writes through `gh`. Attachments need **gh 2.99.0 or later**.
 | Check | Fix |
 |---|---|
 | `gh --version` is below 2.99.0 | `brew upgrade gh`, or the method at https://cli.github.com |
-| `gh auth status` fails | The user runs `gh auth login` in their own terminal. Do not run it for them. |
+| `gh auth` fails: not signed in, or the saved token is no longer valid | Sign-in opens a browser and needs a person. Ask the user to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in and checks again. Or they run `gh auth login --hostname github.com --web` themselves. Do not run the sign-in for them. |
+| `gh auth` fails: token lacks the `repo` scope | The user runs `gh auth refresh --scopes repo`. |
 | `gh issue create --help` has no `--attach` | The version is too old, or the host is GitHub Enterprise Server. Use the branch fallback in `../wat/references/rendering.md`. |
 
 ## 3. GitHub MCP server

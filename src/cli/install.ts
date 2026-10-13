@@ -107,8 +107,14 @@ export async function install(argv: string[]): Promise<number> {
   if (changed) console.log('Restart your agent harness so it loads the skills.');
 
   console.log('\nChecks');
-  const { printChecks, runChecks } = await import('./doctor.ts');
-  const fails = printChecks(await runChecks());
+  const { offerLogin, printChecks, runChecks } = await import('./doctor.ts');
+  let checks = await runChecks();
+  let fails = printChecks(checks);
+  if (await offerLogin(checks)) {
+    console.log('\nChecking again');
+    checks = await runChecks();
+    fails = printChecks(checks);
+  }
   return count('skip') || fails ? 1 : 0;
 }
 

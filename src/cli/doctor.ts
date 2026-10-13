@@ -1,6 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { validateConfig } from './config.ts';
 import type { Config } from './config.ts';
 import { MANIFEST, hashDir, skillNames, targets } from './install.ts';
@@ -11,6 +13,9 @@ const MIN_GH = '2.99.0';
 const MIN_NODE = '24.0.0';
 
 export interface Check { status: 'ok' | 'warn' | 'FAIL'; name: string; detail: string }
+
+const LOGIN = ['auth', 'login', '--hostname', 'github.com', '--web'];
+const LOGIN_CMD = `gh ${LOGIN.join(' ')}`;
 
 function checkRuntime(): Check {
   const g = globalThis as { Bun?: { version: string }; Deno?: { version: { deno: string } } };
@@ -29,13 +34,44 @@ function checkGh(offline: boolean): Check[] {
   const res: Check[] = [compareVersions(v, MIN_GH) >= 0
     ? { status: 'ok', name: 'gh', detail: `${v}, --attach available` }
     : { status: 'FAIL', name: 'gh', detail: `${v}. Attachments need ${MIN_GH} or later. Upgrade: brew upgrade gh, or https://cli.github.com` }];
-  if (!offline) {
-    const login = run('gh', ['api', 'user', '--jq', '.login']);
-    res.push(login
-      ? { status: 'ok', name: 'gh auth', detail: `signed in as ${login}` }
-      : { status: 'FAIL', name: 'gh auth', detail: 'not signed in, or the token is no longer valid. Run in your own terminal: gh auth login' });
-  }
+  if (!offline) res.push(checkAuth());
   return res;
+}
+
+function checkAuth(): Check {
+  const login = run('gh', ['api', 'user', '--jq', '.login']);
+  if (!login) {
+    const hasToken = Boolean(run('gh', ['auth', 'token']));
+    return {
+      status: 'FAIL', name: 'gh auth',
+      detail: `${hasToken ? 'the saved token is no longer valid' : 'not signed in'}. Sign in: ${LOGIN_CMD}`,
+    };
+  }
+  const status = spawnSync('gh', ['auth', 'status', '--hostname', 'github.com'], { encoding: 'utf8' });
+  const scopes = `${status.stdout}${status.stderr}`.match(/Token scopes: (.*)/)?.[1]?.replace(/'/g, '').split(/,\s*/) ?? [];
+  if (scopes.length && !scopes.includes('repo')) {
+    return { status: 'FAIL', name: 'gh auth', detail: `signed in as ${login}, but the token lacks the "repo" scope. Run: gh auth refresh --scopes repo` };
+  }
+  return { status: 'ok', name: 'gh auth', detail: `signed in as ${login}` };
+}
+
+/**
+ * Signs in through gh's own browser flow. Only runs in a terminal a person is using:
+ * an agent gets the command to hand to the human instead.
+ */
+export async function offerLogin(checks: Check[]): Promise<boolean> {
+  const auth = checks.find((c) => c.name === 'gh auth' && c.status === 'FAIL');
+  if (!auth) return false;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log(`\nGitHub sign-in needs a person. Ask them to run this in their own terminal, then run doctor again:\n  ${LOGIN_CMD}`);
+    return false;
+  }
+  if (auth.detail.includes('scope')) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question('\nGitHub CLI is not signed in. Sign in now through your browser? [Y/n] ')).trim().toLowerCase();
+  rl.close();
+  if (answer && answer !== 'y' && answer !== 'yes') return false;
+  return spawnSync('gh', LOGIN, { stdio: 'inherit' }).status === 0;
 }
 
 function checkSkills(cwd: string): Check[] {
@@ -143,11 +179,17 @@ export function printChecks(checks: Check[]): number {
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json'] });
-  const checks = await runChecks({ offline: args.offline });
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login'] });
+  let checks = await runChecks({ offline: args.offline });
   if (args.json) {
     console.log(JSON.stringify(checks, null, 2));
     return checks.some((c) => c.status === 'FAIL') ? 1 : 0;
   }
-  return printChecks(checks) ? 1 : 0;
+  let fails = printChecks(checks);
+  if (!args['no-login'] && await offerLogin(checks)) {
+    console.log('\nChecking again');
+    checks = await runChecks({ offline: args.offline });
+    fails = printChecks(checks);
+  }
+  return fails ? 1 : 0;
 }

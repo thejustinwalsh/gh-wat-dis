@@ -16,7 +16,7 @@ That is the whole thing.
 
 1. Run `npx gh-wat-dis install`. It copies the `wat` skills to `~/.agents/skills` and `~/.claude/skills`, then runs every check. Add `--project` to install into this repository only.
 2. Read the check lines. Fix each `FAIL` it prints. `warn` lines are optional.
-3. If `gh auth` fails, ask the human to run `gh auth login` in their own terminal. Do not run it for them.
+3. If `gh auth` fails, the sign-in needs a person and a browser. Ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in, then checks again. Do not run the sign-in for them.
 4. If the human wants the GitHub MCP server, run `npx gh-wat-dis mcp <client>` and follow the `wat-setup` skill. Never ask for a token in chat. Never write a token into a file.
 5. In a repository that should always use these skills, run `npx gh-wat-dis init`, review `.agents/gh-wat-dis/config.json` with the human, and commit it.
 6. Tell the human to restart the harness so the skills load.
@@ -108,7 +108,7 @@ Run `npx gh-wat-dis doctor`.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `FAIL gh` | GitHub CLI older than 2.99 | `brew upgrade gh`, or https://cli.github.com |
-| `FAIL gh auth` | Not signed in | `gh auth login` |
+| `FAIL gh auth` | Not signed in, or the saved token expired | Run `npx gh-wat-dis doctor` in your terminal and accept the sign-in |
 | `FAIL skills` | Not installed, or a directory `install` does not own | `npx gh-wat-dis install` (`--force` to replace) |
 | Skills do not trigger | Harness not restarted | Restart it |
 | Image shows as a broken link | The file was not attached | Post with `gh ... --attach <file>` and check the body has an `https://` image URL |
