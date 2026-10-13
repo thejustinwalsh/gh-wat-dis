@@ -13,6 +13,20 @@ Server: [github/github-mcp-server](https://github.com/github/github-mcp-server).
 
 OAuth to the remote server works only in hosts that registered a GitHub app (VS Code). The server does not support dynamic client registration, so other hosts use a token.
 
+## Where the token comes from
+
+A harness sends the token to the hosted server in an `Authorization` header on each request. It gets the value in one of three ways.
+
+| Way | Harnesses | Stored where |
+|---|---|---|
+| **Headers helper**: a command the harness runs at each connect | Claude Code (`headersHelper`) | Nowhere. The helper prints it from the `gh` login. |
+| **Own sign-in** | VS Code | In the host's own credential store |
+| **Environment variable** named in the config | Codex, Cursor, Gemini CLI, OpenCode, Copilot CLI | Wherever the harness process got its environment |
+
+For the third way, no harness reads a `.env` file by itself. The variable must be in the environment of the harness process. Keep it out of the global shell profile: put it in `.agents/gh-wat-dis/.env`, which `init` git-ignores, and load that file for the project with direnv or mise. The config file only names the variable. It never holds the value.
+
+Do not name the variable `GITHUB_TOKEN` or `GH_TOKEN`. The `gh` CLI reads both and would use them in place of its own login.
+
 ## Toolsets
 
 Default toolsets: `context`, `repos`, `issues`, `pull_requests`, `users`. gh-wat-dis adds `labels`.
@@ -29,7 +43,7 @@ gh-wat-dis writes through `gh`, so **read-only is a good default** for the MCP s
 
 | Client | File | Key |
 |---|---|---|
-| Claude Code | `claude mcp add-json github '<json>' --scope user`, or `.mcp.json` in the project | `mcpServers` |
+| Claude Code | `.mcp.json` in the project, or `claude mcp add-json github '<json>' --scope user` | `mcpServers`, with `headersHelper` |
 | Codex CLI | `~/.codex/config.toml` | `[mcp_servers.github]` |
 | Cursor | `~/.cursor/mcp.json` or `.cursor/mcp.json` | `mcpServers` |
 | Gemini CLI | `~/.gemini/settings.json` or `.gemini/settings.json` | `mcpServers`, with `httpUrl` |
@@ -55,7 +69,7 @@ A link never carries a token. The config in it names an environment variable.
 ## Rules
 
 1. Merge into the file. Keep every other server and setting.
-2. Reference the token by environment variable. Never write the token value.
+2. Never write the token value into a config file. Use the headers helper, or name an environment variable.
 3. If a `github` entry exists, show it and ask before you change it.
 4. Project-scope files (`.mcp.json`, `.cursor/mcp.json`) are shared with the team. Ask before you add one to a repository.
 5. After the change, the user restarts the harness. Check with `get_me`.

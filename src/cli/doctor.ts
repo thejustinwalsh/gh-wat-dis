@@ -142,13 +142,15 @@ async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
   ];
   const found: string[] = [];
   const wanted = new Set<string>();
+  let helper = false;
   for (const [label, path, entry] of places) {
     if (!existsSync(path)) continue;
     try {
       const e = entry(readFileSync(path, 'utf8'));
       if (e === undefined) continue;
       found.push(label);
-      for (const v of tokenVars(e)) wanted.add(v);
+      if (e.includes('headersHelper')) helper = true;
+      else for (const v of tokenVars(e)) wanted.add(v);
     } catch { /* an unreadable harness config is not ours to report */ }
   }
   const present = TOKEN_VARS.filter((n) => process.env[n]);
@@ -157,12 +159,21 @@ async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
     return { status: 'warn', name: 'github mcp', detail: `no GitHub MCP server found in a known config. Optional: skills read through gh without it.${have} Set up: npx gh-wat-dis mcp <client>` };
   }
   const where = `configured for ${found.join(', ')}`;
-  if (!wanted.size) return { status: 'ok', name: 'github mcp', detail: `${where}. The config names no token variable (the harness signs in itself).` };
+  if (!wanted.size) {
+    return { status: 'ok', name: 'github mcp', detail: helper
+      ? `${where}. No token is stored: a headers helper reads it from the gh login at each connect.`
+      : `${where}. The config names no token variable (the harness signs in itself).` };
+  }
+  const inFile = envFileVars(cwd);
   const missing = [...wanted].filter((n) => !process.env[n]);
+  const fromFile = missing.filter((n) => inFile.includes(n));
+  if (missing.length && fromFile.length === missing.length) {
+    return { status: 'warn', name: 'github mcp', detail: `${where}. ${missing.join(', ')} is in ${ENV_FILE_REL} but not in this environment. Start the harness with that file loaded (direnv, mise, or: set -a; . ${ENV_FILE_REL}; set +a).` };
+  }
   if (missing.length) {
     const reuse = present.length
       ? `${present[0]} is set: point the config at it, or run: export ${missing[0]}="$${present[0]}"`
-      : `set it in your shell profile: export ${missing[0]}="$(gh auth token)"`;
+      : `put ${missing[0]}=<token> in ${ENV_FILE_REL} and load it for this project, or for Claude Code use the headers helper from: npx gh-wat-dis mcp claude`;
     return { status: 'warn', name: 'github mcp', detail: `${where}, but ${missing.join(', ')} is not set in this environment. ${reuse}. Then restart the harness.` };
   }
   if (!offline) {
@@ -173,6 +184,26 @@ async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
     }
   }
   return { status: 'ok', name: 'github mcp', detail: `${where}. ${[...wanted].join(', ')} is set${offline ? '' : ' and GitHub accepts it'}.` };
+}
+
+const ENV_FILE_REL = '.agents/gh-wat-dis/.env';
+
+/** Variable names defined in the project's token file. Never the values. */
+function envFileVars(cwd: string): string[] {
+  const path = join(repoRoot(cwd), ENV_FILE_REL);
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8').split('\n').map((l) => l.match(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*\S/)?.[1]).filter((n): n is string => Boolean(n));
+}
+
+/** A token file that git would commit is the one failure here that leaks a secret. */
+function checkEnvFile(cwd: string): Check[] {
+  const root = repoRoot(cwd);
+  if (!existsSync(join(root, ENV_FILE_REL))) return [];
+  const ignored = spawnSync('git', ['check-ignore', '-q', ENV_FILE_REL], { cwd: root }).status === 0;
+  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', ENV_FILE_REL], { cwd: root, stdio: 'ignore' }).status === 0;
+  if (tracked) return [{ status: 'FAIL', name: 'token file', detail: `${ENV_FILE_REL} is tracked by git. Remove it from the repository (git rm --cached ${ENV_FILE_REL}), then revoke the token and make a new one.` }];
+  if (!ignored) return [{ status: 'FAIL', name: 'token file', detail: `${ENV_FILE_REL} is not git-ignored. Add ".env" to .agents/gh-wat-dis/.gitignore before you commit.` }];
+  return [{ status: 'ok', name: 'token file', detail: `${ENV_FILE_REL} is git-ignored` }];
 }
 
 function checkConfig(cwd: string): Check {
@@ -211,7 +242,7 @@ async function checkTools(): Promise<Check[]> {
 }
 
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), checkConfig(cwd), ...(await checkTools())];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools())];
 }
 
 export function printChecks(checks: Check[]): number {
