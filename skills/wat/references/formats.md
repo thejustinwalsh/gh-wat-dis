@@ -130,7 +130,7 @@ Refs #<m>
 ````
 
 - Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
-- A change a person can see gets a before and after pair in `Evidence`: see "Before and after" below.
+- A before and after pair is one good way to show a change a person can see. It is a choice, not a rule: see "Before and after" below.
 - Link lines go last, after the agent block, one issue per line.
   - `Closes #n`: the issue closes when the PR merges. Use it only for an issue this PR finishes.
   - `Refs #n`: a link with no effect on state. Use it for a tracking issue, a related issue, or an issue this PR only partly covers.
@@ -207,9 +207,9 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 
 ## Before and after
 
-When a change can be seen, show it. Two captures of the same thing, one from before the change and one from after, tell a reviewer more than a paragraph does. They go in `Evidence`.
+A before and after pair is a way to report evidence, not a required part of a body. Reach for it when a reviewer would understand the change faster by seeing it: two captures of the same thing, one from before the change and one from after, can say more than a paragraph. They go in `Evidence`. When words or numbers carry the change as well, use those and attach nothing.
 
-**When it applies.** The change alters something a person looks at or reads:
+**When it fits.** The change alters something a person looks at or reads, and the difference is the point:
 
 | The change | Show it as |
 |---|---|
@@ -218,7 +218,7 @@ When a change can be seen, show it. Two captures of the same thing, one from bef
 | What a command prints, an error message, a log line | Two text blocks, or a `diff` block. Not a screenshot |
 | A terminal UI where the colour or the layout is the change | Two screenshots of the terminal |
 
-**When it does not.** Leave it out when the output is the same before and after (a refactor, a rename, a speed-up: use numbers), when only a test can observe the change, or when you could not capture both sides. Something new has no "before": show one capture under `After` and say that it is new. Never fill the `Before` cell with a mock, a description or a capture of something else.
+**When it does not.** Leave it out when the difference is small enough to state in a sentence, when the output is the same before and after (a refactor, a rename, a speed-up: use numbers), when only a test can observe the change, or when you could not capture both sides. Something new has no "before": show one capture under `After` and say that it is new. Never fill the `Before` cell with a mock, a description or a capture of something else.
 
 **What makes a good pair.** A reader should find the difference in a few seconds, and it should be the only difference.
 
