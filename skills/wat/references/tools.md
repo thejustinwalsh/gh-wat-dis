@@ -77,6 +77,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | The same, plus a PNG to look at | `npx gh-wat-dis diagram change.json -o change.svg --png change.png` |
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |
+| What a repository with history holds: counts of what open issues lack, labels outside the plan, milestones | `npx gh-wat-dis survey` · `--issues` for one row per issue |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --kind issue --md` |
 | Status numbers for a milestone: counts, in review, blocked, done-when | `npx gh-wat-dis milestone ["<title>"]` |

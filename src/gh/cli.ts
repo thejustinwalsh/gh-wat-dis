@@ -9,6 +9,8 @@ import { issueRows } from './issues.ts';
 import type { RawListIssue } from './issues.ts';
 import { byVersion, milestoneStatus } from './milestone.ts';
 import type { RawIssue } from './milestone.ts';
+import { issueNumbers, survey, surveyRows } from './survey.ts';
+import type { RawMilestone, RawSurveyIssue } from './survey.ts';
 import { readRelations, relate } from './relations.ts';
 import type { Api } from './relations.ts';
 import { analyzeLinks } from './links.ts';
@@ -288,5 +290,45 @@ export async function issues(argv: string[]): Promise<number> {
   if (args.milestone) rows = rows.filter((r) => (args.milestone === 'none' ? r.milestone === null : r.milestone === args.milestone));
   if (args.queue) rows = rows.filter((r) => r.missing.length || (r.milestone === null && !r.tracking));
   console.log(JSON.stringify(rows.slice(0, Number(args.limit ?? 100)), null, 2));
+  return 0;
+}
+
+const SURVEY_USAGE = `Usage: npx gh-wat-dis survey
+       npx gh-wat-dis survey --issues [--missing] [--mine] [--milestone <title>|none] [--except <file>] [--limit 5]
+Reads this repository and prints, as JSON, what a migration onto gh-wat-dis has to deal with. It changes nothing.
+With no flag: counts of open issues by what they lack, facts on their bodies, the labels outside the plan with
+the number of open issues on each, and the open milestones (due date, done-when conditions, tracking issue).
+Pull requests are counted and not listed.
+  --issues          print one row for each open issue instead: the current milestone first, then the newest update
+  --missing         keep the issues with no type, several types or no surface
+  --mine            keep the issues the signed-in user wrote
+  --milestone <t>   keep the issues in one milestone, or "none" for the backlog
+  --except <file>   leave out the issues a file lists: one number at the start of each line, the rest is a note
+  --limit <n>       rows to print, 5 by default`;
+
+export async function surveyCmd(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['issues', 'missing', 'mine', 'help'], strings: ['milestone', 'except', 'limit'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(SURVEY_USAGE); return 0; }
+  const limit = Number(args.limit ?? 5);
+  if (!Number.isInteger(limit) || limit <= 0) throw new UsageError('--limit must be a whole number above 0');
+  const cfg = loadConfig();
+  const view = run('gh', ['repo', 'view', '--json', 'nameWithOwner,isInOrganization,viewerPermission']);
+  if (!view) throw new Error('no GitHub repository found for this directory. Run inside a clone with a GitHub remote, signed in with gh.');
+  const info = JSON.parse(view) as { nameWithOwner: string; isInOrganization: boolean; viewerPermission: string };
+  const repo = info.nameWithOwner;
+  const [raw, live, milestones, login] = await Promise.all([
+    api<RawSurveyIssue[]>([`repos/${repo}/issues?state=open&per_page=100`, '--paginate']),
+    gh<LiveLabel[]>(['label', 'list', '--limit', '300', '--json', 'name,description,color']),
+    api<RawMilestone[]>([`repos/${repo}/milestones?state=open&per_page=100`]),
+    api<{ login: string }>(['user']).then((u) => u.login),
+  ]);
+  const input = { repo, organization: info.isInOrganization, viewer: { login, permission: info.viewerPermission }, cfg, issues: raw, labels: live, milestones };
+  if (!args.issues) { console.log(JSON.stringify(survey(input), null, 2)); return 0; }
+  const except = new Set(args.except ? issueNumbers(readInput(args.except)) : []);
+  let rows = surveyRows(input).filter((r) => !except.has(r.number));
+  if (args.missing) rows = rows.filter((r) => r.missing.length);
+  if (args.mine) rows = rows.filter((r) => r.mine);
+  if (args.milestone) rows = rows.filter((r) => (args.milestone === 'none' ? r.milestone === null : r.milestone === args.milestone));
+  console.log(JSON.stringify(rows.slice(0, limit), null, 2));
   return 0;
 }
