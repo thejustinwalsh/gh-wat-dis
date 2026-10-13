@@ -82,7 +82,7 @@ Propose a milestone only when at least one rule holds. State which.
 
 1. **Goal fit.** The issue is needed for a done-when condition in the milestone description.
 2. **Dependency.** An issue in the milestone is blocked by this one.
-3. **Same surface, small fix.** The milestone already has an issue with this surface label, open or closed (`npx gh-wat-dis issues --milestone "<title>"`, and `closed[]` from `npx gh-wat-dis milestone "<title>"`), and the fix is S. Batching saves a review cycle.
+3. **Same surface, small fix.** The milestone already has an issue with this surface label, open or closed (`npx gh-wat-dis issues --milestone "<title>"`, and `closed[]` from `npx gh-wat-dis milestone "<title>"`), and the fix is `s` by your own estimate. Make the estimate for this test even when you are filing the issue and will not set a size label. Batching saves a review cycle.
 4. **Regression.** A bug introduced by work in the current milestone goes in the current milestone.
 5. **A bug the user rates urgent.** Goes in the current milestone: the lowest open version. Milestones have no due dates.
 6. **In scope, and it checks what ships.** The description's `In scope` line covers the issue's surface, and the issue verifies or completes work the milestone delivers. This is the weakest rule: say so in `Why`.
@@ -92,7 +92,7 @@ Otherwise: no milestone. Backlog is a valid answer.
 **When a rule holds for two milestones,** read how far the lower one is: the counts from `npx gh-wat-dis milestone "<title>"`.
 - Early, with most of its issues still open: fold the issue into the lower one.
 - Near release, with most of its issues closed: be selective. Propose the lower one only when the work is severe enough to hold the release, such as a bug in what ships or a done-when condition that needs it. Otherwise propose the later one.
-- Not clear which: do not pick. Name both milestones and the counts, and let the user decide (in triage, under `Decide`).
+- Not clear which, for example the lower one is about half done: do not pick. Name both milestones and the counts, and let the user decide (in triage, under `Decide`; when filing an issue, show the draft with the milestone open and ask).
 
 State the counts in `Why` either way.
 
