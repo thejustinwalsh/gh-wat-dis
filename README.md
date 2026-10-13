@@ -1,6 +1,6 @@
 # gh-wat-dis
 
-![gh-wat-dis: read it in two minutes, know what to do. A tabby cat squints at a screen and asks for context.](docs/og.jpg)
+![A confused tabby cat stares at a laptop full of code. Caption: GH WAT DIS? I CAN HAS CONTEXT?](docs/lolcat.jpg)
 
 Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on in two minutes: the problem and the solution first, the system design next, the long data for agents folded away at the end.
 
@@ -132,5 +132,3 @@ npx gh-wat-dis uninstall
 The writing style adapts [attention-control](https://github.com/aaddrick/attention-control). Diagrams follow the [C4 model](https://c4model.com) and are laid out by [elkjs](https://github.com/kieler/elkjs). Code facts come from [ast-grep](https://ast-grep.github.io). See `NOTICE.md`.
 
 MIT licensed.
-
-![A confused tabby cat stares at a laptop full of code. Caption: GH WAT DIS? I CAN HAS CONTEXT?](docs/lolcat.jpg)
