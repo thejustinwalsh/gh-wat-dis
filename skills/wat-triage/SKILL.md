@@ -77,7 +77,14 @@ Propose a milestone only when at least one rule holds. State which.
 5. **A bug the user rates urgent.** Goes in the current milestone: the lowest open version. Milestones have no due dates.
 6. **In scope, and it checks what ships.** The description's `In scope` line covers the issue's surface, and the issue verifies or completes work the milestone delivers. This is the weakest rule: say so in `Why`.
 
-Otherwise: no milestone. Backlog is a valid answer. When a rule holds for two milestones, propose the lower version and name the other in `Why`.
+Otherwise: no milestone. Backlog is a valid answer.
+
+**When a rule holds for two milestones,** read how far the lower one is: the counts from `npx gh-wat-dis milestone "<title>"`.
+- Early, with most of its issues still open: fold the issue into the lower one.
+- Near release, with most of its issues closed: be selective. Propose the lower one only when the work is severe enough to hold the release, such as a bug in what ships or a done-when condition that needs it. Otherwise propose the later one.
+- Not clear which: do not pick. Name both milestones and the counts, and let the user decide (in triage, under `Decide`).
+
+State the counts in `Why` either way.
 
 **An issue that already has a milestone** stays there when a rule holds. When none holds, do not move it yourself: list it under `Decide` with the question "keep, or move to the backlog?". Flag when a proposal takes the milestone past `milestones.capacity`, and name what to move out.
 
