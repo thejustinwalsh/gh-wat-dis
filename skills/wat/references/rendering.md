@@ -38,6 +38,7 @@ Use the richest element that carries the information in the fewest words. Check 
 - Formats: PNG, JPEG, GIF, WebP, SVG, MP4, MOV, WebM. 10 MB per image.
 - Needs gh 2.99.0 or later, GitHub.com or Enterprise Cloud, and write access.
 - An SVG renders through `<img>`: no scripts, no external fonts, no links inside it. `npx gh-wat-dis diagram` output already fits.
+- An SVG in `<img>` is its own document. It gets no colours from the page: `currentColor` is black, and GitHub exposes no theme variables to it. A `prefers-color-scheme` rule inside the SVG does work, and in Chrome it follows the page's colour scheme, so it tracks the reader's GitHub theme. The renderer's `auto` theme relies on that and keeps an opaque background for browsers that differ.
 - Always write alt text. The alt text is the diagram title.
 - Inline `<svg>` and `data:` URIs are stripped. Do not use them.
 - Fallback when `--attach` is not available: commit the file to a branch and link `../blob/<branch>/<path>.svg?raw=true`.
