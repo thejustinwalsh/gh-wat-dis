@@ -105,6 +105,11 @@
                   "type": "string"
                 },
                 "description": "Ids of the architecture elements this surface covers."
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#?[0-9a-fA-F]{6}$",
+                "description": "Six hex digits. Leave it out to get a colour from the label's place in the list."
               }
             }
           }

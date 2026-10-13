@@ -18,16 +18,21 @@ export interface ArchElement {
 export interface ArchRelationship { from: string; to: string; label: string; technology?: string }
 
 /** A label for a part of the product an issue touches. */
-export interface SurfaceLabel { name: string; description: string; elements?: string[] }
+export interface SurfaceLabel {
+  name: string;
+  description: string;
+  elements?: string[];
+  /** Six hex digits. Leave it out to get a colour from the label's place in the list. */
+  color?: string;
+}
 
-export const AGENTS_LABEL = { name: 'agents', description: 'Agent memory, an agentic workflow, or work managed by autonomous agents', color: '5319e7' };
-export const SURFACE_COLOR = 'c5def5';
+export const AGENTS_LABEL = { name: 'agents', description: 'Agent memory, an agentic workflow, or work managed by autonomous agents' };
 export const DEFAULT_TYPES = ['Task', 'Bug', 'Feature'] as const;
-/** Colour and wording for a type label on a user repository. The wording follows GitHub's own issue types. */
-export const TYPE_LABELS: Record<string, { description: string; color: string }> = {
-  task: { description: 'A specific piece of work', color: 'fbca04' },
-  bug: { description: 'An unexpected problem or behavior', color: 'd73a4a' },
-  feature: { description: 'A request, idea, or new functionality', color: '0e8a16' },
+/** Wording for a type label on a user repository. It follows GitHub's own issue types. */
+export const TYPE_LABELS: Record<string, { description: string }> = {
+  task: { description: 'A specific piece of work' },
+  bug: { description: 'An unexpected problem or behavior' },
+  feature: { description: 'A request, idea, or new functionality' },
 };
 export const typeLabel = (type: string): string => type.trim().toLowerCase().replace(/\s+/g, '-');
 

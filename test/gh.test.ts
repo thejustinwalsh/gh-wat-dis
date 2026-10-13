@@ -186,3 +186,19 @@ test('relations: reads all four kinds and sends database ids when it writes', as
   assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/1/sub_issues' && c.includes('sub_issue_id=1007')));
   assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/7/dependencies/blocked_by' && c.includes('issue_id=1003')));
 });
+
+test('label colours: valid hex, distinct hues, stable when a surface is appended', async () => {
+  const { oklchHex, surfaceColor, ROLE_COLORS } = await import('../src/gh/color.ts');
+  assert.equal(oklchHex(1, 0, 0), 'ffffff');
+  assert.equal(oklchHex(0, 0, 0), '000000');
+  const twelve = Array.from({ length: 12 }, (_, i) => surfaceColor(i));
+  for (const c of [...twelve, ...Object.values(ROLE_COLORS)]) assert.match(c, /^[0-9a-f]{6}$/);
+  assert.equal(new Set(twelve).size, 12);
+  const chan = (hex: string): number[] => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const dist = (a: string, b: string): number => Math.hypot(...chan(a).map((v, i) => v - chan(b)[i]!));
+  for (let i = 1; i < twelve.length; i++) assert.ok(dist(twelve[i - 1]!, twelve[i]!) > 40, `neighbours ${i - 1} and ${i} look alike`);
+  assert.equal(surfaceColor(3), Array.from({ length: 20 }, (_, i) => surfaceColor(i))[3]);
+  const luma = (hex: string): number => { const [r, g, b] = chan(hex); return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!; };
+  const lumas = twelve.map(luma);
+  assert.ok(Math.max(...lumas) - Math.min(...lumas) < 45, 'surfaces share one lightness');
+});
