@@ -15,7 +15,7 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 1. **Pick the type and scope.** One level per diagram: context, container, component, dynamic or deployment. A container diagram keeps the people and the external systems that have a line to a container: they show who and what the system talks to.
 2. **Get the elements.**
    - From a change: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts > .wat-tmp/change.json`.
-   - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`. That holds every element, components too. For the container view of the whole system, fold the components: `npx gh-wat-dis graph from-config --type container --title "<System>: containers" | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/containers.json`. `--type` sets the diagram type in the subtitle and filters nothing: `collapse` does the folding.
+   - From the map: `npx gh-wat-dis graph from-config > .wat-tmp/system.json`. That spec holds every element, components included. For the container view of the whole system, pipe it through `collapse`, which folds the components into their containers: `npx gh-wat-dis graph from-config --type container --title "<System>: containers" | npx gh-wat-dis graph collapse --to-type container > .wat-tmp/containers.json`. `--type` and `--title` label the diagram.
    - From neither: read the code. Never draw an element you did not find.
 3. **Shape the spec.** The spec is the one format every graph tool reads and writes, so shape it in steps:
    ```bash
@@ -49,14 +49,14 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg --png .wat-tmp/<name>.png
    ```
-   Check that no label overlaps a box, that nothing is cut at an edge, and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram. The PNG is for your eyes only: GitHub gets the SVG. It uses the light colours; both schemes share one layout. Do not reach for another rasterizer: a thumbnail tool such as `qlmanage` crops a wide diagram, which looks like a renderer fault and is not one.
+   Check that no label overlaps a box, that nothing is cut at an edge, and that the changed elements stand out. If it reads as a hairball, cut elements or split the diagram. This command is the way to see a diagram: it draws the whole image at twice its size, which a preview or thumbnail tool does not promise. The PNG is for you to inspect. GitHub gets the SVG. The PNG shows the light colours, and both colour schemes share one layout, so one look covers both.
 7. **No issue or PR to put it in?** When the user asked only for the diagram, stop here: give the path of the SVG and print the legend table when the lines are numbered. Do not attach it anywhere.
 8. **Reference it** in the body by its local path. The alt text is the diagram title:
    ```markdown
    ![Checkout: payment retries move to a worker](./<name>.svg)
    ```
    Write the path relative to the body file. Put the diagram right after the opening and the alert.
-9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. `gh` uploads the file and swaps the local path for the uploaded URL. The swap needs the body and the flag to name the file the same way: run `gh` from the folder that holds the body file, and pass `--attach ./<name>.svg` exactly as the body writes it. Check the posted body: the image link must start with `https://`. If the local path is still there and the image sits at the end of the body, `gh` appended it: put the uploaded URL in place of the local path, remove the appended line, and update the body with `gh issue edit` or `gh pr edit --body-file`.
+9. **Attach on post.** Repeat `--attach` for each diagram: `gh issue create|edit --body-file <body> --attach <svg> --attach <svg2>` or `gh pr create|edit ...`. Run `gh` from the folder that holds the body file, and pass each file as the body writes it: the body says `![Title](./<name>.svg)`, the flag says `--attach ./<name>.svg`. `gh` matches the two, uploads the file and puts the uploaded URL where the local path was. Then read the posted body: every image link starts with `https://`. A local path still in the body means the two did not match and `gh` put the image at the end. Repair it by moving that URL into the image line and updating the body with `gh issue edit` or `gh pr edit --body-file`.
 
 ## Spec
 

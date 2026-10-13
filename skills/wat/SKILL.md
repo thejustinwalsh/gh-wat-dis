@@ -63,9 +63,14 @@ gh-wat-dis decides how to communicate: the shape, the words, the diagram, the fi
 ## 6. Tools
 
 - **Write with `gh`.** Create and edit issues, PRs, comments and milestones with the GitHub CLI. Only `gh` can upload attachments (`--attach`, needs gh 2.99.0 or later).
-- **Read with the GitHub MCP server.** Search, list, read threads, diffs and check runs. If the server is not connected, use `gh` for reads too and suggest `wat-setup`. Where a step shows a `gh` read command, that is the fallback: the matching MCP tool is the first choice. The exception is a read the server cannot do: milestones, a search by `updated:<DATE`, `linked:pr` or `is:blocked`, and a PR's closing references. Use `gh` first for those. Where a step names an `npx gh-wat-dis` tool, use that tool and do not rebuild its output from raw reads.
+- **Read in this order of choice:**
+  1. A step names an `npx gh-wat-dis` tool: use that tool. Its output is the fact. Do not rebuild it from raw reads.
+  2. The GitHub MCP server is connected and has a tool for the read (search, list, a thread, a diff, check runs): use it.
+  3. Everything else goes through `gh`: every read when no server is connected, and these reads always, because the server has no tool for them: milestones, a search by `updated:<DATE`, `linked:pr` or `is:blocked`, and a pull request's closing references.
+
+  A `gh` command shown in a step is the form to use under 3. With no server connected, mention `wat-setup` once.
 - **Measure with `npx gh-wat-dis`.** `impact`, `diagram`, `related`, `links`, `lint`. The package carries everything these commands need. Never ask a project to install another tool for them.
 
-Scratch files go in `.wat-tmp/`. Check it first and never overwrite a file you did not write: see "Scratch files" in the command map.
+Scratch files go in a folder of your own for the task, `.wat-tmp/<short-task-name>/`: see "Scratch files" in the command map.
 
 Command map: [references/tools.md](references/tools.md). What GitHub renders and where: [references/rendering.md](references/rendering.md).
