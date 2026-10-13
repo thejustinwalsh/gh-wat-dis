@@ -1,0 +1,78 @@
+{
+  "title": "Checkout platform in its environment",
+  "type": "context",
+  "scope": "the Checkout platform",
+  "elements": [
+    {
+      "id": "shopper",
+      "type": "person",
+      "name": "Shopper",
+      "description": "Buys goods from the storefront"
+    },
+    {
+      "id": "support",
+      "type": "person",
+      "name": "Support agent",
+      "description": "Resolves order and refund queries"
+    },
+    {
+      "id": "checkout",
+      "type": "system",
+      "name": "Checkout platform",
+      "description": "Takes orders, collects payment and arranges fulfilment"
+    },
+    {
+      "id": "stripe",
+      "type": "system",
+      "name": "Stripe",
+      "description": "Processes card payments",
+      "external": true
+    },
+    {
+      "id": "postmark",
+      "type": "system",
+      "name": "Postmark",
+      "description": "Delivers transactional email",
+      "external": true
+    },
+    {
+      "id": "wms",
+      "type": "system",
+      "name": "Warehouse system",
+      "description": "Picks, packs and ships orders",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "shopper",
+      "to": "checkout",
+      "label": "Places orders and pays",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "support",
+      "to": "checkout",
+      "label": "Looks up orders and issues refunds",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "checkout",
+      "to": "stripe",
+      "label": "Authorises and captures payments",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "checkout",
+      "to": "postmark",
+      "label": "Sends order emails",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "checkout",
+      "to": "wms",
+      "label": "Sends paid orders for fulfilment",
+      "technology": "HTTPS"
+    }
+  ]
+}

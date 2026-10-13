@@ -1,0 +1,159 @@
+{
+  "title": "Checkout platform containers",
+  "type": "container",
+  "scope": "the Checkout platform",
+  "elements": [
+    {
+      "id": "shopper",
+      "type": "person",
+      "name": "Shopper",
+      "description": "Buys goods from the storefront"
+    },
+    {
+      "id": "checkout",
+      "type": "system",
+      "name": "Checkout platform",
+      "description": "Takes orders, collects payment and arranges fulfilment"
+    },
+    {
+      "id": "web",
+      "type": "container",
+      "name": "Storefront",
+      "technology": "TypeScript, Next.js",
+      "description": "Renders the catalogue, basket and checkout pages",
+      "parent": "checkout"
+    },
+    {
+      "id": "gateway",
+      "type": "container",
+      "name": "API gateway",
+      "technology": "TypeScript, Fastify",
+      "description": "Authenticates sessions and routes API calls",
+      "parent": "checkout"
+    },
+    {
+      "id": "orders",
+      "type": "container",
+      "name": "Order service",
+      "technology": "Rust, Axum",
+      "description": "Owns the order lifecycle from basket to fulfilment",
+      "parent": "checkout"
+    },
+    {
+      "id": "payments",
+      "type": "container",
+      "name": "Payment service",
+      "technology": "Rust, Axum",
+      "description": "Authorises and captures card payments",
+      "parent": "checkout"
+    },
+    {
+      "id": "inventory",
+      "type": "container",
+      "name": "Inventory service",
+      "technology": "Rust, Tonic",
+      "description": "Reserves and releases stock",
+      "parent": "checkout"
+    },
+    {
+      "id": "notifier",
+      "type": "container",
+      "name": "Notification worker",
+      "technology": "Rust, Tokio",
+      "description": "Turns order events into customer emails",
+      "parent": "checkout"
+    },
+    {
+      "id": "orders-db",
+      "type": "datastore",
+      "name": "Orders database",
+      "technology": "PostgreSQL 16",
+      "description": "Stores orders, payments and stock reservations",
+      "parent": "checkout"
+    },
+    {
+      "id": "events",
+      "type": "queue",
+      "name": "Order events",
+      "technology": "NATS JetStream",
+      "description": "Carries order lifecycle events",
+      "parent": "checkout"
+    },
+    {
+      "id": "stripe",
+      "type": "system",
+      "name": "Stripe",
+      "description": "Processes card payments",
+      "external": true
+    },
+    {
+      "id": "postmark",
+      "type": "system",
+      "name": "Postmark",
+      "description": "Delivers transactional email",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "shopper",
+      "to": "web",
+      "label": "Browses and checks out",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "web",
+      "to": "gateway",
+      "label": "Calls the storefront API",
+      "technology": "JSON/HTTPS"
+    },
+    {
+      "from": "gateway",
+      "to": "orders",
+      "label": "Places and reads orders",
+      "technology": "gRPC"
+    },
+    {
+      "from": "orders",
+      "to": "payments",
+      "label": "Requests payment authorisation",
+      "technology": "gRPC"
+    },
+    {
+      "from": "orders",
+      "to": "inventory",
+      "label": "Reserves stock",
+      "technology": "gRPC"
+    },
+    {
+      "from": "orders",
+      "to": "orders-db",
+      "label": "Reads and writes orders",
+      "technology": "SQL"
+    },
+    {
+      "from": "orders",
+      "to": "events",
+      "label": "Publishes order events",
+      "technology": "NATS"
+    },
+    {
+      "from": "payments",
+      "to": "stripe",
+      "label": "Creates payment intents",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "events",
+      "to": "notifier",
+      "label": "Delivers order events",
+      "technology": "NATS"
+    },
+    {
+      "from": "notifier",
+      "to": "postmark",
+      "label": "Sends order emails",
+      "technology": "HTTPS"
+    }
+  ]
+}

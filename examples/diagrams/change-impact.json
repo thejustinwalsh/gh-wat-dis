@@ -1,0 +1,136 @@
+{
+  "title": "Screen payments for fraud before capture",
+  "type": "container",
+  "scope": "the fraud screening change",
+  "elements": [
+    {
+      "id": "checkout",
+      "type": "system",
+      "name": "Checkout platform",
+      "description": "Takes orders, collects payment and arranges fulfilment"
+    },
+    {
+      "id": "gateway",
+      "type": "container",
+      "name": "API gateway",
+      "technology": "TypeScript, Fastify",
+      "description": "Authenticates sessions and routes API calls",
+      "parent": "checkout",
+      "status": "unchanged"
+    },
+    {
+      "id": "orders",
+      "type": "container",
+      "name": "Order service",
+      "technology": "Rust, Axum",
+      "description": "Owns the order lifecycle from basket to fulfilment",
+      "parent": "checkout",
+      "status": "affected"
+    },
+    {
+      "id": "payments",
+      "type": "container",
+      "name": "Payment service",
+      "technology": "Rust, Axum",
+      "description": "Authorises card payments and now waits for a risk score before capture",
+      "parent": "checkout",
+      "status": "changed"
+    },
+    {
+      "id": "fraud",
+      "type": "container",
+      "name": "Fraud screening service",
+      "technology": "Rust, Axum",
+      "description": "Scores each payment attempt against risk rules",
+      "parent": "checkout",
+      "status": "added"
+    },
+    {
+      "id": "fraud-cron",
+      "type": "container",
+      "name": "Nightly fraud job",
+      "technology": "TypeScript, Node.js",
+      "description": "Flagged risky orders after the fact",
+      "parent": "checkout",
+      "status": "removed"
+    },
+    {
+      "id": "orders-db",
+      "type": "datastore",
+      "name": "Orders database",
+      "technology": "PostgreSQL 16",
+      "description": "Stores orders, payments and stock reservations",
+      "parent": "checkout"
+    },
+    {
+      "id": "events",
+      "type": "queue",
+      "name": "Order events",
+      "technology": "NATS JetStream",
+      "description": "Carries order lifecycle events",
+      "parent": "checkout"
+    },
+    {
+      "id": "stripe",
+      "type": "system",
+      "name": "Stripe",
+      "description": "Processes card payments",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "gateway",
+      "to": "orders",
+      "label": "Places and reads orders",
+      "technology": "gRPC"
+    },
+    {
+      "from": "orders",
+      "to": "payments",
+      "label": "Requests authorisation with basket and device details",
+      "technology": "gRPC",
+      "status": "changed"
+    },
+    {
+      "from": "payments",
+      "to": "fraud",
+      "label": "Asks for a risk score",
+      "technology": "gRPC",
+      "status": "added"
+    },
+    {
+      "from": "fraud",
+      "to": "events",
+      "label": "Publishes fraud decisions",
+      "technology": "NATS",
+      "status": "added"
+    },
+    {
+      "from": "fraud-cron",
+      "to": "orders-db",
+      "label": "Scanned yesterday's orders",
+      "technology": "SQL",
+      "status": "removed"
+    },
+    {
+      "from": "orders",
+      "to": "orders-db",
+      "label": "Reads and writes orders",
+      "technology": "SQL",
+      "status": "affected"
+    },
+    {
+      "from": "orders",
+      "to": "events",
+      "label": "Publishes order events",
+      "technology": "NATS"
+    },
+    {
+      "from": "payments",
+      "to": "stripe",
+      "label": "Creates payment intents",
+      "technology": "HTTPS"
+    }
+  ]
+}

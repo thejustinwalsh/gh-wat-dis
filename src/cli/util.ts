@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,11 +61,31 @@ export function readJson<T = unknown>(path: string): T | null {
   try { return JSON.parse(readFileSync(path, 'utf8')) as T; } catch { return null; }
 }
 
+const pause = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+
+/** A pipe written by another Node process can be non-blocking, so a plain read fails with EAGAIN. */
+function readStdin(): string {
+  const chunks: Buffer[] = [];
+  const buf = Buffer.alloc(65536);
+  for (;;) {
+    let size: number;
+    try { size = readSync(0, buf, 0, buf.length, null); } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EAGAIN') { pause(5); continue; }
+      if (code === 'EOF') break;
+      throw err;
+    }
+    if (size === 0) break;
+    chunks.push(Buffer.from(buf.subarray(0, size)));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** Read a file argument, or stdin for "-" or for no argument when stdin is piped. */
 export function readInput(file: string | undefined): string {
   if (file && file !== '-') return readFileSync(file, 'utf8');
   if (!file && process.stdin.isTTY) throw new UsageError('no input: pass a file, or pipe data to stdin');
-  return readFileSync(0, 'utf8');
+  return readStdin();
 }
 
 export function compareVersions(a: string, b: string): number {

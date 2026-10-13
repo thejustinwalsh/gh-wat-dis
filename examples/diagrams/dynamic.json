@@ -1,0 +1,113 @@
+{
+  "title": "Placing an order",
+  "type": "dynamic",
+  "scope": "a successful card checkout",
+  "elements": [
+    {
+      "id": "shopper",
+      "type": "person",
+      "name": "Shopper",
+      "description": "Buys goods from the storefront"
+    },
+    {
+      "id": "web",
+      "type": "container",
+      "name": "Storefront",
+      "technology": "TypeScript, Next.js",
+      "description": "Renders the catalogue, basket and checkout pages"
+    },
+    {
+      "id": "gateway",
+      "type": "container",
+      "name": "API gateway",
+      "technology": "TypeScript, Fastify",
+      "description": "Authenticates sessions and routes API calls"
+    },
+    {
+      "id": "orders",
+      "type": "container",
+      "name": "Order service",
+      "technology": "Rust, Axum",
+      "description": "Owns the order lifecycle from basket to fulfilment"
+    },
+    {
+      "id": "inventory",
+      "type": "container",
+      "name": "Inventory service",
+      "technology": "Rust, Tonic",
+      "description": "Reserves and releases stock"
+    },
+    {
+      "id": "payments",
+      "type": "container",
+      "name": "Payment service",
+      "technology": "Rust, Axum",
+      "description": "Authorises and captures card payments"
+    },
+    {
+      "id": "stripe",
+      "type": "system",
+      "name": "Stripe",
+      "description": "Processes card payments",
+      "external": true
+    },
+    {
+      "id": "events",
+      "type": "queue",
+      "name": "Order events",
+      "technology": "NATS JetStream",
+      "description": "Carries order lifecycle events"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "shopper",
+      "to": "web",
+      "label": "Submits the checkout form",
+      "technology": "HTTPS",
+      "order": 1
+    },
+    {
+      "from": "web",
+      "to": "gateway",
+      "label": "Posts the order",
+      "technology": "JSON/HTTPS",
+      "order": 2
+    },
+    {
+      "from": "gateway",
+      "to": "orders",
+      "label": "Creates the order",
+      "technology": "gRPC",
+      "order": 3
+    },
+    {
+      "from": "orders",
+      "to": "inventory",
+      "label": "Reserves stock",
+      "technology": "gRPC",
+      "order": 4
+    },
+    {
+      "from": "orders",
+      "to": "payments",
+      "label": "Authorises the payment",
+      "technology": "gRPC",
+      "order": 5
+    },
+    {
+      "from": "payments",
+      "to": "stripe",
+      "label": "Confirms the payment intent",
+      "technology": "HTTPS",
+      "order": 6
+    },
+    {
+      "from": "orders",
+      "to": "events",
+      "label": "Publishes OrderPlaced",
+      "technology": "NATS",
+      "order": 7
+    }
+  ]
+}

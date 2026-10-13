@@ -1,0 +1,351 @@
+{
+  "title": "Checkout platform components",
+  "type": "component",
+  "scope": "the Checkout platform, with the payment retry change marked",
+  "elements": [
+    {
+      "id": "shopper",
+      "type": "person",
+      "name": "Shopper",
+      "description": "Buys goods from the storefront"
+    },
+    {
+      "id": "checkout",
+      "type": "system",
+      "name": "Checkout platform",
+      "description": "Takes orders, collects payment and arranges fulfilment"
+    },
+    {
+      "id": "web",
+      "type": "container",
+      "name": "Storefront",
+      "technology": "TypeScript, Next.js",
+      "description": "Renders the catalogue, basket and checkout pages",
+      "parent": "checkout"
+    },
+    {
+      "id": "checkout-page",
+      "type": "component",
+      "name": "Checkout page",
+      "technology": "React",
+      "description": "Collects address and card details",
+      "parent": "web"
+    },
+    {
+      "id": "basket-store",
+      "type": "component",
+      "name": "Basket store",
+      "technology": "TypeScript",
+      "description": "Holds the basket in the browser",
+      "parent": "web"
+    },
+    {
+      "id": "gateway",
+      "type": "container",
+      "name": "API gateway",
+      "technology": "TypeScript, Fastify",
+      "description": "Authenticates sessions and routes API calls",
+      "parent": "checkout"
+    },
+    {
+      "id": "session-auth",
+      "type": "component",
+      "name": "Session auth",
+      "technology": "TypeScript",
+      "description": "Checks the session cookie on each call",
+      "parent": "gateway"
+    },
+    {
+      "id": "order-routes",
+      "type": "component",
+      "name": "Order routes",
+      "technology": "TypeScript",
+      "description": "Maps REST calls to order service RPCs",
+      "parent": "gateway"
+    },
+    {
+      "id": "orders",
+      "type": "container",
+      "name": "Order service",
+      "technology": "Rust, Axum",
+      "description": "Owns the order lifecycle from basket to fulfilment",
+      "parent": "checkout"
+    },
+    {
+      "id": "order-api",
+      "type": "component",
+      "name": "Order API",
+      "technology": "Rust, Tonic",
+      "description": "Accepts order commands and queries",
+      "parent": "orders"
+    },
+    {
+      "id": "order-saga",
+      "type": "component",
+      "name": "Order saga",
+      "technology": "Rust",
+      "description": "Runs reserve, pay and confirm with one idempotency key per order",
+      "parent": "orders",
+      "status": "changed"
+    },
+    {
+      "id": "retry-scheduler",
+      "type": "component",
+      "name": "Retry scheduler",
+      "technology": "Rust, Tokio",
+      "description": "Re-ran failed payment steps on a timer",
+      "parent": "orders",
+      "status": "removed"
+    },
+    {
+      "id": "order-repo",
+      "type": "component",
+      "name": "Order repository",
+      "technology": "Rust, SQLx",
+      "description": "Loads and saves order aggregates",
+      "parent": "orders"
+    },
+    {
+      "id": "outbox",
+      "type": "component",
+      "name": "Event outbox",
+      "technology": "Rust",
+      "description": "Publishes committed events exactly once",
+      "parent": "orders"
+    },
+    {
+      "id": "payments",
+      "type": "container",
+      "name": "Payment service",
+      "technology": "Rust, Axum",
+      "description": "Authorises and captures card payments",
+      "parent": "checkout"
+    },
+    {
+      "id": "payment-api",
+      "type": "component",
+      "name": "Payment API",
+      "technology": "Rust, Tonic",
+      "description": "Accepts authorise and capture requests with a required key",
+      "parent": "payments",
+      "status": "changed"
+    },
+    {
+      "id": "idempotency",
+      "type": "component",
+      "name": "Idempotency store",
+      "technology": "Rust, SQLx",
+      "description": "Remembers the outcome of each payment key",
+      "parent": "payments",
+      "status": "added"
+    },
+    {
+      "id": "stripe-client",
+      "type": "component",
+      "name": "Stripe client",
+      "technology": "Rust, reqwest",
+      "description": "Calls the Stripe API and forwards the key",
+      "parent": "payments",
+      "status": "affected"
+    },
+    {
+      "id": "inventory",
+      "type": "container",
+      "name": "Inventory service",
+      "technology": "Rust, Tonic",
+      "description": "Reserves and releases stock",
+      "parent": "checkout"
+    },
+    {
+      "id": "reservations",
+      "type": "component",
+      "name": "Reservation engine",
+      "technology": "Rust",
+      "description": "Holds stock for unpaid orders",
+      "parent": "inventory"
+    },
+    {
+      "id": "notifier",
+      "type": "container",
+      "name": "Notification worker",
+      "technology": "Rust, Tokio",
+      "description": "Turns order events into customer emails",
+      "parent": "checkout"
+    },
+    {
+      "id": "event-consumer",
+      "type": "component",
+      "name": "Event consumer",
+      "technology": "Rust, async-nats",
+      "description": "Reads order events in order",
+      "parent": "notifier"
+    },
+    {
+      "id": "email-templates",
+      "type": "component",
+      "name": "Email templates",
+      "technology": "Rust, Askama",
+      "description": "Renders order emails",
+      "parent": "notifier"
+    },
+    {
+      "id": "orders-db",
+      "type": "datastore",
+      "name": "Orders database",
+      "technology": "PostgreSQL 16",
+      "description": "Stores orders, payments and stock reservations",
+      "parent": "checkout"
+    },
+    {
+      "id": "events",
+      "type": "queue",
+      "name": "Order events",
+      "technology": "NATS JetStream",
+      "description": "Carries order lifecycle events",
+      "parent": "checkout"
+    },
+    {
+      "id": "stripe",
+      "type": "system",
+      "name": "Stripe",
+      "description": "Processes card payments",
+      "external": true
+    },
+    {
+      "id": "postmark",
+      "type": "system",
+      "name": "Postmark",
+      "description": "Delivers transactional email",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "shopper",
+      "to": "checkout-page",
+      "label": "Enters address and card details",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "checkout-page",
+      "to": "basket-store",
+      "label": "Reads the basket"
+    },
+    {
+      "from": "checkout-page",
+      "to": "session-auth",
+      "label": "Posts the order",
+      "technology": "JSON/HTTPS"
+    },
+    {
+      "from": "session-auth",
+      "to": "order-routes",
+      "label": "Passes authenticated calls"
+    },
+    {
+      "from": "order-routes",
+      "to": "order-api",
+      "label": "Places and reads orders",
+      "technology": "gRPC"
+    },
+    {
+      "from": "order-api",
+      "to": "order-saga",
+      "label": "Starts checkout"
+    },
+    {
+      "from": "order-api",
+      "to": "order-repo",
+      "label": "Loads orders"
+    },
+    {
+      "from": "order-saga",
+      "to": "reservations",
+      "label": "Reserves stock",
+      "technology": "gRPC"
+    },
+    {
+      "from": "order-saga",
+      "to": "payment-api",
+      "label": "Authorises payment with an idempotency key",
+      "technology": "gRPC",
+      "status": "changed"
+    },
+    {
+      "from": "retry-scheduler",
+      "to": "payment-api",
+      "label": "Retried failed authorisations",
+      "technology": "gRPC",
+      "status": "removed"
+    },
+    {
+      "from": "retry-scheduler",
+      "to": "order-repo",
+      "label": "Scanned for stuck orders",
+      "status": "removed"
+    },
+    {
+      "from": "order-saga",
+      "to": "order-repo",
+      "label": "Saves order state"
+    },
+    {
+      "from": "order-saga",
+      "to": "outbox",
+      "label": "Records order events"
+    },
+    {
+      "from": "order-repo",
+      "to": "orders-db",
+      "label": "Reads and writes orders",
+      "technology": "SQL"
+    },
+    {
+      "from": "outbox",
+      "to": "events",
+      "label": "Publishes order events",
+      "technology": "NATS"
+    },
+    {
+      "from": "payment-api",
+      "to": "idempotency",
+      "label": "Looks up and stores key outcomes",
+      "status": "added"
+    },
+    {
+      "from": "idempotency",
+      "to": "orders-db",
+      "label": "Reads and writes payment keys",
+      "technology": "SQL",
+      "status": "added"
+    },
+    {
+      "from": "payment-api",
+      "to": "stripe-client",
+      "label": "Authorises and captures"
+    },
+    {
+      "from": "stripe-client",
+      "to": "stripe",
+      "label": "Creates payment intents",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "events",
+      "to": "event-consumer",
+      "label": "Delivers order events",
+      "technology": "NATS"
+    },
+    {
+      "from": "event-consumer",
+      "to": "email-templates",
+      "label": "Renders the email for an event"
+    },
+    {
+      "from": "email-templates",
+      "to": "postmark",
+      "label": "Sends order emails",
+      "technology": "HTTPS"
+    }
+  ]
+}
