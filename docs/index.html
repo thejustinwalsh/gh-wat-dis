@@ -97,6 +97,22 @@ button.copy { flex: none; font: 700 14px/1 var(--mono); color: #fff; padding: 12
   background: linear-gradient(180deg, #2b2b3a, #181820); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(24, 24, 32, 0.25); }
 @media (prefers-color-scheme: dark) { button.copy { background: linear-gradient(180deg, #f2f2f7, #c8c8d5); color: #181820; box-shadow: none; } }
 .note { font-size: 16px; color: var(--muted); margin: 12px 0 0; }
+/* The photo card from the unfurl image, shown from 1200px up. There the text column gives up 312px and the install prompt
+   still fits on one line. Below that the <picture> has no matching source, so the photo is never requested.
+   The card's colours sit on the photo and do not follow the theme. */
+.cat { display: none; }
+@media (min-width: 1200px) {
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 272px; column-gap: 40px; }
+  .hero .wrap > .eyebrow, .hero h1 { grid-column: 1 / -1; }
+  .hero .lead, .install { grid-column: 1; }
+  .cat { display: block; position: relative; grid-column: 2; grid-row: 3 / span 2; margin: 28px 0 0; overflow: hidden;
+    background: #21212c; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); }
+  .cat img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 22% 50%; }
+  .cat::after { content: ""; position: absolute; inset: auto 0 0; height: 140px; background: linear-gradient(180deg, rgba(24, 24, 32, 0), rgba(24, 24, 32, 0.92)); }
+  .cat span { position: absolute; z-index: 1; top: 14px; left: 14px; padding: 5px 9px; border-radius: 6px; font: 500 13px/18px var(--mono);
+    color: #f5df76; background: rgba(24, 24, 32, 0.82); box-shadow: inset 0 0 0 1px rgba(245, 223, 118, 0.28); }
+  .cat figcaption { position: absolute; z-index: 1; left: 18px; right: 18px; bottom: 16px; font: 700 18px/24px var(--mono); letter-spacing: -0.01em; color: #afea7b; }
+}
 
 .stage { color: var(--stage-muted); background-color: var(--stage);
   background-image: radial-gradient(circle at 1px 1px, var(--stage-dot) 1px, transparent 1.5px), linear-gradient(180deg, var(--stage-2) 0%, var(--stage) 50%);
@@ -212,6 +228,14 @@ footer span { color: var(--muted); }
       </div>
       <p class="note">The agent runs every tool through npx, so your project gains no dependency.</p>
     </div>
+    <figure class="cat">
+      <picture>
+        <source media="(min-width: 1200px)" srcset="cat.jpg">
+        <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" width="800" height="720" alt="A tabby cat rests one paw on a laptop keyboard and looks up, wide-eyed.">
+      </picture>
+      <span>// gh wat dis?</span>
+      <figcaption>"i can has context?"</figcaption>
+    </figure>
   </div>
 </section>
 
