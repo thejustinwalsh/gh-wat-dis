@@ -23,8 +23,18 @@ function ghList<T>(cwd: string, args: string[]): T[] {
   try { return out ? (JSON.parse(out) as T[]) : []; } catch { return []; }
 }
 
+const HELP = `Usage: npx gh-wat-dis init [--use always|ask|never] [--dry-run] [--force]
+
+Write the repository config at ${CONFIG_REL}: policy, labels, issue types, milestones, architecture map.
+
+  --use <mode>     when agents use gh-wat-dis here: always (default), ask or never
+  --dry-run, -n    print the config and write nothing
+  --force, -f      write a new config over an existing one
+`;
+
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['force', 'dry-run'], strings: ['use'], aliases: { '-n': '--dry-run', '-f': '--force' } });
+  const args = parseArgs(argv, { booleans: ['force', 'dry-run', 'help'], strings: ['use'], aliases: { '-n': '--dry-run', '-f': '--force', '-h': '--help' } });
+  if (args.help) { process.stdout.write(HELP); return 0; }
   const use = (args.use ?? 'always') as Use;
   if (!USE.includes(use)) throw new UsageError(`--use must be one of ${USE.join(', ')}`);
 

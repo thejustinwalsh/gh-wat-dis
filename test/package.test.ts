@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,4 +56,16 @@ test('skills: every file a skill links to ships inside the skills folder', () =>
     }
   }
   assert.deepEqual(missing, []);
+});
+
+test('cli: every command prints its usage for --help and exits 0', () => {
+  const main = readFileSync(join(root, 'src/main.ts'), 'utf8');
+  const table = main.slice(main.indexOf('const COMMANDS'), main.indexOf('};', main.indexOf('const COMMANDS')));
+  const commands = [...table.matchAll(/^\s+'?([a-z-]+)'?: async/gm)].map((m) => m[1]!);
+  assert.ok(commands.length >= 20, `found ${commands.length} commands`);
+  for (const c of commands) {
+    const r = spawnSync(process.execPath, [join(root, 'src/bin.ts'), c, '--help'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${c} --help exited ${r.status}: ${r.stderr}`);
+    assert.match(r.stdout, /Usage|usage/, `${c} --help prints no usage`);
+  }
 });

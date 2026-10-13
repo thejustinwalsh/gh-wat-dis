@@ -253,8 +253,20 @@ export function printChecks(checks: Check[]): number {
   return fails;
 }
 
+const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip]
+
+Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config. Offers a fix where it has one.
+Exits non-zero when a check fails.
+
+  --offline        skip the checks that call GitHub
+  --json           print the checks as JSON and offer no fixes
+  --no-login       do not offer to run gh auth login
+  --mcp <scope>    where to write the GitHub MCP server config when none is found: user, project or skip
+`;
+
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login'], strings: ['mcp'] });
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp'], aliases: { '-h': '--help' } });
+  if (args.help) { process.stdout.write(HELP); return 0; }
   let checks = await runChecks({ offline: args.offline });
   if (args.json) {
     console.log(JSON.stringify(checks, null, 2));

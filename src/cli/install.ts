@@ -88,11 +88,32 @@ function apply(step: Step): void {
   writeFileSync(join(step.dest, MANIFEST), JSON.stringify(manifest, null, 2) + '\n');
 }
 
+const INSTALL_HELP = `Usage: npx gh-wat-dis install [--project] [--client <names>] [--mcp user|project|skip] [--dry-run] [--force]
+
+Copy the wat skills to where each agent harness looks, then run the doctor checks.
+
+  --project, -p        install into this repository (default: your user directory)
+  --client, -c <names> comma-separated harnesses, or "all" (default all): ${CLIENT_NAMES.join(', ')}
+  --mcp <scope>        where to write the GitHub MCP server config when none is found: user, project or skip
+  --dry-run, -n        print what would be written and change nothing
+  --force, -f          replace skill directories this package did not write
+`;
+
+const UNINSTALL_HELP = `Usage: npx gh-wat-dis uninstall [--project] [--client <names>] [--dry-run]
+
+Remove the skill directories this package installed. Other directories are left alone.
+
+  --project, -p        remove from this repository (default: your user directory)
+  --client, -c <names> comma-separated harnesses, or "all" (default all): ${CLIENT_NAMES.join(', ')}
+  --dry-run, -n        print what would be removed and change nothing
+`;
+
 export async function install(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['project', 'dry-run', 'force'], strings: ['client', 'mcp'],
-    aliases: { '-n': '--dry-run', '-f': '--force', '-c': '--client', '-p': '--project' },
+    booleans: ['project', 'dry-run', 'force', 'help'], strings: ['client', 'mcp'],
+    aliases: { '-n': '--dry-run', '-f': '--force', '-c': '--client', '-p': '--project', '-h': '--help' },
   });
+  if (args.help) { process.stdout.write(INSTALL_HELP); return 0; }
   if (args.mcp && !['user', 'project', 'skip'].includes(args.mcp)) throw new UsageError('--mcp must be user, project or skip');
   const steps = plan({ project: args.project, clients: parseClients(args.client), force: args.force });
   for (const s of steps) console.log(`${s.action.padEnd(8)} ${s.dest}${s.note ? `  (${s.note})` : ''}`);
@@ -127,9 +148,10 @@ export async function install(argv: string[]): Promise<number> {
 
 export async function uninstall(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['project', 'dry-run'], strings: ['client'],
-    aliases: { '-n': '--dry-run', '-c': '--client', '-p': '--project' },
+    booleans: ['project', 'dry-run', 'help'], strings: ['client'],
+    aliases: { '-n': '--dry-run', '-c': '--client', '-p': '--project', '-h': '--help' },
   });
+  if (args.help) { process.stdout.write(UNINSTALL_HELP); return 0; }
   let removed = 0;
   for (const t of targets({ project: args.project, clients: parseClients(args.client) })) {
     if (!existsSync(t.root)) continue;
