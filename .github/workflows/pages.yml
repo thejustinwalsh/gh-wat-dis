@@ -1,0 +1,41 @@
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'examples/diagrams/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Render the site's diagrams from their specs
+        run: |
+          for name in focused dynamic change-impact in-process; do
+            node src/bin.ts diagram "examples/diagrams/$name.json" -o "docs/assets/$name.svg"
+          done
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4
