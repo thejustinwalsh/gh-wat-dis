@@ -4,7 +4,8 @@
 
 ## Install it
 
-Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
+1. Install the package in the project: `npm install --save-dev gh-wat-dis`, or the project's own package manager, matching whatever lockfile is present. Do this before any `npx` command: in a harness that sandboxes commands (Codex does by default), an `npx` that has to fetch a package hangs and then dies with "heap out of memory". No `package.json`: skip this step.
+2. Run `npx gh-wat-dis install`. It copies the skills into `~/.agents/skills` and `~/.claude/skills` and then runs every check. Fix each `FAIL` line it prints.
 
 Then read the README that ships in the package and follow its section "If you are the coding agent reading this". The shipped README is the install contract. This file is a pointer to it.
 

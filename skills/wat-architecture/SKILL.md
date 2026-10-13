@@ -59,15 +59,15 @@ npx gh-wat-dis reach <path|path#symbol>  # who depends on this, with no diff
 npx gh-wat-dis owners <path>...          # CODEOWNERS for paths
 ```
 
-**A pull request that already merged.** On the default branch the first command compares nothing, so name the commits:
+**A pull request that already merged.** Measure it between the commit before it and its merge commit. Three steps:
 
 ```bash
-gh pr list --state merged --limit 1 --json number,title,mergedAt,mergeCommit   # the last merged PR
-git fetch origin && git cat-file -e <mergeCommit>                              # the local clone must hold it
-npx gh-wat-dis impact --base <mergeCommit>~1 --head <mergeCommit>              # squash or merge commit
+gh pr list --state merged --limit 1 --json number,title,mergedAt,mergeCommit,commits   # 1. find it: this is "the last merged PR"
+git fetch origin && git cat-file -e <mergeCommit>                                      # 2. make sure the local clone holds the merge commit
+npx gh-wat-dis impact --base <mergeCommit>~1 --head <mergeCommit>                      # 3. measure it
 ```
 
-A PR merged by rebase lands as several commits: use `<mergeCommit>~<number of commits in the PR>` as the base. If the MCP pull request list shows `merged: false` beside a `merged_at` date, trust the date.
+`~1` is right for a squash merge and for a merge commit. A pull request merged by rebase lands as one commit for each of its own commits, so step back that many: `<mergeCommit>~<number of commits>`. Use `gh` for step 1: it reports `mergedAt` and `mergeCommit` together, which is what tells you a pull request merged.
 
 Read the facts in this order:
 

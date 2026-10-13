@@ -104,8 +104,8 @@ A diagram spec is plain JSON. When no filter does what you need, edit the file. 
 
 `npx gh-wat-dis help` lists every tool with what it does and whether it writes; `npx gh-wat-dis help --json` prints the same list as JSON, and `npx gh-wat-dis <tool> --help` gives one tool's options. When a skill and the help disagree, the help is right.
 
-Every command runs through `npx`. A project installs nothing. The first run downloads the package; later runs use the npm cache.
+Every command runs through `npx`. A project adds `gh-wat-dis` as a dev dependency, so `npx` runs the project's own copy with no download. In a project with no `package.json`, `npx` downloads the package on the first run and uses the npm cache after that.
 
 ## Scratch files
 
-Write drafts, specs and SVGs to `.wat-tmp/` at the repo root (git-ignored by `npx gh-wat-dis init`). Look in it before you write: files there may belong to another session or to work that has not been posted. When it is not empty, work in a folder of your own, `.wat-tmp/<short-task-name>/`, and use that path wherever a skill shows `.wat-tmp/`. Remove only the files you wrote, after the post succeeds.
+`.wat-tmp/` at the repo root holds drafts, specs and images, and `npx gh-wat-dis init` git-ignores it. Give each task a folder of its own there, named for the task: `.wat-tmp/issue-webhook-retry/`, `.wat-tmp/pr-123/`. Write every file of the task in that folder, and read `.wat-tmp/` in a skill's commands as that folder. Other sessions and unposted work keep their own folders this way, and one `rm -r` of your folder cleans up after the post succeeds.

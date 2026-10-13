@@ -14,7 +14,7 @@ Maintenance has two phases. **Audit** reads and reports. **Apply** changes GitHu
 
 Run the checks the user asks for. Default: all. Two thresholds come from `.agents/gh-wat-dis/config.json`: `triage.staleIssueDays` (60) and `triage.stalePrDays` (14). The others are fixed and stated in the table.
 
-Most of these queries go through `gh`, and here `gh` is the first choice, not the fallback: the GitHub MCP server cannot filter by `updated:<DATE`, `linked:pr` or `is:blocked`, and does not return milestones or closing references.
+Run the queries in the table with `gh`, as written. They filter by `updated:<DATE`, `linked:pr` and `is:blocked` and read milestones and closing references, and the GitHub MCP server has no tool for those.
 
 List the open milestones first (`gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[].title'`): the milestone checks run once for each title.
 

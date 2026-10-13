@@ -8,9 +8,14 @@ license: MIT
 
 Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each prints one `ok`, `warn` or `FAIL` line for each part. Fix only what fails.
 
+**A harness that sandboxes commands.** Codex runs commands where they cannot reach the network or write outside the project. `npx` needs both to fetch a package, and with them blocked it does not fail cleanly: it hangs and then dies with "heap out of memory", before any gh-wat-dis code runs. So when you are in such a harness, or `doctor` prints `warn codex sandbox`, set this up first:
+
+1. In a project with a `package.json`: ask the user, then run `npm install --save-dev gh-wat-dis` with their approval to use the network once. From then on `npx gh-wat-dis` finds the copy in `node_modules` and needs nothing the sandbox blocks.
+2. In a project with no `package.json`, or when the user does not want the dependency: ask them to run `npx gh-wat-dis doctor --fix` in their own terminal. It lets Codex's sandbox write npm's cache folder and prints the line it added. `npx` then runs a package that is installed or already cached. To let it also fetch a package inside Codex, they choose `npx gh-wat-dis doctor --sandbox network`. Both change the user's own Codex settings, so the user runs them. You do not edit that file.
+
 `doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. It is a warning when missing, never a failure. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
 
-A project needs three things and no more: the `gh` CLI, `npx gh-wat-dis`, and (optional) the GitHub MCP server. Never tell a project to install another tool.
+A project needs three things and no more: the `gh` CLI, `gh-wat-dis` (as a dev dependency where there is a `package.json`, through `npx` alone where there is not), and (optional) the GitHub MCP server. Never tell a project to install another tool.
 
 ```bash
 npx gh-wat-dis doctor
