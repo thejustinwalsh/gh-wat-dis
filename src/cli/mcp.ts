@@ -1,6 +1,13 @@
 import { parseArgs } from './util.ts';
 
-interface Snippet { target: string; lang: 'bash' | 'toml' | 'json'; snippet: string; noToken?: boolean }
+interface Snippet {
+  target: string;
+  lang: 'bash' | 'toml' | 'json';
+  snippet: string;
+  noToken?: boolean;
+  /** A link that opens the harness on its own "add this MCP server" screen. Only some harnesses have one. */
+  link?: string;
+}
 
 const URL = 'https://api.githubcopilot.com/mcp/';
 const ENV = 'GITHUB_PERSONAL_ACCESS_TOKEN';
@@ -28,6 +35,7 @@ export const CLIENTS: Record<string, (readonly: boolean) => Snippet> = {
     target: '~/.cursor/mcp.json (or .cursor/mcp.json in the project)',
     lang: 'json',
     snippet: json({ mcpServers: { github: { url: URL, headers: headers(`\${env:${ENV}}`, ro) } } }),
+    link: `https://cursor.com/en/install-mcp?name=github&config=${encodeURIComponent(Buffer.from(JSON.stringify({ url: URL, headers: headers(`\${env:${ENV}}`, ro) })).toString('base64'))}`,
   }),
   gemini: (ro) => ({
     target: '~/.gemini/settings.json (or .gemini/settings.json in the project)',
@@ -49,6 +57,7 @@ export const CLIENTS: Record<string, (readonly: boolean) => Snippet> = {
     lang: 'json',
     snippet: json({ servers: { github: { type: 'http', url: URL, headers: { 'X-MCP-Toolsets': TOOLSETS, ...(ro ? { 'X-MCP-Readonly': 'true' } : {}) } } } }),
     noToken: true,
+    link: `https://insiders.vscode.dev/redirect/mcp/install?name=github&config=${encodeURIComponent(JSON.stringify({ type: 'http', url: URL, headers: { 'X-MCP-Toolsets': TOOLSETS, ...(ro ? { 'X-MCP-Readonly': 'true' } : {}) } }))}`,
   }),
   windsurf: (ro) => ({
     target: '~/.codeium/windsurf/mcp_config.json. Windsurf does not expand environment variables: the user replaces YOUR_GITHUB_PAT by hand.',
@@ -75,6 +84,7 @@ export async function main(argv: string[]): Promise<number> {
   console.log(`Target: ${c.target}\n`);
   console.log(c.snippet);
   console.log('');
+  if (c.link) console.log(`One click: open this link and confirm in ${client === 'vscode' ? 'VS Code' : 'Cursor'}.\n  ${c.link}\n`);
   if (!c.noToken) {
     console.log(`Token: the snippet reads ${ENV} from the environment. Set it in your shell profile, for example:`);
     console.log(`  export ${ENV}="$(gh auth token)"`);

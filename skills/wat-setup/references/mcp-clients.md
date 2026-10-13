@@ -39,6 +39,19 @@ gh-wat-dis writes through `gh`, so **read-only is a good default** for the MCP s
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers`, with `serverUrl`. No environment expansion: the user edits the token in by hand. |
 | Claude Desktop | `claude_desktop_config.json` | `mcpServers`. Local Docker only. |
 
+## One-click install links
+
+Some harnesses register a link that opens their own "add this MCP server" screen with the config filled in. The user clicks, reads the config, and confirms. `npx gh-wat-dis mcp cursor` and `mcp vscode` print the link.
+
+| Harness | Link | Carries |
+|---|---|---|
+| Cursor | `https://cursor.com/en/install-mcp?name=github&config=<base64 JSON>` | The server entry, base64-encoded |
+| VS Code | `https://insiders.vscode.dev/redirect/mcp/install?name=github&config=<URL-encoded JSON>` | The server entry, URL-encoded |
+| Claude Code | None for MCP. `claude-cli://open?q=<prompt>` opens a session with a prompt filled in, so a link can ask the agent to run the setup. | A prompt, not a config |
+| Codex, Gemini CLI, OpenCode | None | Use the CLI or the config file |
+
+A link never carries a token. The config in it names an environment variable.
+
 ## Rules
 
 1. Merge into the file. Keep every other server and setting.
