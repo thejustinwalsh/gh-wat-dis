@@ -26,3 +26,8 @@ gh-wat-dis decides how to communicate in issues, pull requests and milestones. I
 ## Words
 
 Every word this project shows a person follows `skills/wat/references/style.md`: the site, the README, CLI output and error messages, as well as the issues and pull requests the skills write. Lead with what the reader can do, use one word for one thing, keep sentences short and complete, and name the actor.
+
+## Releasing
+
+1. Bump `version` in `package.json` (and `package-lock.json`) in a pull request, and merge it.
+2. Run the Publish workflow on `main`: the Actions tab, or `gh workflow run publish.yml`. It runs the checks, refuses a version that is already on npm, publishes with provenance through npm trusted publishing (environment `release`), then tags `v<version>` and makes the GitHub release.
