@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { repoRoot, run } from './util.ts';
+import { parseJsonc, repoRoot, run } from './util.ts';
 
 const URL = 'https://api.githubcopilot.com/mcp/';
 const ENV = 'GITHUB_PERSONAL_ACCESS_TOKEN';
@@ -18,8 +18,8 @@ export type Applied = { client: string; label: string; action: 'added' | 'exists
 const extra = (ro: boolean): Record<string, string> => ({ 'X-MCP-Toolsets': TOOLSETS, ...(ro ? { 'X-MCP-Readonly': 'true' } : {}) });
 const withToken = (ref: string, ro: boolean): Record<string, string> => ({ Authorization: `Bearer ${ref}`, ...extra(ro) });
 
-interface JsonTarget { kind: 'json'; user: string; project?: string; key: string; entry: (ro: boolean) => unknown }
-interface TomlTarget { kind: 'toml'; user: string; project?: string; block: (ro: boolean) => string }
+interface JsonTarget { kind: 'json'; user: string; project?: string; key: string; entry: (ro: boolean) => unknown; /** The harness also reads the same file with this extension, and merges the two. */ twin?: string }
+interface TomlTarget { kind: 'toml'; user: string; project?: string; block: (ro: boolean) => string; /** What a person must know about the project-level file. */ projectNote?: string }
 interface CliTarget { kind: 'claude'; project: string; entry: (ro: boolean) => unknown }
 interface Target { label: string; needsEnv: boolean; detect: (home: string) => boolean; write: JsonTarget | TomlTarget | CliTarget }
 
@@ -38,6 +38,7 @@ export const TARGETS: Record<string, Target> = {
     write: {
       kind: 'toml', user: '.codex/config.toml', project: '.codex/config.toml',
       block: (ro) => `[mcp_servers.github]\nurl = "${URL}"\nbearer_token_env_var = "${ENV}"\nhttp_headers = { "X-MCP-Toolsets" = "${TOOLSETS}"${ro ? ', "X-MCP-Readonly" = "true"' : ''} }\n`,
+      projectNote: 'Codex reads this file only in a project it trusts',
     },
   },
   cursor: {
@@ -54,7 +55,7 @@ export const TARGETS: Record<string, Target> = {
     label: 'OpenCode', needsEnv: true,
     detect: (home) => existsSync(join(home, '.config/opencode')) || onPath('opencode'),
     write: {
-      kind: 'json', user: '.config/opencode/opencode.json', project: 'opencode.json', key: 'mcp',
+      kind: 'json', user: '.config/opencode/opencode.json', project: 'opencode.json', key: 'mcp', twin: '.jsonc',
       entry: (ro) => ({ type: 'remote', url: URL, enabled: true, oauth: false, headers: withToken(`{env:${ENV}}`, ro) }),
     },
   },
@@ -62,15 +63,21 @@ export const TARGETS: Record<string, Target> = {
 
 export const detectClients = (home: string = homedir()): string[] => Object.keys(TARGETS).filter((c) => TARGETS[c]!.detect(home));
 
-/** Adds a key to a JSON config and keeps everything else. Refuses a file it cannot parse, such as JSON with comments. */
-function mergeJson(path: string, key: string, name: string, value: unknown): 'added' | 'exists' {
+const hasGithub = (servers: unknown): boolean => Object.keys((servers ?? {}) as Record<string, unknown>).some((k) => /github/i.test(k));
+
+/**
+ * Adds a key to a JSON config and keeps everything else. Refuses a file it cannot parse, such as JSON with comments.
+ * `twin` is a second file the harness merges with this one: an entry there counts as already set up.
+ */
+function mergeJson(path: string, key: string, name: string, value: unknown, twin?: string): 'added' | 'exists' {
+  if (twin && existsSync(twin) && hasGithub(parseJsonc<Record<string, unknown>>(readFileSync(twin, 'utf8'))[key])) return 'exists';
   let doc: Record<string, unknown> = {};
   if (existsSync(path)) {
     const text = readFileSync(path, 'utf8');
     if (text.trim()) doc = JSON.parse(text) as Record<string, unknown>;
   }
   const servers = (doc[key] ?? {}) as Record<string, unknown>;
-  if (Object.keys(servers).some((k) => /github/i.test(k))) return 'exists';
+  if (hasGithub(servers)) return 'exists';
   doc[key] = { ...servers, [name]: value };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(doc, null, 2) + '\n');
@@ -113,8 +120,11 @@ export function applyClient(client: string, { scope, readonly = true, home = hom
     if (!rel) return { client, label: t.label, action: 'skipped', where: '', detail: `${t.label} has no ${scope}-level config` };
     const path = join(base, rel);
     if (dryRun) return { client, label: t.label, action: 'added', where: path };
-    const action = w.kind === 'json' ? mergeJson(path, w.key, 'github', w.entry(readonly)) : mergeToml(path, w.block(readonly));
-    return { client, label: t.label, action, where: path };
+    const action = w.kind === 'json'
+      ? mergeJson(path, w.key, 'github', w.entry(readonly), w.twin && path.replace(/\.json$/, w.twin))
+      : mergeToml(path, w.block(readonly));
+    const note = action === 'added' && scope === 'project' && w.kind === 'toml' ? w.projectNote : undefined;
+    return { client, label: t.label, action, where: path, ...(note ? { detail: note } : {}) };
   } catch (e) {
     return { client, label: t.label, action: 'failed', where: '', detail: `could not update the config (${e instanceof Error ? e.message.split('\n')[0] : e}). Add it by hand: npx gh-wat-dis mcp ${client}` };
   }
