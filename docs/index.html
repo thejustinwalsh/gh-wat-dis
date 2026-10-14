@@ -197,9 +197,12 @@ details.all dd { margin: 0; font-size: 16px; line-height: 1.5; }
 details.all dd i { font: 400 12px/1.5 var(--mono); font-style: normal; color: var(--keyword); white-space: nowrap; margin-left: 6px; }
 
 .gallery-band { background: var(--panel); background-image: linear-gradient(180deg, color-mix(in oklab, var(--line) 35%, var(--panel)) 0, var(--panel) 160px); }
-.gallery { display: grid; grid-template-columns: 1.25fr 1fr 0.85fr; gap: 24px; align-items: start; margin-top: 40px; }
-.gallery figure { margin: 0; }
-.gallery img { width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-sm); }
+.gallery { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 56px 32px; margin-top: 40px; }
+/* Each drawing at its own width, up to GitHub's 860px column. Two stand side by side only when both fit at full size. */
+.gallery figure { margin: 0; width: fit-content; max-width: min(100%, 860px); }
+.gallery a { display: block; border-radius: 10px; }
+.gallery img { width: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-sm); }
+.gallery figcaption { width: 0; min-width: 100%; }
 .gallery figcaption b { display: block; margin: 14px 0 8px; font: 700 14px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--strong); }
 .gallery figcaption { font-size: 16px; line-height: 1.5; }
 
@@ -224,7 +227,7 @@ footer span { color: var(--muted); }
   .pipe { grid-template-columns: minmax(0, 1fr); }
   .step { border-right: 0; border-bottom: 1px solid var(--line); min-height: 0; }
   .step:last-child { border-bottom: 0; }
-  .more, .gallery { grid-template-columns: minmax(0, 1fr); }
+  .more { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   header.top nav a:nth-child(2) { display: none; }
@@ -462,9 +465,9 @@ Links read
     <h2 id="diagrams" style="margin:16px 0;max-width:880px">A system diagram in the issue, drawn to fit GitHub’s 860-pixel column.</h2>
     <p class="lead">A JSON spec goes in and an SVG comes out. A diagram can show services, or the inside of one browser tab: threads, workers, WASM modules and the protocols between them. Each status has its own border and badge, so colour is never the only signal.</p>
     <div class="gallery">
-      <figure><img src="assets/dynamic.svg" width="712" height="884" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps read in order from the top left, each with its words.</figcaption></figure>
-      <figure><img src="assets/change-impact.svg" width="702" height="1104" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
-      <figure><img src="assets/in-process.svg" width="827" height="1340" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
+      <figure><a href="assets/dynamic.svg" title="Open the full-size SVG"><img src="assets/dynamic.svg" width="712" height="884" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."></a><figcaption><b>Flow</b>Numbered steps read in order from the top left, each with its words.</figcaption></figure>
+      <figure><a href="assets/change-impact.svg" title="Open the full-size SVG"><img src="assets/change-impact.svg" width="702" height="1104" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."></a><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
+      <figure><a href="assets/in-process.svg" title="Open the full-size SVG"><img src="assets/in-process.svg" width="827" height="1340" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."></a><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
     </div>
   </div>
 </section>
