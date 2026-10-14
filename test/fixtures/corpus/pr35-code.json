@@ -2,7 +2,6 @@
  "title": "See all commands: the page is written from the CLI's own tool list",
  "type": "component",
  "scope": "gh-wat-dis, at file level",
- "direction": "RIGHT",
  "elements": [
   {
    "id": "cli",

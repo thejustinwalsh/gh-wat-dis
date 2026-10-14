@@ -6,15 +6,13 @@ import { FONT } from '../diagram/theme.ts';
 
 const FONTS = { loadSystemFonts: true, defaultFontFamily: 'Helvetica', sansSerifFamily: 'Arial' };
 
-/**
- * Draw an SVG string as PNG bytes at twice its size, so small labels stay readable.
- * resvg reads no CSS variables and no media queries: pass an SVG with a fixed theme, not the `auto` one.
- * Text uses the fonts of this machine, with Helvetica or Arial standing in for the system UI font.
- */
 /** Emoji and the joiners that glue them. resvg has no colour font: one emoji turns its whole line of text into boxes. */
 const EMOJI = /[\p{Extended_Pictographic}\p{Regional_Indicator}][\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}\p{Extended_Pictographic}]*/gu;
 
 /**
+ * Draw an SVG string as PNG bytes at twice its size, so small labels stay readable.
+ * resvg reads no CSS variables and no media queries: pass an SVG with a fixed theme, not the `auto` one.
+ * Text uses the fonts of this machine, with Helvetica or Arial standing in for the system UI font.
  * `emoji` counts the emoji that were drawn as a small box. The SVG still holds them: only the PNG cannot draw them.
  */
 export function toPng(svg: string): { png: Uint8Array; width: number; height: number; emoji: number } {

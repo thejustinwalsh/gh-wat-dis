@@ -36,22 +36,25 @@ Usage: npx gh-wat-dis diagram [spec.json|-] [options]
 With no -o, a spec read from a file is drawn to <spec>.svg beside it and the path is printed.
 A spec read from stdin is drawn to stdout. Written paths go to stdout, lint messages to stderr.
 
-Each type of diagram has one form. A code diagram runs left to right, so that a line ends on a symbol row.
-A flow reads in step order from the top left. The rest read from the first relationship in the spec, top down
-or left to right. The order of the relationships is the reading order: in a cycle, the line that returns to an
-element already drawn is the one drawn backwards.
+Each type of diagram has one form. A code diagram is layers of files by import depth, left to right, three
+layers at most: a line ends on a symbol row, files that import one another share a layer, and the name of a
+group is a label on each of its cards. A flow reads in step order from the top left. The rest read from the
+first relationship in the spec, top down or left to right. The order of the relationships is the reading
+order: in a cycle, the line that returns to an element already drawn is the one drawn backwards.
 
 A layout must pass every gate: each relationship drawn from end to end on its own element or row, no line
 through text, nothing on top of anything else, and the whole image no wider than --max-width and no taller
 than 1.6 times that. The form is loosened one rung at a time until a layout passes: numbers on the lines or a
-long chain wrapped, then both, then compact cards. A code diagram tries its files in a column before it wraps.
-The first rung that passes is drawn. On one rung, the layout with the fewest crossings wins, then the least
-detour, then the fewest corners, then the shape nearest 1.6 wide to 1 tall.
+long chain wrapped, then both, then compact cards. A code diagram is never wrapped. The first rung that
+passes is drawn. On one rung, the layout with the fewest crossings wins, then the least detour, then the
+fewest corners, then the shape nearest 1.6 wide to 1 tall. A layout that passes and is taller than 900px
+gives way to the wrapped layout of the next rung when that one is nearer 1.6 to 1 and its lines are as calm.
 
 Stderr gets the size, then a "layout:" line with what was kept, the rung, and why each rung above it failed.
-When no rung passes, the nearest layout is drawn and the "layout:" line says so. Then a "warning:" for each
-fault that is left. After the warnings, each "fix:" line is a filter or option the tool applied and judged
-again, with the size and the warnings it leaves. Only a fix that leaves fewer warnings is printed.
+When no rung passes, the layout with the calmest lines is drawn, then the one that overshoots least, and the
+"layout:" line says so. Then a "warning:" for each fault that is left. After the warnings, each "fix:" line is
+a filter or option the tool applied and judged again, with the size and the warnings it leaves. Only a fix
+that leaves fewer warnings, or that makes a drawing pass which no rung could, is printed.
 Exit 0 ok, 1 lint errors, 2 usage error.
 
 Shape the spec first with "npx gh-wat-dis graph --help".
@@ -141,10 +144,12 @@ export const main: Command = async (argv) => {
       const gives = f.command.endsWith('the largest') ? '' : ' gives';
       console.error(`fix: ${f.command}${gives} ${f.width} x ${f.height}px with ${f.warnings.length ? `${f.warnings.length} of these ${warnings.length} warnings left` : 'no warning'}.${f.removes ? ` It ${f.removes}.` : ''}`);
     }
+    // A code diagram is cut by file, or split by group: `graph split` writes one diagram for each.
+    const byHand = spec.type === 'code' ? 'Take files out with `graph drop --ids <path,path>`, or draw one diagram for each group with `graph split`.' : 'Cut elements by hand, or draw two diagrams.';
     if (!fixes.length) {
       console.error(advice.tried.length
-        ? `fix: none found. Tried and judged no better: ${advice.tried.join('; ')}. Cut elements by hand, or draw two diagrams.`
-        : 'fix: none to try on this spec. Cut elements by hand, or draw two diagrams.');
+        ? `fix: none found. Tried and judged no better: ${advice.tried.join('; ')}. ${byHand}`
+        : `fix: none to try on this spec. ${byHand}`);
     }
   }
   if (args.png) {

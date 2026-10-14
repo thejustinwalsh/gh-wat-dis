@@ -11,6 +11,8 @@ const CHROME_W = 48;
 const CHROME_H = 176;
 /** Past this height the image does not fit a screen, and gets a warning. It is the height of the whole image. */
 export const TALL = 900;
+/** A wrapped chain has one line that steps back to the start of the next row. This much detour for each line is that step, not a fault. */
+const DETOUR_STEP = 30;
 /** The shapes a wrapped layout aims for, as width to height: the golden one first, then narrower. */
 const WRAPS = [GOLDEN, 1, 0.6] as const;
 
@@ -24,10 +26,10 @@ export interface FitOptions extends LayoutOptions {
 type Direction = 'DOWN' | 'RIGHT';
 /**
  * The form each type of diagram is drawn in. It is a rule, not a score. A code diagram runs left to
- * right, the only way a line can end on a symbol row. The others may run either way: top down is
- * tried first, and a flow left to right first.
+ * right, in layers by import depth, so that a line ends on a symbol row: it has no other form. The
+ * others may run either way: top down is tried first, and a flow left to right first.
  */
-const formsOf = (type: DiagramSpec['type']): Direction[][] => (type === 'code' ? [['RIGHT'], ['DOWN']] : type === 'dynamic' ? [['RIGHT', 'DOWN']] : [['DOWN', 'RIGHT']]);
+const formsOf = (type: DiagramSpec['type']): Direction[][] => (type === 'code' ? [['RIGHT']] : type === 'dynamic' ? [['RIGHT', 'DOWN']] : [['DOWN', 'RIGHT']]);
 
 /** One layout that was tried, with what a reader has to follow in it. */
 export interface Candidate extends Metrics {
@@ -98,23 +100,25 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   // File cards have one form, and a spec with many elements is compact already.
   const details = asked === 'auto' && !isCompact(spec, 'auto') && spec.elements.some((e) => e.type !== 'file' && e.type !== 'boundary') ? [false, true] : [asked === 'compact'];
 
+  // The layers of a code diagram are its shape: a wrap would cut them.
+  const wraps = spec.type === 'code' ? [] : WRAPS;
   const ladder: { name: string; steps: Step[] }[] = [];
   for (const compact of details) for (const given of [0, 1, 2]) for (const directions of forms) {
     const steps: Step[] = [];
-    for (const numbered of numberings) for (const wrap of [undefined, ...WRAPS]) for (const direction of directions) {
+    for (const numbered of numberings) for (const wrap of [undefined, ...wraps]) for (const direction of directions) {
       if (Number(numbered !== numberings[0]) + Number(wrap !== undefined) === given) steps.push({ direction, numbered, compact, ...(wrap ? { wrap } : {}) });
     }
     if (!steps.length) continue;
     const gives = [...new Set(steps.flatMap((s) => [...(s.numbered !== numberings[0] ? ['numbers on the lines'] : []), ...(s.wrap ? ['wrapped'] : [])]))].join(given === 2 ? ' and ' : ' or ');
-    const name = [...(forms.length > 1 ? [directions[0] === 'RIGHT' ? 'left to right' : 'files in a column'] : []), ...(compact && details.length > 1 ? ['compact cards'] : []), ...(gives ? [gives] : [])].join(', ');
+    const name = [...(compact && details.length > 1 ? ['compact cards'] : []), ...(gives ? [gives] : [])].join(', ');
     ladder.push({ name: name || 'as written', steps });
   }
 
   const tried: { layout: Layout; c: Candidate; order: number[] }[] = [];
   let failure: unknown;
-  let best: (typeof tried)[number] | undefined;
-  for (const [k, rung] of ladder.entries()) {
-    for (const step of rung.steps) {
+  /** Lays out every step of one rung, and returns the layout on it that passes every gate and reads best. */
+  const climb = async (k: number): Promise<(typeof tried)[number] | undefined> => {
+    for (const step of ladder[k]!.steps) {
       const { direction } = step;
       let l: Layout;
       try { l = await layout(spec, { detail: step.compact ? 'compact' : asked, direction, numbered: step.numbered, wrap: step.wrap }); } catch (err) { failure ??= err; continue; }
@@ -125,14 +129,36 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
       const width = Math.ceil(whole.width), height = Math.ceil(whole.height);
       tried.push({ layout: l, order: rank(m, width, height), c: { rung: k + 1, direction, labels: l.numbered ? 'numbered' : 'text', compact: l.compact, wrapped: l.wrapped, width, height, fails: failed(m, { width, height }, { width: maxWidth, height: Math.round(maxWidth * GOLDEN) }), chosen: false, ...m } });
     }
-    best = tried.filter((t) => t.c.rung === k + 1 && !t.c.fails.length).sort((a, b) => compare(a.order, b.order))[0];
-    if (best) break;
+    return tried.filter((t) => t.c.rung === k + 1 && !t.c.fails.length).sort((a, b) => compare(a.order, b.order))[0];
+  };
+  const shape = (c: Candidate): number => Math.abs(Math.log(c.width / c.height / GOLDEN));
+  let best: (typeof tried)[number] | undefined;
+  /** The tall layout that passed a rung above, when the next rung gave a better shape with lines as calm. */
+  let tall: Candidate | undefined;
+  for (let k = 0; k < ladder.length && !best; k++) {
+    best = await climb(k);
+    if (!best || best.c.height <= TALL) continue;
+    // It passes, and a reader still has to scroll. So the next rung that wraps is drawn too, and its wrapped layout
+    // with the same words or numbers on the lines is taken only when it costs the lines nothing: no more crossings,
+    // no line sent out of its way, and at most a step more of detour for each line. A better shape never buys a fault.
+    const kept = best.c;
+    const next = ladder.findIndex((r, j) => j > k && r.steps.some((st) => st.wrap !== undefined && st.compact === ladder[k]!.steps[0]!.compact && st.numbered === (kept.labels === 'numbered')));
+    if (next >= 0) await climb(next);
+    const other = tried.filter((t) => t.c.rung === next + 1 && !t.c.fails.length && t.c.wrapped && t.c.labels === kept.labels && t.c.compact === kept.compact).sort((a, b) => compare(a.order, b.order))[0];
+    if (other && other.c.crossings <= best.c.crossings && other.c.detour <= best.c.detour + DETOUR_STEP * other.c.lines && (!other.c.worst || best.c.worst) && shape(other.c) < shape(best.c)) {
+      tall = best.c;
+      best = other;
+    }
   }
   // When no layout could be made, the reason is the layout engine's own error, not a guess.
   if (!tried.length) throw new Error(`could not lay out the diagram: ${failure instanceof Error ? failure.message : String(failure ?? 'no layout was tried')}`);
   const passed = best !== undefined;
-  // No rung passes: the layout that fails the least is drawn. A missing line is worse than a line through text, and so on down the gates.
-  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Math.ceil(Math.max(0, c.width - maxWidth) / 100), Math.ceil(Math.max(0, c.height - maxWidth * GOLDEN) / 100)];
+  // No rung passes: the layout that fails the least is drawn. A missing line is worse than a line through text, and
+  // so on down the gates. Then the lines decide before the size does: a line sent round the drawing, then crossings
+  // counted in steps of a quarter of the lines, so that one crossing more or less does not outweigh the page.
+  // So a clean drawing that is too wide is kept before a narrower one whose lines a reader cannot follow.
+  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Number(c.worst !== undefined), Math.floor(c.crossings / Math.max(3, c.lines / 4)),
+    Math.ceil(Math.max(0, c.width - maxWidth) / 100), Math.ceil(Math.max(0, c.height - maxWidth * GOLDEN) / 100)];
   best ??= [...tried].sort((a, b) => compare(badness(a.c), badness(b.c)) || compare(a.order, b.order))[0]!;
   best.c.chosen = true;
 
@@ -145,6 +171,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
     if (k + 1 >= c.rung && passed) break;
     const near = tried.filter((t) => t.c.rung === k + 1).sort((a, b) => compare(badness(a.c), badness(b.c)))[0]?.c;
     if (!near || near === c) continue;
+    if (near === tall) { lost.push(`rung ${k + 1} (${rung.name}) passes at ${near.height}px tall, and this one is nearer ${GOLDEN} to 1 with lines as calm`); continue; }
     const gate = near.fails[0];
     lost.push(`rung ${k + 1} (${rung.name}) ${gate === 'width' ? `is ${near.width}px wide` : gate === 'height' ? `is ${near.height}px tall` : gate ? GATE_WORDS[gate] : 'passes'}`);
   }

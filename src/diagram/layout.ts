@@ -1,5 +1,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { Detail, DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
+import { codeShape } from './code-shape.ts';
 import { fit, monoWidth, textWidth, wrap } from './measure.ts';
 import { STATUS_BADGE, STATUS_MARK, active, kindLine } from './vocab.ts';
 import type { ActiveStatus } from './vocab.ts';
@@ -15,6 +16,8 @@ export interface FileCard {
   /** Height of the header. A long path puts its folders on a small line above the file name, and the header is taller. */
   head: number;
   stacked: boolean;
+  /** The name of the group the file is in, small and in capitals at the top of the card. */
+  lane?: string;
 }
 /** The name of a group, where the layout engine kept room for it. `stacked` puts the kind under the name. */
 export interface GroupTitle extends Rect { name: string; kind: string; stacked: boolean }
@@ -81,6 +84,10 @@ export const CARD_KIND_PX = 10;
 export const LANE_NAME_PX = 10.5;
 const CARD_MIN = 148;
 const CARD_MAX = 240;
+/** The widest a card may be when a code diagram has one, two or three layers: three columns and the room for their lines fill the page. */
+const CARD_MAX_IN_LAYERS = [320, 320, 300, 216];
+/** Room at the top of a card for the name of its group. */
+export const CARD_LANE = 14;
 export const CARD_ROWS_MAX = 8;
 /** Lines that end on one row or header sit this far apart, or closer when there are many. */
 const PORT_GAP = 6;
@@ -145,14 +152,15 @@ const longPath = (el: SpecElement): boolean => {
 };
 
 /** A file card is as wide as its longest line, within limits. A long path loses its leading folders first. */
-function fileCard(el: SpecElement, stack: boolean): { w: number; h: number; card: FileCard } {
+function fileCard(el: SpecElement, stack: boolean, widest = CARD_MAX, group?: string): { w: number; h: number; card: FileCard } {
   const mark = active(el.status) ? 15 : 0;
   const cut = el.name.lastIndexOf('/') + 1;
   let dir = el.name.slice(0, cut);
   const stacked = stack && dir !== '';
-  const head = stacked ? CARD_HEAD_STACKED : CARD_HEAD;
+  const lane = group === undefined ? undefined : fit(group.toUpperCase(), LANE_NAME_PX, (widest - 2 * CARD_PAD) / 1.06, true);
+  const head = (stacked ? CARD_HEAD_STACKED : CARD_HEAD) + (lane === undefined ? 0 : CARD_LANE);
   const dirPx = stacked ? CARD_DIR_PX : CARD_PATH_PX;
-  const room = CARD_MAX - 2 * CARD_PAD - mark;
+  const room = widest - 2 * CARD_PAD - mark;
   const pathWidth = (d: string, b: string): number =>
     (stacked ? Math.max(textWidth(d, dirPx), textWidth(b, CARD_PATH_PX, true)) : textWidth(d, dirPx) + textWidth(b, CARD_PATH_PX, true));
   while (dir && (stacked ? textWidth(dir, dirPx) : pathWidth(dir, el.name.slice(cut))) > room) {
@@ -165,14 +173,14 @@ function fileCard(el: SpecElement, stack: boolean): { w: number; h: number; card
   const kindWidth = (kind: string | undefined): number => (kind ? textWidth(kind, CARD_KIND_PX) + 12 : 0);
   const rowWidth = Math.max(0, ...symbols.map((s) => CARD_NAME_X + monoWidth(s.name, CARD_SYMBOL_PX) + kindWidth(s.kind) + CARD_PAD));
   const note = el.description?.trim();
-  const w = Math.ceil(Math.min(CARD_MAX, Math.max(CARD_MIN, pathWidth(dir, base) + mark + 2 * CARD_PAD, rowWidth, note ? textWidth(note, 11) + 2 * CARD_PAD : 0)));
+  const w = Math.ceil(Math.min(widest, Math.max(CARD_MIN, pathWidth(dir, base) + mark + 2 * CARD_PAD, rowWidth, note ? textWidth(note, 11) + 2 * CARD_PAD : 0, lane === undefined ? 0 : laneLabelWidth(lane) + 2 * CARD_PAD)));
   const rows: CardRow[] = symbols.map((s, i) => ({
     name: monoFit(s.name, CARD_SYMBOL_PX, w - CARD_NAME_X - kindWidth(s.kind) - CARD_PAD),
     ...(s.kind ? { kind: s.kind } : {}), ...(active(s.status) ? { status: active(s.status)! } : {}),
     dy: head + 4 + i * CARD_ROW + CARD_ROW / 2,
   }));
   let h = head + (rows.length ? rows.length * CARD_ROW + 9 : 0);
-  const card: FileCard = { dir, base, rows, head, stacked };
+  const card: FileCard = { dir, base, rows, head, stacked, ...(lane === undefined ? {} : { lane }) };
   if (note) { card.note = { text: fit(note, 11, w - 2 * CARD_PAD), dy: h + (rows.length ? 9 : 12) }; h += rows.length ? 18 : 22; }
   return { w, h, card };
 }
@@ -204,7 +212,7 @@ function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number;
 export const groupLabelWidth = (el: SpecElement): number =>
   textWidth(el.name, GROUP_NAME_PX, true) + 8 + textWidth(kindLine(el), GROUP_KIND_PX);
 /** A light group shows its name alone, small, in capitals and spaced. */
-export const laneLabelWidth = (name: string): number => textWidth(name, LANE_NAME_PX, true) * 1.06;
+export function laneLabelWidth(name: string): number { return textWidth(name, LANE_NAME_PX, true) * 1.06; }
 
 /**
  * The title of a group, and the room the layout engine keeps for it with its status badge.
@@ -300,13 +308,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const position = new Map(spec.elements.map((e, i) => [e.id, i]));
   const kids = new Map<string | undefined, SpecElement[]>();
   for (const el of spec.elements) {
-    const key = el.parent !== undefined && byId.has(el.parent) ? el.parent : undefined;
+    // In a code diagram a group takes no room: its name is a label on each of its files, so the files are free to stand in layers.
+    if (code && (parents.has(el.id) || el.type === 'boundary' || el.type === 'node')) continue;
+    const key = !code && el.parent !== undefined && byId.has(el.parent) ? el.parent : undefined;
     kids.set(key, [...(kids.get(key) ?? []), el]);
   }
   /** The element, then each group that holds it, outermost last. A parent cycle stops at the first repeat. */
   const chain = (id: string): string[] => {
     const out: string[] = [];
-    for (let p: string | undefined = id; p !== undefined && byId.has(p) && !out.includes(p); p = byId.get(p)!.parent) out.push(p);
+    for (let p: string | undefined = id; p !== undefined && byId.has(p) && !out.includes(p); p = code ? undefined : byId.get(p)!.parent) out.push(p);
     return out;
   };
 
@@ -318,7 +328,11 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   // Shape. A flow reads in step order. Every other diagram reads in the order the spec lists its relationships.
   const lines = spec.relationships.map((rel, i) => ({ rel, i })).filter(({ rel }) => placed.has(rel.from) && placed.has(rel.to));
   if (spec.type === 'dynamic') lines.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
-  const back = backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
+  // A code diagram left to right has its layers worked out here: no line runs backwards, and a line between two
+  // files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
+  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec) : undefined;
+  const within = (rel: SpecRelationship): boolean => shape !== undefined && rel.from !== rel.to && shape.layer.get(rel.from) === shape.layer.get(rel.to);
+  const back = shape ? new Set<number>() : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
   /** The two ends of a line as the layout engine gets them: source first. */
   const flow = (rel: SpecRelationship, i: number): [string, string] => (back.has(i) ? [rel.to, rel.from] : [rel.from, rel.to]);
   // Which elements have a line, themselves or inside them, and which have one arriving from beside them in their group.
@@ -371,15 +385,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const slots = new Map<string, { name: string; rank: number }[]>();
   const portId = (id: string, row: number, side: Side, name: string): string => `${id}\u0000${row}\u0000${side}\u0000${name}`;
   /**
-   * The port one end of a line uses. Left to right, a line leaves on the right and arrives on the left; one drawn
-   * backwards does the reverse, and a loop stays on the right. Top down the files stand in a column and every
-   * line runs down their right side, which is the only way it can still end on a row.
+   * The port one end of a line uses. Left to right, a line leaves on the right and arrives on the left. A loop, and a
+   * line between two files of one layer, leave and arrive on the right. Top down, which a code diagram takes only
+   * when the spec names it, every line runs down the right side of the cards, the only way it can still end on a row.
    */
   const port = (rel: SpecRelationship, i: number, end: 'from' | 'to'): string => {
     const el = byId.get(rel[end])!;
     if (el.type !== 'file' || parents.has(el.id)) return el.id;
     const loop = rel.from === rel.to, rev = back.has(i);
-    const side: Side = down ? 'e' : end === 'from' ? (rev ? 'w' : 'e') : loop || rev ? 'e' : 'w';
+    const side: Side = down ? 'e' : end === 'from' ? (rev ? 'w' : 'e') : loop || rev || within(rel) ? 'e' : 'w';
     const row = rowOf(el, end === 'from' ? rel.fromSymbol : rel.toSymbol);
     const name = end === 'from' ? `out${rel.status ?? ''}` : `in${i}`;
     const key = `${el.id}\u0000${row}\u0000${side}`;
@@ -387,19 +401,30 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : position.get(rel.from) ?? 0 });
     return portId(el.id, row, side, name);
   };
+  const roots = kids.get(undefined) ?? [];
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
   const topOf = (id: string): string => chain(id).at(-1)!;
   // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
-  const edges: { part: string; edge: any }[] = lines.map(({ rel, i }) => {
+  const turnId = (i: number): string => `\u0000turn\u0000${i}`;
+  const turns: unknown[] = [];
+  const edges: { part: string; edge: any }[] = lines.flatMap(({ rel, i }) => {
     const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
     labels.set(i, label);
     const a = port(rel, i, 'from'), z = port(rel, i, 'to');
-    return { part: topOf(rel.from), edge: {
-      id: `e${i}`, sources: [back.has(i) ? z : a], targets: [back.has(i) ? a : z],
-      ...(label.lines.length ? { labels: [{ id: `l${i}`, text: rel.label, width: label.w, height: label.h, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] } : {}),
-    } };
+    const words = label.lines.length ? { labels: [{ id: `l${i}`, text: rel.label, width: label.w, height: label.h, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] } : {};
+    const part = topOf(rel.from);
+    if (!within(rel)) return [{ part, edge: { id: `e${i}`, sources: [back.has(i) ? z : a], targets: [back.has(i) ? a : z], ...words } }];
+    // The engine has no line inside a layer. So both ends run to a point in the gap to the right of the layer,
+    // and the two halves are joined there into one line when the layout is read.
+    turns.push({ id: turnId(i), width: 0.1, height: 0.1, layoutOptions: { 'elk.partitioning.partition': String(2 * shape!.layer.get(rel.from)! + 1) } });
+    return [{ part, edge: { id: `e${i}`, sources: [a], targets: [turnId(i)], ...words } }, { part, edge: { id: `h${i}`, sources: [z], targets: [turnId(i)] } }];
   });
 
+  // The fewer the layers of a code diagram, the wider its cards may be.
+  const cardMax = shape ? CARD_MAX_IN_LAYERS[shape.layers]! : CARD_MAX;
+  const sizes = new Map(spec.elements.filter((e) => e.type === 'file' && !parents.has(e.id)).map((e) =>
+    [e.id, fileCard(e, stack, cardMax, code && e.parent !== undefined ? byId.get(e.parent)?.name : undefined)]));
+  const partition = (id: string): Record<string, string> => (shape ? { 'elk.partitioning.partition': String(2 * (shape.layer.get(id) ?? 0)) } : {});
   const boxes = new Map<string, NodeBox>();
   const titleId = (id: string): string => `\u0000title\u0000${id}`;
   /** Groups whose title sits in the padding at the top, with how far in. The rest have a title the engine placed. */
@@ -409,7 +434,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
     const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
     if (!group && el.type === 'file') {
-      const { w, h, card } = fileCard(el, stack);
+      const { w, h, card } = sizes.get(el.id)!;
       boxes.set(el.id, { el, group, depth, x: 0, y: 0, w, h, lines: [], card });
       const ports: unknown[] = down ? [{ id: portId(el.id, -2, 'w', 'top'), x: w / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } }] : [];
       for (const [row, dy] of [[-1, card.head / 2] as const, ...card.rows.map((r, i) => [i, r.dy] as const)]) for (const side of ['w', 'e'] as const) {
@@ -420,13 +445,13 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
           layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
         }));
       }
-      return { id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' }, ports };
+      return { id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS', ...partition(el.id) }, ports };
     }
     const light = code && group;
     const text = group ? { h: light ? 48 : 64, lines: [] } : leafText(el, compact, nodeW);
     if (!group) {
       boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: nodeW, h: text.h, lines: text.lines });
-      return { id: el.id, width: nodeW, height: text.h };
+      return { id: el.id, width: nodeW, height: text.h, layoutOptions: partition(el.id) };
     }
     const { title, w: titleW, h: titleH } = groupTitle(el, light);
     const side = light ? 10 : compact ? 14 : 18, top = light ? 8 : 10;
@@ -460,7 +485,6 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   };
 
   // Parts of the drawing with no line between them are laid out one by one and packed side by side.
-  const roots = kids.get(undefined) ?? [];
   const part = new Map(roots.map((el) => [el.id, el.id]));
   const find = (id: string): string => { let p = id; while (part.get(p) !== p) p = part.get(p)!; return p; };
   for (const { rel } of lines) part.set(find(topOf(rel.from)), find(topOf(rel.to)));
@@ -470,13 +494,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const frame = { 'elk.padding': '[top=0,left=0,bottom=0,right=0]', 'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT' };
   const graph = (modelOrder: boolean): unknown => {
     const joined = { ...layered, ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}), ...frame };
-    const within = (ids: string[]): unknown[] => edges.filter((e) => ids.includes(find(e.part)) || ids.includes(e.part)).map((e) => e.edge);
-    if (parts.size <= 1) return { id: 'root', layoutOptions: joined, children: [...built.values()], edges: within([...built.keys()]) };
+    const inside = (ids: string[]): unknown[] => edges.filter((e) => ids.includes(find(e.part)) || ids.includes(e.part)).map((e) => e.edge);
+    // The layers of a code diagram are partitions, in order: the engine keeps each file in its own, and the turn points between them.
+    if (shape) return { id: 'root', layoutOptions: { ...joined, 'elk.partitioning.activate': 'true' }, children: [...built.values(), ...turns], edges: edges.map((e) => e.edge) };
+    if (parts.size <= 1) return { id: 'root', layoutOptions: joined, children: [...built.values()], edges: inside([...built.keys()]) };
     return {
       id: 'root',
       layoutOptions: { ...packed, ...frame, 'elk.spacing.nodeNode': gap(26) },
       children: [...parts.values()].map((ids, k) => (ids.length === 1 && !linked.has(ids[0]!) ? built.get(ids[0]!)
-        : { id: `\u0000part\u0000${k}`, layoutOptions: joined, children: ids.map((id) => built.get(id)), edges: within(ids) })),
+        : { id: `\u0000part\u0000${k}`, layoutOptions: joined, children: ids.map((id) => built.get(id)), edges: inside(ids) })),
     };
   };
   const elk = new (ELK as any)();
@@ -485,6 +511,8 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
 
   const paths: EdgePath[] = [];
+  /** The second half of each line that stays inside a layer: from its target out to the turn point. */
+  const halves = new Map<number, Pt[]>();
   const read = (node: any): void => {
     for (const child of node.children ?? []) {
       const id = String(child.id);
@@ -493,10 +521,11 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
       read(child);
     }
     for (const edge of node.edges ?? []) {
-      if (!String(edge.id).startsWith('e')) continue;
       const i = Number(String(edge.id).slice(1));
       const rel = spec.relationships[i]!;
       const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint]).map((p: Pt) => ({ x: p.x, y: p.y }));
+      if (String(edge.id).startsWith('h')) { halves.set(i, points); continue; }
+      if (!String(edge.id).startsWith('e')) continue;
       if (back.has(i)) points.reverse();
       const placed = edge.labels?.[0];
       const label = labels.get(i)!;
@@ -504,6 +533,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     }
   };
   read(done);
+  // A line inside a layer is its two halves, joined at the turn point. Both halves run into that point along one
+  // level, so the point itself and the stretch they share are left out, and the line turns where the first half did.
+  for (const path of paths) {
+    const half = halves.get(spec.relationships.indexOf(path.rel));
+    if (!half) continue;
+    if (path.points.length < 2 || half.length < 2) { path.points = []; continue; }
+    // A line with words keeps the stretch out to the point, since its words sit on it.
+    path.points = [...(path.label ? path.points : path.points.slice(0, -1)), ...half.slice(0, -1).reverse()];
+  }
   // A relationship the engine gave no route is kept with no points, so that it is counted as not drawn.
   for (const { rel } of lines) if (!paths.some((p) => p.rel === rel)) paths.push({ rel, points: [] });
   // The engine centres a title box over the boxes under it. It is moved to the left of its row, as far as the

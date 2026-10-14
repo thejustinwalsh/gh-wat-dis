@@ -1,7 +1,7 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec } from '../spec.ts';
 import {
-  BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX,
+  BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_LANE, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX,
   LANE_NAME_PX, PIPE_RX,
 } from './layout.ts';
 import type { EdgePath, Layout, NodeBox, Pt, Rect } from './layout.ts';
@@ -114,8 +114,11 @@ const mark = (status: string, x: number, y: number): string =>
 function drawFile(b: NodeBox): string {
   const card = b.card!;
   const status = active(b.el.status);
-  const x = b.x + CARD_PAD + (status ? 15 : 0), headY = b.y + (card.stacked ? card.head - 11 : card.head / 2 + 4);
+  // The name of the group, when there is one, takes a line of its own above the path.
+  const top = card.lane === undefined ? 0 : CARD_LANE;
+  const x = b.x + CARD_PAD + (status ? 15 : 0), headY = b.y + top + (card.stacked ? card.head - top - 11 : (card.head - top) / 2 + 4);
   let out = `<rect class="card f-bg" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="6"/>`;
+  if (card.lane !== undefined) out += `<text class="ln" x="${n(b.x + CARD_PAD)}" y="${n(b.y + 15)}">${escapeXml(card.lane)}</text>`;
   if (status) out += mark(status, b.x + CARD_PAD + 4, headY + 0.5);
   out += card.stacked
     ? `<text class="fs" x="${n(x)}" y="${n(headY - 15)}">${escapeXml(card.dir)}</text><text class="fb" x="${n(x)}" y="${n(headY)}">${escapeXml(card.base)}</text>`
@@ -225,8 +228,8 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
     const plain = boxes.every((b) => !b.group || b.light || b.el.type === 'boundary' || b.el.type === 'node');
     items.push({ w: 26, label: plain ? 'Boundary' : 'Group', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
-  if (boxes.some((b) => b.light)) {
-    items.push({ w: 26, label: 'Part of the system', draw: (x, y) => `<rect class="lane" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
+  if (boxes.some((b) => b.card?.lane !== undefined)) {
+    items.push({ w: 36, label: 'Part of the system', draw: (x, y) => `<text class="ln" x="${n(x)}" y="${n(y + 12)}">NAME</text>` });
   }
   const imports = edges.some((e) => !e.rel.label?.trim());
   if (edges.some((e) => e.rel.label?.trim())) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : numbered ? 'Relationship, numbered in the table' : 'Relationship', draw: (x, y) => sample(x, y) });

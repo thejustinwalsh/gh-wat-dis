@@ -87,14 +87,17 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
   const fixes: (Fix & { score: number })[] = [];
   for (const t of tries) {
     let worst: Fix | undefined;
+    let passes = true;
     try {
       for (const s of t.specs) {
         const out = await render(s, t.opts);
         const fix: Fix = { command: t.command, width: out.width, height: out.height, warnings: out.report.warnings, elements: s.elements.length, removes: t.removes };
+        passes &&= out.report.passed;
         if (!worst || fix.warnings.length > worst.warnings.length || (fix.warnings.length === worst.warnings.length && fix.height > worst.height)) worst = fix;
       }
     } catch { continue; }
-    if (!worst || worst.warnings.length >= report.warnings.length) continue;
+    // A fix leaves fewer warnings. One that leaves as many still counts when the drawing failed a gate and now passes them all.
+    if (!worst || worst.warnings.length > report.warnings.length || (worst.warnings.length === report.warnings.length && (report.passed || !passes))) continue;
     fixes.push({ ...worst, ...(t.specs.length > 1 ? { command: `${t.command} gives ${t.specs.length} diagrams, the largest` } : {}), score: worst.height });
   }
   fixes.sort((a, b) => a.warnings.length - b.warnings.length || b.elements - a.elements || a.score - b.score);

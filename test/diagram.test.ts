@@ -441,18 +441,20 @@ test('judge: every example passes every gate it can, with short lines and few co
 test('judge: a direction, a label mode and a level of detail that are named are never overridden', async () => {
   const { render } = await import('../src/diagram/svg.ts');
   const { advise } = await import('../src/diagram/advise.ts');
-  // This spec names left to right, which is far too wide for it. It is drawn left to right, and the report says no rung fits.
-  const pinned = await render(fixture('diagram-three-groups'));
+  // A spec that names left to right where that is far too wide is drawn left to right, and the report says no rung fits.
+  const named: DiagramSpec = { ...fixture('diagram-three-groups'), direction: 'RIGHT' };
+  const pinned = await render(named);
   assert.equal(pinned.direction, 'RIGHT');
   assert.ok(pinned.report.candidates.every((k) => k.direction === 'RIGHT'));
   assert.equal(pinned.report.passed, false);
   assert.match(pinned.report.why, /^no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/);
   assert.match(pinned.report.warnings[0]!, /is wider than GitHub's 860px body/);
+  // With nothing passing, the lines decide before the size: the layout drawn has no line sent round the drawing.
+  assert.equal(pinned.report.candidates.find((k) => k.chosen)!.worst, undefined);
   // Taking the direction out of the spec is the fix, and it was tried before it is offered.
-  const fixes = (await advise(fixture('diagram-three-groups'), {}, pinned.report)).fixes;
+  const fixes = (await advise(named, {}, pinned.report)).fixes;
   assert.ok(fixes.some((f) => f.command === 'graph set --direction ""' && f.width <= 860), fixes.map((f) => f.command).join('|'));
-  const { direction: _direction, ...free } = fixture('diagram-three-groups');
-  const out = await render(free);
+  const out = await render(fixture('diagram-three-groups'));
   assert.deepEqual([out.direction, out.report.passed, out.width <= 860], ['DOWN', true, true]);
   for (const opts of [{ labels: 'text' as const }, { labels: 'numbered' as const }, { detail: 'full' as const }, { detail: 'compact' as const }, { direction: 'RIGHT' as const }, { direction: 'DOWN' as const }]) {
     const r = await render(fixture('diagram-containers'), opts);
@@ -550,15 +552,28 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   const { render } = await import('../src/diagram/svg.ts');
   const { measure } = await import('../src/diagram/judge.ts');
   const out = await render(spec);
-  // Left to right is the form of a code diagram. Four files deep it is wider than the page, so the files stand
-  // in a column, where every line still ends on its row, on the right side of the card.
-  assert.deepEqual([out.direction, out.numbered, out.report.passed, out.report.rung], ['DOWN', false, true, 2]);
-  assert.match(out.report.why, /^kept top down: rung 2 of \d+\. rung 1 \(left to right\) is \d+px wide/);
-  assert.ok(out.width <= 860, `${out.width}`);
-  for (const direction of ['RIGHT', 'DOWN'] as const) {
-    const drawn = await layout(spec, { direction });
-    assert.equal(measure(drawn).broken, 0, `${direction}: every line ends on the row it names`);
-    for (const g of drawn.nodes.filter((b) => b.group)) for (const e of drawn.edges) assert.ok(!crossesRect(e.points, g.title!, 1), `${direction}: a line runs through ${g.el.name}`);
+  // A code diagram has one form: layers of files by import depth, left to right. Three layers fit the page.
+  assert.deepEqual([out.direction, out.numbered, out.report.passed, out.report.rung, out.report.rungs], ['RIGHT', false, true, 1, 1]);
+  assert.ok(out.width <= 860 && out.height <= 520, `${out.width} x ${out.height}`);
+  const xs = (ids: string[]): number[] => ids.map((id) => box(out.layout, id).x);
+  // What imports the change, the change, and what the change imports: each layer is a column to the right of the one before.
+  assert.ok(Math.max(...xs(['checkout', 'retry'])) < Math.min(...xs(['authorise', 'lib'])) && Math.max(...xs(['authorise', 'lib'])) < box(out.layout, 'keys').x, JSON.stringify(out.layout.nodes.map((b) => [b.el.id, Math.round(b.x)])));
+  // A group takes no room: its name is on each of its cards, and no band is drawn.
+  assert.ok(out.layout.nodes.every((b) => !b.group));
+  assert.equal(box(out.layout, 'retry').card!.lane, 'PAYMENT SERVICE');
+  assert.match(out.svg, /class="ln"[^>]*>ORDER SERVICE</);
+  assert.equal(measure(out.layout).broken, 0, 'every line ends on the row it names');
+  // Two files that import each other stand in one layer, and the lines between them run beside the cards, on their right.
+  const knot = structuredClone(spec);
+  knot.relationships.push({ from: 'keys', to: 'authorise', toSymbol: 'authorise', label: '' });
+  const tied = await render(knot);
+  assert.equal(tied.report.passed, true, tied.report.why);
+  const [a, k] = [box(tied.layout, 'authorise'), box(tied.layout, 'keys')];
+  assert.ok(a.x < k.x + k.w && k.x < a.x + a.w && (a.y >= k.y + k.h || k.y >= a.y + a.h), 'the two files of the cycle share a column, one above the other');
+  for (const e of tied.layout.edges.filter((x) => [x.rel.from, x.rel.to].sort().join() === 'authorise,keys')) {
+    assert.ok(Math.abs(e.points[0]!.x - (a.x + Math.max(a.w, k.w))) < Math.max(a.w, k.w) && e.points.every((pt) => pt.x >= Math.min(a.x + a.w, k.x + k.w) - 1), 'the line stays to the right of the two cards');
+    const span = Math.max(...e.points.map((pt) => pt.x)) - Math.min(...e.points.map((pt) => pt.x));
+    assert.ok(span < 80, `the line turns beside the cards, ${Math.round(span)}px out`);
   }
   assertWellFormed(out.svg);
   assert.match(out.svg, /^<svg[^>]*><title[^>]*>Payment retries move to idempotency keys: Code diagram for/);
@@ -568,7 +583,7 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   }
   assert.match(out.svg, /<g class="gone"><text class="sy"[^>]*>backoff_schedule<\/text>.*?class="strike"/);
   const key = out.svg.slice(out.svg.indexOf('>KEY<'));
-  assert.match(key, />File<.*>Part of the system<.*>Imports<.*>Added<.*>Changed<.*>Removed<.*>Imports a changed signature</);
+  assert.match(key, />File<.*>NAME<.*>Part of the system<.*>Imports<.*>Added<.*>Changed<.*>Removed<.*>Imports a changed signature</);
   assert.doesNotMatch(key, /Boundary|Relationship|ADDED/);
   for (const theme of ['light', 'dark'] as const) assert.doesNotMatch(await renderSvg(spec, { theme }), /var\(--/);
 
@@ -624,11 +639,11 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   assert.equal(kept.length, 1);
   assert.deepEqual([kept[0]!.rung, kept[0]!.fails], [1, []]);
   // A spec that no rung fits is still drawn, and the layout line says so before the warnings.
-  const wide = run(fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url)), '-o', join(dir, 'c.svg'));
+  const wide = run(fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url)), '-o', join(dir, 'c.svg'), '--direction', 'right');
   assert.equal(wide.status, 0, wide.stderr);
   assert.match(wide.stderr, /^layout: no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/m);
   assert.match(wide.stderr, /^warning: \d+px is wider than GitHub's 860px body/m);
-  assert.match(wide.stderr, /^fix: graph set --direction "" gives \d+ x \d+px with 1 of these 3 warnings left\.$/m);
+  assert.match(wide.stderr, /^fix: no --direction right gives \d+ x \d+px with \d of these \d warnings left\.$/m);
   assert.equal(run(spec, '--report', '-o', '-').status, 2);
 });
 
@@ -832,4 +847,41 @@ test('round 3: the command refuses --mermaid with --png, says a write failure pl
   assert.equal(lost.status, 2);
   assert.match(lost.stderr, /cannot write ".*a\.svg": its folder does not exist/);
   assert.doesNotMatch(lost.stderr, /ENOENT/);
+});
+
+test('code shape: files stand in layers by import depth, a cycle shares a layer, and three layers are kept round the first file', async () => {
+  const { codeShape } = await import('../src/diagram/code-shape.ts');
+  const { judge } = await import('../src/diagram/fit.ts');
+  const file = (id: string, status?: 'changed'): DiagramSpec['elements'][number] => ({ id, type: 'file', name: `src/${id}.ts`, ...(status ? { status } : {}) });
+  const line = (from: string, to: string): DiagramSpec['relationships'][number] => ({ from, to, label: '' });
+  const spec = (elements: DiagramSpec['elements'], relationships: DiagramSpec['relationships']): DiagramSpec => ({ title: 'T', type: 'code', elements, relationships });
+  // A chain, a file that imports the end of it, and a file with no line.
+  const chain = codeShape(spec(['a', 'b', 'c', 'late', 'alone'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('late', 'c')]));
+  assert.deepEqual([...chain.layer], [['a', 0], ['b', 1], ['c', 2], ['late', 1], ['alone', 0]], 'a file stands just left of what it imports, and a file with no line in the shortest layer');
+  assert.deepEqual([chain.layers, chain.depth, chain.beyond], [3, 3, []]);
+  // Two files that import each other are one layer.
+  const knot = codeShape(spec(['a', 'b', 'c'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('c', 'b')]));
+  assert.deepEqual([knot.layer.get('b'), knot.layer.get('c'), knot.depth], [1, 1, 2]);
+  // Five deep: the three layers that hold the first file are drawn.
+  const deep = spec([file('c', 'changed'), file('a'), file('b'), file('d'), file('e')], [line('a', 'b'), line('b', 'c'), line('c', 'd'), line('d', 'e')]);
+  const shape = codeShape(deep);
+  assert.deepEqual([shape.depth, shape.layers, shape.layer.get('c'), shape.beyond.sort()], [5, 3, 2, ['d', 'e']]);
+  // Drawn as it is, no line runs backwards or round the drawing: each goes right or stays in its layer.
+  const { layout: l, report } = await judge(deep);
+  assert.deepEqual([l.direction, report.rungs, report.candidates.find((c) => c.chosen)!.worst], ['RIGHT', 1, undefined]);
+  for (const e of l.edges) assert.ok(e.points.every((pt) => pt.x >= e.points[0]!.x - 1), `${e.rel.from} -> ${e.rel.to} runs back to the left`);
+});
+
+test('judge: a tall drawing gives way to a wrapped one only when the lines stay as calm, and with no rung passing the lines decide', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  // A chain of eight passes top down at over 900px. Wrapped it is nearer 1.6 to 1 with no crossing, and keeps its words.
+  const chain = await judge(pressure('01-chain8'), { frame: undefined });
+  const kept = chain.report.candidates.find((c) => c.chosen)!;
+  assert.deepEqual([kept.wrapped, kept.labels, kept.crossings, chain.report.rung], [true, 'text', 0, 2]);
+  assert.match(chain.report.why, /rung 1 \(as written\) passes at \d+px tall, and this one is nearer 1\.6 to 1 with lines as calm/);
+  assert.ok(chain.report.candidates.some((c) => c.rung === 1 && !c.fails.length && c.height > 900));
+  // Two groups with lines going back: wrapped, the lines cross. It stays tall, with its warning.
+  const groups = await judge(pressure('n02-back-edge-groups'));
+  assert.deepEqual([groups.report.rung, groups.report.candidates.find((c) => c.chosen)!.wrapped], [1, false]);
+  assert.match(groups.report.warnings.join('\n'), /px tall/);
 });
