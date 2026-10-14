@@ -267,6 +267,8 @@ Use a flow for behaviour over time: a request path, a retry, a migration sequenc
 | Legend table for numbered lines | `npx gh-wat-dis legend spec.json` |
 | Force a palette | `--theme light` or `--theme dark` (default `auto` carries both palettes and follows the page it is shown on) |
 | Two files for a `<picture>` tag | `--theme split` writes `.light.svg` and `.dark.svg` |
+| The site's colours | `--palette ebony` (default `github`) |
+| No canvas behind the drawing | `--background transparent`, with `--theme auto` or `--theme split` only, so the text follows the page |
 | Mermaid text, no file | `npx gh-wat-dis diagram spec.json --mermaid` |
 
 Use the Mermaid output only where an attachment is not possible: a milestone tracking comment from a tool with no `gh`, or a repo on GitHub Enterprise Server.
