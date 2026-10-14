@@ -268,21 +268,52 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   assert.equal(s.trackingFrom, 'description');
   assert.deepEqual(Object.keys(milestoneStatus({ ...base, blockedBy: new Map([[4, [{ number: 3, title: 't3', state: 'open', body: 'x'.repeat(5000), user: {} } as never]]]) }).open[1]!.blockedBy[0]!).sort(), ['inMilestone', 'number', 'state', 'title'], 'a blocker is four fields, not the raw API object');
   assert.deepEqual(s.counts, { total: 3, closed: 1, open: 2, inReview: 1, blocked: 1, blockedOutside: 0, closedLast7Days: 1 });
-  assert.equal(s.status, 'moving');
+  assert.equal(s.rating, 'moving');
+  assert.equal(s.signals.find((x) => x.name === 'addedAfterStart')!.value, null, 'no timeline read: scope is not measured');
+  assert.ok(s.signals.every((x) => x.text.endsWith('.')) && s.signals.filter((x) => x.decides).length > 0, 'every signal is a sentence, and the rating names what decided it');
   assert.equal(s.milestone.current, true, 'v0.2.0 comes before v0.10.0');
   assert.deepEqual(s.doneWhen, ['first thing', 'second thing']);
   assert.deepEqual(s.open.map((o) => [o.number, o.inReview, o.blockedBy.map((b) => b.inMilestone)]), [[3, [20], []], [4, [], [true]]]);
 
   const outside = milestoneStatus({ ...base, blockedBy: new Map([[3, [{ number: 77, title: 'other', state: 'open' }]]]) });
-  assert.equal(outside.status, 'blocked');
+  assert.equal(outside.rating, 'blocked');
   assert.match(outside.reason, /#3 waits on #77/);
   const stalled = milestoneStatus({ ...base, openPrs: [], blockedBy: new Map(), now: new Date('2026-10-30T00:00:00Z') });
-  assert.equal(stalled.status, 'stalled');
+  assert.equal(stalled.rating, 'stalled');
   const done = milestoneStatus({ ...base, items: [issue(1, 'open', undefined, 2), issue(2, 'closed', '2026-10-12T00:00:00Z')] });
-  assert.equal(done.status, 'done');
+  assert.equal(done.rating, 'done');
   assert.deepEqual(['v1.0.0', 'v0.10.0', 'v0.2.0'].sort(byVersion), ['v0.2.0', 'v0.10.0', 'v1.0.0']);
   assert.deepEqual(doneWhen('no list here'), []);
   assert.ok(!('dueOn' in s.milestone) && !JSON.stringify(s).includes('due'), 'a status carries no date');
+});
+
+test('milestone: the rating follows the rules in order and prints the signals that decided it', async () => {
+  const { milestoneStatus } = await import('../src/gh/milestone.ts');
+  const { readFileSync } = await import('node:fs');
+  type Case = {
+    name: string; milestone: { title: string; number: number; state: string; description: string | null }; openMilestones: string[]; items: never[];
+    blockedBy: Record<string, { number: number; title: string; state: string; created_at?: string }[]>;
+    openPrs: { number: number; closes: number[]; createdAt?: string }[];
+    events: Record<string, { joinedAt: string | null; reopened: number }> | null;
+    want: { rating: string; decides: string[]; values: Record<string, number | null> };
+  };
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/milestone-rating.json', import.meta.url), 'utf8')) as { now: string; cases: Case[] };
+  const keyed = <T>(o: Record<string, T>): Map<number, T> => new Map(Object.entries(o).map(([k, v]) => [Number(k), v]));
+  for (const c of fixture.cases) {
+    const s = milestoneStatus({
+      milestone: c.milestone, openMilestones: c.openMilestones, items: c.items, blockedBy: keyed(c.blockedBy), openPrs: c.openPrs,
+      events: c.events ? keyed(c.events) : undefined, now: new Date(fixture.now),
+    });
+    assert.equal(s.rating, c.want.rating, c.name);
+    assert.deepEqual(s.signals.filter((x) => x.decides).map((x) => x.name).sort(), [...c.want.decides].sort(), `${c.name}: the signals that decided`);
+    const value = Object.fromEntries(s.signals.map((x) => [x.name, x.value]));
+    for (const [name, want] of Object.entries(c.want.values)) assert.equal(value[name], want, `${c.name}: ${name}`);
+    assert.equal(s.signals.length, 12, 'every signal prints, whatever the rating');
+    assert.ok(!JSON.stringify(s).includes('due'), 'a rating carries no due date');
+  }
+  const growing = milestoneStatus({ ...fixture.cases[0]!, blockedBy: new Map(), events: keyed(fixture.cases[0]!.events!), now: new Date(fixture.now) });
+  assert.equal(growing.reason, '57% of the issues are closed, and in the last 7 days 3 issues joined while 1 closed.');
+  assert.equal(growing.signals.find((x) => x.name === 'addedAfterStart')!.text, '4 issues joined after the first close.');
 });
 
 test('issues: reads type and surfaces from the config, and says what is missing', async () => {
@@ -459,7 +490,19 @@ test('audit: one group for each check, one finding for each item, and the readin
   assert.deepEqual(pairs('stale-prs'), [['#40', 'No update in 42 days, and it is a draft.']]);
   assert.deepEqual(pairs('missing-fields'), [['#3', 'Missing: one type, priority, size.']], 'a tracking issue needs a type only');
   assert.deepEqual(of('milestone-status').map((f) => [f.item, f.kind, f.value, f.unit]), [['v1', 'milestone', 23, 'days']], 'a later milestone that has not started is not a finding');
-  assert.match(of('milestone-status')[0]!.reason, /^Stalled\. No issue closed in 23 days/);
+  assert.match(of('milestone-status')[0]!.reason, /^Stalled\. No issue closed in 23 days.* Signals: The last issue closed 23 days ago\. 0 open issues have an open pull request/);
+  const rated = (ms: object[]) => audit({ ...input, milestones: ms as never, checks: selectChecks('milestone-status') }).checks[0]!.findings.map((f) => [f.item, f.value, f.unit, f.reason.split('.')[0]]);
+  const unstarted = (title: string, number: number, open: string[]) => milestoneStatus({
+    milestone: { title, number, state: 'open', description: null }, openMilestones: open, items: [raw(60, '2026-10-01'), raw(61, '2026-10-01')] as never, blockedBy: new Map(), openPrs: [], now,
+  });
+  assert.deepEqual(rated([unstarted('v1', 1, ['v1', 'v2']), unstarted('v2', 2, ['v1', 'v2'])]), [['v1', 2, 'issues', 'Not started']], 'the current milestone is due now, so not started is a finding for it and not for a later one');
+  const closedOn = (n: number, at: string) => ({ ...raw(n, '2026-09-01'), state: 'closed', closed_at: `${at}T00:00:00Z` });
+  const growing = milestoneStatus({
+    milestone: { title: 'v1', number: 1, state: 'open', description: null }, openMilestones: ['v1'], blockedBy: new Map(), openPrs: [], now,
+    items: [closedOn(70, '2026-10-01'), closedOn(71, '2026-10-10'), raw(72, '2026-10-11'), raw(73, '2026-10-11')] as never,
+    events: new Map([72, 73].map((n) => [n, { joinedAt: '2026-10-11T00:00:00Z', reopened: 0 }])),
+  });
+  assert.deepEqual(rated([growing]), [['v1', 2, 'issues', 'Growing']]);
   assert.deepEqual(pairs('finished-milestone'), [['v2', 'All 1 issues are closed.']]);
   assert.deepEqual(pairs('orphan-prs'), [['#40', 'Closes no issue.']]);
   assert.deepEqual(pairs('done-but-open'), [

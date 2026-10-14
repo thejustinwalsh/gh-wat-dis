@@ -251,11 +251,11 @@ export async function relateCmd(argv: string[]): Promise<number> {
 }
 
 type RawMilestoneRow = { title: string; number: number; state: string; description: string | null };
-type PrRow = { number: number; title: string; updatedAt: string; isDraft: boolean; closingIssuesReferences: { number: number }[] };
+type PrRow = { number: number; title: string; createdAt: string; updatedAt: string; isDraft: boolean; closingIssuesReferences: { number: number }[] };
 
 async function openPrList(): Promise<OpenPr[]> {
-  const prs = await gh<PrRow[]>(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,updatedAt,isDraft,closingIssuesReferences']);
-  return prs.map((p) => ({ number: p.number, title: p.title, updatedAt: p.updatedAt, isDraft: p.isDraft, closes: p.closingIssuesReferences.map((r) => r.number) }));
+  const prs = await gh<PrRow[]>(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,createdAt,updatedAt,isDraft,closingIssuesReferences']);
+  return prs.map((p) => ({ number: p.number, title: p.title, createdAt: p.createdAt, updatedAt: p.updatedAt, isDraft: p.isDraft, closes: p.closingIssuesReferences.map((r) => r.number) }));
 }
 
 /** The issues that block each of these, open and closed. An issue GitHub counts no blocker for costs no call. */
@@ -270,13 +270,50 @@ async function blockersOf(repo: string, issues: { number: number; issue_dependen
 async function milestoneReport(repo: string, found: RawMilestoneRow, openTitles: string[], openPrs: OpenPr[], stalledAfterDays?: number): Promise<MilestoneStatus> {
   const items = await api<(RawIssue & { issue_dependencies_summary?: { total_blocked_by: number } })[]>([`repos/${repo}/issues?milestone=${found.number}&state=all&per_page=100`, '--paginate']);
   const blockedBy = await blockersOf(repo, items.filter((i) => !i.pull_request && i.state === 'open'));
-  return milestoneStatus({ milestone: found, openMilestones: openTitles, items, blockedBy, openPrs, now: new Date(), stalledAfterDays });
+  // The timeline is one more request. Without it the scope and reopen signals print as not measured.
+  const events = await milestoneEvents(repo, found.number, found.title).catch(() => undefined);
+  return milestoneStatus({ milestone: found, openMilestones: openTitles, items, blockedBy, openPrs, events, now: new Date(), stalledAfterDays });
 }
 
 const MILESTONE_USAGE = `Usage: npx gh-wat-dis milestone [<title>] [--stalled-after 7]
 Prints the numbers for a status report as JSON: issue counts (pull requests and the tracking issue are not counted),
-what is in review, what is blocked and by what, the done-when conditions, and a status: done, blocked, stalled or moving.
+what is in review, what is blocked and by what, and the done-when conditions.
+It rates the milestone: done, not started, blocked, stalled, growing or moving. The first rule that holds gives the rating:
+  done         every issue is closed
+  not started  no issue is closed and no pull request that closes one is open
+  blocked      an open issue waits on an issue outside the milestone, or every open issue waits on another
+  stalled      no issue closed in 7 days (--stalled-after) and no such pull request is open
+  growing      half the issues or more are closed, and more issues joined in the last 7 days than closed
+  moving       none of the above
+signals[] holds every number behind the rating, and "decides" marks the ones the rule used.
 With no title it reports the current milestone: the lowest open version. Milestones have no due dates.`;
+
+const TIMELINE_QUERY = `query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){milestone(number:$number){
+issues(first:100,after:$after,states:[OPEN,CLOSED]){pageInfo{hasNextPage endCursor} nodes{number
+timelineItems(last:50,itemTypes:[MILESTONED_EVENT,REOPENED_EVENT]){nodes{__typename ... on MilestonedEvent{createdAt milestoneTitle}}}}}}}}`;
+
+/** When each issue joined the milestone and how often it was reopened: one GraphQL request for each 100 issues. */
+async function milestoneEvents(repo: string, number: number, title: string): Promise<Map<number, { joinedAt: string | null; reopened: number }>> {
+  type Page = { data: { repository: { milestone: { issues: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: { number: number; timelineItems: { nodes: { __typename: string; createdAt?: string; milestoneTitle?: string }[] } }[];
+  } } } } };
+  const [owner, name] = repo.split('/') as [string, string];
+  const out = new Map<number, { joinedAt: string | null; reopened: number }>();
+  for (let after: string | null = null; ;) {
+    const page: Page = await gh<Page>(['api', 'graphql', '-f', `query=${TIMELINE_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`, ...(after ? ['-f', `after=${after}`] : [])]);
+    const issues = page.data.repository.milestone.issues;
+    for (const i of issues.nodes) {
+      const events = i.timelineItems.nodes;
+      out.set(i.number, {
+        joinedAt: events.filter((e) => e.__typename === 'MilestonedEvent' && e.milestoneTitle === title).at(-1)?.createdAt ?? null,
+        reopened: events.filter((e) => e.__typename === 'ReopenedEvent').length,
+      });
+    }
+    if (!issues.pageInfo.hasNextPage) return out;
+    after = issues.pageInfo.endCursor;
+  }
+}
 
 export async function milestone(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['help'], strings: ['stalled-after'], aliases: { '-h': '--help' } });

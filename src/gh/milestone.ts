@@ -1,13 +1,19 @@
 // The numbers for a milestone status. Milestones have no due dates here: the lowest open
-// milestone is the current one and is always due now, so status comes from movement and blockers.
+// milestone is the current one and is always due now, so the rating comes from movement, blockers and scope.
+// The rating never stands alone: every signal prints with its number, and the ones the rule used are marked.
 
 export interface RawIssue {
-  number: number; title: string; state: string; closed_at: string | null; updated_at: string;
+  number: number; title: string; state: string; closed_at: string | null; updated_at: string; created_at?: string;
   pull_request?: unknown; sub_issues_summary?: { total: number };
 }
 export interface Blocker { number: number; title: string; state: string; inMilestone: boolean }
 export interface OpenIssue { number: number; title: string; blockedBy: Blocker[]; inReview: number[] }
-export type MilestoneState = 'done' | 'blocked' | 'stalled' | 'moving';
+/** Checked in this order. The first rule that holds gives the rating. */
+export type Rating = 'done' | 'not started' | 'blocked' | 'stalled' | 'growing' | 'moving';
+/** One measured number. `value` is null when the tool could not measure it. `decides` marks the signals the rule used for this rating. */
+export interface Signal { name: string; value: number | null; text: string; decides: boolean }
+/** At this share of closed issues a milestone is near release, and new scope counts against it. */
+export const SELECTIVE_AT = 50;
 
 export interface MilestoneStatus {
   milestone: { title: string; number: number; state: string; current: boolean };
@@ -17,9 +23,11 @@ export interface MilestoneStatus {
   trackingFrom: 'description' | 'sub-issues' | null;
   /** Issues only. Pull requests and the tracking issue are left out. */
   counts: { total: number; closed: number; open: number; inReview: number; blocked: number; blockedOutside: number; closedLast7Days: number };
-  status: MilestoneState;
-  /** Why the status is what it is, as one fact. */
+  rating: Rating;
+  /** Why the rating is what it is, as one fact. */
   reason: string;
+  /** Every number behind the rating, so a reader can disagree with it. */
+  signals: Signal[];
   daysSinceLastClose: number | null;
   doneWhen: string[];
   open: OpenIssue[];
@@ -31,9 +39,11 @@ export interface MilestoneInput {
   /** Titles of every open milestone, to decide which one is current. */
   openMilestones: string[];
   items: RawIssue[];
-  blockedBy: Map<number, { number: number; title: string; state: string }[]>;
+  blockedBy: Map<number, { number: number; title: string; state: string; created_at?: string }[]>;
   /** Open pull requests with the issue numbers each one closes. */
-  openPrs: { number: number; closes: number[] }[];
+  openPrs: { number: number; closes: number[]; createdAt?: string }[];
+  /** From each issue's timeline: when it joined this milestone, and how often it was reopened. Leave out when the timeline was not read. */
+  events?: Map<number, { joinedAt: string | null; reopened: number }>;
   now: Date;
   stalledAfterDays?: number;
 }
@@ -58,6 +68,9 @@ export function doneWhen(description: string | null): string[] {
   }
   return out;
 }
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+const ago = (days: number): string => (days === 0 ? 'today' : `${plural(days, 'day')} ago`);
 
 export function milestoneStatus(input: MilestoneInput): MilestoneStatus {
   const { milestone, items, blockedBy, openPrs, now } = input;
@@ -87,13 +100,52 @@ export function milestoneStatus(input: MilestoneInput): MilestoneStatus {
   const blocked = open.filter((o) => o.blockedBy.length);
   const free = open.filter((o) => !o.blockedBy.length);
 
-  let status: MilestoneState, reason: string;
-  if (!open.length && work.length) { status = 'done'; reason = `All ${work.length} issues are closed.`; }
-  else if (outside.length) { status = 'blocked'; reason = `#${outside[0]!.number} waits on #${outside[0]!.blockedBy.find((b) => !b.inMilestone)!.number}, which is outside the milestone.`; }
-  else if (open.length && !free.length) { status = 'blocked'; reason = `Every open issue waits on another one: ${blocked.map((o) => `#${o.number}`).join(', ')}.`; }
-  else if (last !== null && last >= stalledAfter && !open.some((o) => o.inReview.length)) { status = 'stalled'; reason = `No issue closed in ${last} days and no pull request is open.`; }
-  else if (last === null && !open.some((o) => o.inReview.length)) { status = 'stalled'; reason = 'No issue is closed and no pull request is open.'; }
-  else { status = 'moving'; reason = last === null ? 'A pull request is open.' : `Last issue closed ${last === 0 ? 'today' : `${last} day${last === 1 ? '' : 's'} ago`}.`; }
+  const since = (iso: string | undefined): number | null => (iso ? Math.floor((now.getTime() - Date.parse(iso)) / day) : null);
+  const oldest = (xs: (number | null)[]): number | null => { const ys = xs.filter((x): x is number => x !== null); return ys.length ? Math.max(...ys) : null; };
+  const reviewed = open.filter((o) => o.inReview.length);
+  const share = work.length ? Math.round((closed.length / work.length) * 100) : 0;
+  const closed7 = closed.filter((c) => now.getTime() - Date.parse(c.closedAt) < 7 * day).length;
+  const reviewAge = oldest(openPrs.filter((p) => p.closes.some((n) => open.some((o) => o.number === n))).map((p) => since(p.createdAt)));
+  const blockerAge = oldest(work.filter((i) => i.state === 'open').flatMap((i) => (blockedBy.get(i.number) ?? []).filter((b) => b.state === 'open').map((b) => since(b.created_at))));
+
+  // Scope: the milestone starts at its first close. An issue that joins after that is added scope.
+  const start = closed.length ? closed[closed.length - 1]!.closedAt : null;
+  const ev = input.events;
+  const joined = ev && start ? work.map((i) => ev.get(i.number)?.joinedAt ?? i.created_at).filter((t): t is string => Boolean(t) && Date.parse(t!) > Date.parse(start)) : null;
+  const added = ev ? (joined?.length ?? 0) : null;
+  const added7 = ev ? (joined ?? []).filter((t) => now.getTime() - Date.parse(t) < 7 * day).length : null;
+  const reopened = ev ? work.filter((i) => (ev.get(i.number)?.reopened ?? 0) > 0).length : null;
+
+  // A done-when condition that names issues: are those issues closed? An indirect fact, not a check of the condition.
+  const conditions = doneWhen(milestone.description);
+  const state = new Map(issues.map((i) => [i.number, i.state]));
+  const naming = conditions.map((c) => [...c.matchAll(/#(\d+)/g)].map((m) => Number(m[1]))).filter((ns) => ns.length);
+  const conditionsClosed = naming.filter((ns) => ns.every((n) => state.get(n) === 'closed')).length;
+
+  let rating: Rating, reason: string, decides: string[];
+  if (!open.length && work.length) { rating = 'done'; reason = `All ${work.length} issues are closed.`; decides = ['closedShare']; }
+  else if (!closed.length && !reviewed.length) { rating = 'not started'; reason = work.length ? 'No issue is closed and no pull request is open.' : 'The milestone has no issues.'; decides = ['closedShare', 'inReview']; }
+  else if (outside.length) { rating = 'blocked'; reason = `#${outside[0]!.number} waits on #${outside[0]!.blockedBy.find((b) => !b.inMilestone)!.number}, which is outside the milestone.`; decides = ['blockedOutside']; }
+  else if (!free.length) { rating = 'blocked'; reason = `Every open issue waits on another one: ${blocked.map((o) => `#${o.number}`).join(', ')}.`; decides = ['blocked']; }
+  else if (last !== null && last >= stalledAfter && !reviewed.length) { rating = 'stalled'; reason = `No issue closed in ${last} days and no pull request is open.`; decides = ['daysSinceLastClose', 'inReview']; }
+  else if (share >= SELECTIVE_AT && added7 !== null && added7 > closed7) { rating = 'growing'; reason = `${share}% of the issues are closed, and in the last 7 days ${plural(added7, 'issue')} joined while ${closed7} closed.`; decides = ['closedShare', 'addedLast7Days', 'closedLast7Days']; }
+  else { rating = 'moving'; reason = last === null ? 'A pull request is open.' : `Last issue closed ${ago(last)}.`; decides = last === null ? ['inReview'] : last >= stalledAfter ? ['daysSinceLastClose', 'inReview'] : ['daysSinceLastClose']; }
+
+  const noTimeline = 'Not measured: the issue timelines were not read.';
+  const signals: Signal[] = ([
+    ['closedShare', share, `${closed.length} of ${plural(work.length, 'issue')} closed (${share}%).`],
+    ['closedLast7Days', closed7, `${plural(closed7, 'issue')} closed in the last 7 days.`],
+    ['daysSinceLastClose', last, last === null ? 'No issue is closed yet.' : `The last issue closed ${ago(last)}.`],
+    ['inReview', reviewed.length, `${plural(reviewed.length, 'open issue')} ${reviewed.length === 1 ? 'has' : 'have'} an open pull request that closes ${reviewed.length === 1 ? 'it' : 'them'}.`],
+    ['oldestReviewDays', reviewAge, reviewAge === null ? 'No such pull request to age.' : `The oldest of those pull requests opened ${ago(reviewAge)}.`],
+    ['blocked', blocked.length, `${blocked.length} of ${plural(open.length, 'open issue')} ${blocked.length === 1 ? 'waits' : 'wait'} on an open blocker.`],
+    ['blockedOutside', outside.length, `${plural(outside.length, 'open issue')} ${outside.length === 1 ? 'waits' : 'wait'} on a blocker outside the milestone.`],
+    ['oldestBlockerDays', blockerAge, blockerAge === null ? 'No open blocker to age.' : `The oldest open blocker was filed ${ago(blockerAge)}.`],
+    ['addedAfterStart', added, added === null ? noTimeline : start ? `${plural(added, 'issue')} joined after the first close.` : 'No issue is closed yet, so no issue counts as added.'],
+    ['addedLast7Days', added7, added7 === null ? noTimeline : `${added7} of them joined in the last 7 days.`],
+    ['reopened', reopened, reopened === null ? noTimeline : `${plural(reopened, 'issue was', 'issues were')} reopened at least once.`],
+    ['conditionsClosed', naming.length ? conditionsClosed : null, naming.length ? `${conditionsClosed} of the ${plural(naming.length, 'done-when condition')} that name an issue have every named issue closed.` : 'No done-when condition names an issue.'],
+  ] as [string, number | null, string][]).map(([name, value, text]) => ({ name, value, text, decides: decides.includes(name) }));
 
   return {
     milestone: { title: milestone.title, number: milestone.number, state: milestone.state, current: [...input.openMilestones].sort(byVersion)[0] === milestone.title },
@@ -101,9 +153,9 @@ export function milestoneStatus(input: MilestoneInput): MilestoneStatus {
     trackingFrom: fromLine ? 'description' : tracking ? 'sub-issues' : null,
     counts: {
       total: work.length, closed: closed.length, open: open.length,
-      inReview: open.filter((o) => o.inReview.length).length, blocked: blocked.length, blockedOutside: outside.length,
-      closedLast7Days: closed.filter((c) => now.getTime() - Date.parse(c.closedAt) < 7 * day).length,
+      inReview: reviewed.length, blocked: blocked.length, blockedOutside: outside.length,
+      closedLast7Days: closed7,
     },
-    status, reason, daysSinceLastClose: last, doneWhen: doneWhen(milestone.description), open, closed,
+    rating, reason, signals, daysSinceLastClose: last, doneWhen: conditions, open, closed,
   };
 }

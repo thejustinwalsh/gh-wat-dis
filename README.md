@@ -94,7 +94,7 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 | `audit` | Runs the maintenance checks that can be counted and prints one finding for each item: stale issues and PRs, missing fields, milestones, orphan PRs, done but open, labels, blocked chains. |
 | `related` | Finds issues and PRs that share signals with a draft. |
 | `links` | Shows what a PR will close on merge and what it only mentions. |
-| `milestone` | Prints the numbers for a status report: counts, what is in review, what is blocked, and a status with no dates. |
+| `milestone` | Rates a milestone with no dates and prints every measured signal behind the rating, with the numbers for a status report: counts, what is in review, what is blocked. |
 | `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. A new parent replaces the old one. |
 | `labels` | Plans and creates the labels: `agents`, one for each product surface, priority (`critical` to `nit`), size (`s` to `xl`), and the type labels on a user repository. |
 | `graph <op>` | Builds and reshapes a diagram spec: `from-facts`, `from-config`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `split`, `stats`, `ids`. |
