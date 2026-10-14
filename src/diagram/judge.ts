@@ -1,4 +1,4 @@
-import { CARD_ROW, CYLINDER_RY, PIPE_RX, crossesRect, pathLength, runsAlong } from './layout.ts';
+import { CARD_ROW, CYLINDER_RY, PIPE_RX, crossesRect, crossings, pathLength, runsAlong } from './layout.ts';
 import type { EdgePath, Layout, NodeBox, Pt, Rect } from './layout.ts';
 
 /** What a reader has to follow in one layout. Lengths are in pixels. */
@@ -18,6 +18,8 @@ export interface Metrics {
   maxBends: number;
   /** Places where two lines cross. */
   crossings: number;
+  /** Lines that run more than twice as far as they need to, round the drawing or back on themselves. */
+  roundabout: number;
   /** Lines that pass through an element or a group that holds neither of their ends. */
   through: number;
   /** Lines that run through the name of a group. */
@@ -33,7 +35,7 @@ export interface Metrics {
 }
 
 /** What a drawing must do before it is worth judging. A layout that fails one is not kept while another passes them all. */
-export const GATES = ['lines', 'text', 'overlap', 'width', 'height'] as const;
+export const GATES = ['lines', 'text', 'overlap', 'calm', 'width', 'height'] as const;
 export type Gate = (typeof GATES)[number];
 
 /** A line is a detour when it is this much longer than the direct path, in pixels and as a ratio. */
@@ -41,23 +43,11 @@ const DETOUR_PX = 300;
 const DETOUR_RATIO = 3;
 /** A line may be this much longer than the direct path at no cost: it is what one step round a box takes. */
 const STEP = 60;
+/** A line may run twice its direct distance and this much more before it is a line the reader has to hunt for. */
+const ROUNDABOUT = 160;
 
 const overlap = (a: Rect, b: Rect, pad = 0): boolean =>
   a.x < b.x + b.w + pad && a.x + a.w > b.x - pad && a.y < b.y + b.h + pad && a.y + a.h > b.y - pad;
-
-/** Counts the places where a flat segment of one line meets an upright segment of the other, away from their ends. */
-function crossings(a: Pt[], b: Pt[]): number {
-  let count = 0;
-  for (let i = 1; i < a.length; i++) for (let j = 1; j < b.length; j++) {
-    const p = a[i - 1]!, q = a[i]!, r = b[j - 1]!, s = b[j]!;
-    const flatA = Math.abs(p.y - q.y) < 0.5, flatB = Math.abs(r.y - s.y) < 0.5;
-    if (flatA === flatB) continue;
-    const [h1, h2, v1, v2] = flatA ? [p, q, r, s] : [r, s, p, q];
-    if (v1.x > Math.min(h1.x, h2.x) + 1 && v1.x < Math.max(h1.x, h2.x) - 1
-      && h1.y > Math.min(v1.y, v2.y) + 1 && h1.y < Math.max(v1.y, v2.y) - 1) count++;
-  }
-  return count;
-}
 
 /**
  * True when the end of a line lies on the border of its element. On a file it lies on a side,
@@ -85,7 +75,7 @@ export function measure(l: Layout): Metrics {
     return false;
   };
   const edges = l.edges.filter((e) => e.points.length > 1);
-  const m: Metrics = { lines: edges.length, broken: l.edges.length - edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
+  const m: Metrics = { lines: edges.length, broken: l.edges.length - edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, roundabout: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
   const diagonal = Math.hypot(l.width, l.height) || 1;
   let worst = 0;
   edges.forEach((e, i) => {
@@ -98,6 +88,7 @@ export function measure(l: Layout): Metrics {
     if (e.rel.from !== e.rel.to) {
       const direct = Math.abs(first.x - last.x) + Math.abs(first.y - last.y);
       m.detour += Math.max(0, length - direct - STEP);
+      if (length > 2 * direct + ROUNDABOUT) m.roundabout++;
       m.bends += bends;
       m.maxBends = Math.max(m.maxBends, bends);
       // Three times the direct path, or a line longer than the drawing is wide and tall that goes well out of its way.
@@ -142,6 +133,8 @@ export function failed(m: Metrics, size: { width: number; height: number }, max:
   if (m.broken > 0) out.push('lines');
   if (m.through + m.titles + m.struck > 0) out.push('text');
   if (m.overlaps + m.clipped > 0) out.push('overlap');
+  // Calm: no line sent round the drawing, and crossings no more than one for every four lines.
+  if (m.roundabout > 0 || m.crossings > Math.ceil(m.lines / 4)) out.push('calm');
   if (size.width > max.width) out.push('width');
   if (size.height > max.height) out.push('height');
   return out;
@@ -178,6 +171,7 @@ export function faults(m: Metrics, name: (id: string) => string): string[] {
   if (m.struck > 0) out.push(`${n(m.struck, 'line runs', 'lines run')} through a label or a badge`);
   if (m.overlaps > 0) out.push(`${n(m.overlaps, 'place', 'places')} where a label lies on a label or a box, or one line lies on another`);
   if (m.clipped > 0) out.push(`${n(m.clipped, 'group is', 'groups are')} narrower than ${m.clipped === 1 ? 'its' : 'their'} name`);
-  if (m.crossings >= 3) out.push(`${m.crossings} line crossings on ${m.lines} lines`);
+  if (m.roundabout > 0 && !m.worst) out.push(`${n(m.roundabout, 'line runs', 'lines run')} more than twice as far as ${m.roundabout === 1 ? 'it needs' : 'they need'} to`);
+  if (m.crossings >= 3 || m.crossings > m.lines / 4) out.push(`${m.crossings} line ${m.crossings === 1 ? 'crossing' : 'crossings'} on ${m.lines} lines`);
   return out;
 }

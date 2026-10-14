@@ -66,6 +66,7 @@ const GATE_WORDS: Record<Gate, string> = {
   lines: 'cannot draw every line from end to end',
   text: 'puts a line through text',
   overlap: 'puts a label or a line on top of another',
+  calm: 'sends a line round the drawing or crosses too many lines',
   width: 'is too wide',
   height: 'is too tall',
 };
@@ -157,7 +158,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   // so on down the gates. Then the lines decide before the size does: a line sent round the drawing, then crossings
   // counted in steps of a quarter of the lines, so that one crossing more or less does not outweigh the page.
   // So a clean drawing that is too wide is kept before a narrower one whose lines a reader cannot follow.
-  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Number(c.worst !== undefined), Math.floor(c.crossings / Math.max(3, c.lines / 4)),
+  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Number(c.worst !== undefined) + Number(c.roundabout > 0), Math.floor(c.crossings / Math.max(3, c.lines / 4)),
     Math.ceil(Math.max(0, c.width - maxWidth) / 100), Math.ceil(Math.max(0, c.height - maxWidth * GOLDEN) / 100)];
   best ??= [...tried].sort((a, b) => compare(badness(a.c), badness(b.c)) || compare(a.order, b.order))[0]!;
   best.c.chosen = true;

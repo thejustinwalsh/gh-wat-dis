@@ -21,6 +21,8 @@ export interface CodeShape {
   beyond: string[];
   /** The height of each layer: its cards and the gaps between them. */
   heights: number[];
+  /** How deep each file stands in the chain, before the layers past the three are folded in: the order inside a layer that holds several. */
+  rank: Map<string, number>;
 }
 
 const changed = (status: string | undefined): boolean => status === 'added' || status === 'changed' || status === 'removed';
@@ -35,7 +37,7 @@ const changed = (status: string | undefined): boolean => status === 'added' || s
  * `graph from-facts` cuts those files instead, and lint names them in a hand-written spec.
  * A file with no line at all stands in the shortest layer.
  */
-export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number = cardHeight): CodeShape {
+export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number = cardHeight, limit = CODE_LAYERS): CodeShape {
   const parents = new Set(spec.elements.map((e) => e.parent));
   const files = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node');
   const ids = new Set(files.map((f) => f.id));
@@ -71,17 +73,18 @@ export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number
   // More than three deep: keep the three layers in a row that hold the first file of the spec, which is the one the
   // diagram is about, and then the changed files listed soonest: a spec lists the files with the most change first.
   let first = 0;
-  if (depth > CODE_LAYERS) {
-    const weight = (start: number): number => files.filter((f) => depthOf[knot.get(f.id)!]! >= start && depthOf[knot.get(f.id)!]! < start + CODE_LAYERS)
+  if (depth > limit) {
+    const weight = (start: number): number => files.filter((f) => depthOf[knot.get(f.id)!]! >= start && depthOf[knot.get(f.id)!]! < start + limit)
       .reduce((sum, f) => sum + (f === files[0] ? files.length ** 2 : 0) + (changed(f.status) ? files.length - files.indexOf(f) : 0), 0);
-    for (let start = 1; start + CODE_LAYERS <= depth; start++) if (weight(start) > weight(first)) first = start;
+    for (let start = 1; start + limit <= depth; start++) if (weight(start) > weight(first)) first = start;
   }
-  const layers = Math.max(1, Math.min(depth, CODE_LAYERS));
-  const layer = new Map<string, number>(), beyond: string[] = [], heights = new Array<number>(layers).fill(0);
+  const layers = Math.max(1, Math.min(depth, limit));
+  const layer = new Map<string, number>(), beyond: string[] = [], heights = new Array<number>(layers).fill(0), rank = new Map<string, number>();
   for (const f of files.filter((x) => joined.has(x.id))) {
     const d = depthOf[knot.get(f.id)!]! - first;
-    if (d < 0 || d >= CODE_LAYERS) beyond.push(f.id);
-    layer.set(f.id, Math.max(0, Math.min(CODE_LAYERS - 1, d)));
+    rank.set(f.id, d);
+    if (d < 0 || d >= limit) beyond.push(f.id);
+    layer.set(f.id, Math.max(0, Math.min(limit - 1, d)));
     heights[layer.get(f.id)!]! += height(f);
   }
   for (const f of files.filter((x) => !joined.has(x.id))) {
@@ -89,5 +92,5 @@ export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number
     layer.set(f.id, least);
     heights[least]! += height(f);
   }
-  return { layer, layers, depth, beyond, heights };
+  return { layer, layers, depth, beyond, heights, rank };
 }

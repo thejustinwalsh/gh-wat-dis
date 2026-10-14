@@ -226,7 +226,8 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
   if (boxes.some((b) => b.group && !b.light)) {
     // A container or a system that holds other elements is a group, and not every group is a boundary.
     const plain = boxes.every((b) => !b.group || b.light || b.el.type === 'boundary' || b.el.type === 'node');
-    items.push({ w: 26, label: plain ? 'Boundary' : 'Group', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
+    // In a deployment diagram the groups are deployment nodes, and the key says so.
+    items.push({ w: 26, label: !plain ? 'Group' : spec.type === 'deployment' ? 'Deployment Node' : 'Boundary', draw: (x, y) => `<rect class="sh grp f-group" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
   if (boxes.some((b) => b.card?.lane !== undefined)) {
     items.push({ w: 36, label: 'Part of the system', draw: (x, y) => `<text class="ln" x="${n(x)}" y="${n(y + 12)}">NAME</text>` });

@@ -1,7 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { Detail, DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
 import { codeShape } from './code-shape.ts';
-import { fit, monoWidth, textWidth, wrap } from './measure.ts';
+import { fit, monoWidth, textWidth, wrap, wrapEven } from './measure.ts';
 import { STATUS_BADGE, STATUS_MARK, active, kindLine } from './vocab.ts';
 import type { ActiveStatus } from './vocab.ts';
 
@@ -85,7 +85,10 @@ export const LANE_NAME_PX = 10.5;
 const CARD_MIN = 148;
 const CARD_MAX = 240;
 /** The widest a card may be when a code diagram has one, two or three layers: three columns and the room for their lines fill the page. */
-const CARD_MAX_IN_LAYERS = [320, 320, 300, 216];
+const CARD_WIDEST = 360;
+/** Room a code diagram leaves for the gap between two layers, its lines and their turns, when it shares the page out among its cards. */
+const LAYER_GAP = 96;
+const PAGE = 812;
 /** Room at the top of a card for the name of its group. */
 export const CARD_LANE = 14;
 export const CARD_ROWS_MAX = 8;
@@ -135,10 +138,15 @@ function leafText(el: SpecElement, compact: boolean, width: number): { h: number
   return { h: Math.ceil(y + (el.type === 'datastore' ? CYLINDER_RY + 8 : compact ? 10 : 13)), lines };
 }
 
-/** Cut a name in the middle: names in one file often share a start and differ at the end. */
+/**
+ * Cut a name that does not fit. A qualified name loses its leading parts whole (`…Sprite.addEffect`), so the part
+ * that names the symbol stays. Any other name is cut in the middle: names in one file often share a start and differ at the end.
+ */
 const monoFit = (text: string, px: number, max: number): string => {
   const chars = [...text];
   if (monoWidth(text, px) <= max) return text;
+  const seams = [...text.matchAll(/(::|\.)/g)].map((m) => m.index! + m[0].length);
+  for (const at of seams) if (monoWidth(`\u2026${text.slice(at)}`, px) <= max) return `\u2026${text.slice(at)}`;
   let keep = chars.length - 1;
   const cut = (n: number): string => `${chars.slice(0, Math.ceil(n * 0.6)).join('')}\u2026${chars.slice(chars.length - Math.floor(n * 0.4)).join('')}`;
   while (keep > 2 && monoWidth(cut(keep), px) > max) keep--;
@@ -195,7 +203,7 @@ function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number;
   const text = `${status ? `${STATUS_MARK[status]} ` : ''}${rel.order !== undefined ? `${rel.order}. ` : ''}${rel.label}`;
   const lines: TextLine[] = [];
   let y = 3, w = 0;
-  for (const line of wrap(text, 11.5, LABEL_MAX)) {
+  for (const line of wrapEven(text, 11.5, LABEL_MAX)) {
     lines.push({ text: line, cls: 'el', dy: y + 11 });
     w = Math.max(w, textWidth(line, 11.5, true));
     y += 14.5;
@@ -254,6 +262,20 @@ function backLines(starts: string[], lines: { rel: SpecRelationship; i: number }
   };
   for (const id of starts) if (!state.has(id)) visit(id);
   return back;
+}
+
+/** Counts the places where a flat segment of one line meets an upright segment of the other, away from their ends. */
+export function crossings(a: Pt[], b: Pt[]): number {
+  let count = 0;
+  for (let i = 1; i < a.length; i++) for (let j = 1; j < b.length; j++) {
+    const p = a[i - 1]!, q = a[i]!, r = b[j - 1]!, s = b[j]!;
+    const flatA = Math.abs(p.y - q.y) < 0.5, flatB = Math.abs(r.y - s.y) < 0.5;
+    if (flatA === flatB) continue;
+    const [h1, h2, v1, v2] = flatA ? [p, q, r, s] : [r, s, p, q];
+    if (v1.x > Math.min(h1.x, h2.x) + 1 && v1.x < Math.max(h1.x, h2.x) - 1
+      && h1.y > Math.min(v1.y, v2.y) + 1 && h1.y < Math.max(v1.y, v2.y) - 1) count++;
+  }
+  return count;
 }
 
 /** Length of a right-angled path. */
@@ -382,7 +404,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const row = symbol === undefined ? -1 : (el.symbols ?? []).findIndex((s) => s.name === symbol);
     return row < CARD_ROWS_MAX ? row : -1;
   };
-  const slots = new Map<string, { name: string; rank: number }[]>();
+  const slots = new Map<string, { name: string; rank: number; from?: string }[]>();
   const portId = (id: string, row: number, side: Side, name: string): string => `${id}\u0000${row}\u0000${side}\u0000${name}`;
   /**
    * The port one end of a line uses. Left to right, a line leaves on the right and arrives on the left. A loop, and a
@@ -398,7 +420,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const name = end === 'from' ? `out${rel.status ?? ''}` : `in${i}`;
     const key = `${el.id}\u0000${row}\u0000${side}`;
     const list = slots.get(key) ?? slots.set(key, []).get(key)!;
-    if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : position.get(rel.from) ?? 0 });
+    if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : position.get(rel.from) ?? 0, ...(end === 'to' ? { from: rel.from } : {}) });
     return portId(el.id, row, side, name);
   };
   const roots = kids.get(undefined) ?? [];
@@ -415,15 +437,29 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const part = topOf(rel.from);
     if (!within(rel)) return [{ part, edge: { id: `e${i}`, sources: [back.has(i) ? z : a], targets: [back.has(i) ? a : z], ...words } }];
     // The engine has no line inside a layer. So both ends run to a point in the gap to the right of the layer,
-    // and the two halves are joined there into one line when the layout is read.
-    turns.push({ id: turnId(i), width: 0.1, height: 0.1, layoutOptions: { 'elk.partitioning.partition': String(2 * shape!.layer.get(rel.from)! + 1) } });
-    return [{ part, edge: { id: `e${i}`, sources: [a], targets: [turnId(i)], ...words } }, { part, edge: { id: `h${i}`, sources: [z], targets: [turnId(i)] } }];
+    // and the two halves are joined there into one line when the layout is read. The words of such a line are that
+    // point: a box of their size, which the line runs down the left side of.
+    turns.push({ id: turnId(i), width: label.lines.length ? label.w : 0.1, height: label.lines.length ? label.h : 0.1, layoutOptions: { 'elk.partitioning.partition': String(2 * shape!.layer.get(rel.from)! + 1) } });
+    return [{ part, edge: { id: `e${i}`, sources: [a], targets: [turnId(i)] } }, { part, edge: { id: `h${i}`, sources: [z], targets: [turnId(i)] } }];
   });
 
-  // The fewer the layers of a code diagram, the wider its cards may be.
-  const cardMax = shape ? CARD_MAX_IN_LAYERS[shape.layers]! : CARD_MAX;
-  const sizes = new Map(spec.elements.filter((e) => e.type === 'file' && !parents.has(e.id)).map((e) =>
-    [e.id, fileCard(e, stack, cardMax, code && e.parent !== undefined ? byId.get(e.parent)?.name : undefined)]));
+  // A card is as wide as its longest name. In a code diagram the page is shared out among the layers: a layer whose
+  // names are long takes more of it, and only when the layers together are wider than the page are the widest ones narrowed.
+  const cardFiles = spec.elements.filter((e) => e.type === 'file' && !parents.has(e.id));
+  const lane = (e: SpecElement): string | undefined => (code && e.parent !== undefined ? byId.get(e.parent)?.name : undefined);
+  let cardMax = CARD_MAX;
+  if (shape) {
+    const want = new Array<number>(shape.layers).fill(CARD_MIN);
+    for (const e of cardFiles) { const k = shape.layer.get(e.id) ?? 0; want[k] = Math.max(want[k]!, fileCard(e, stack, CARD_WIDEST, lane(e)).w); }
+    // Words on a line sit in the gap to the right of the layer it leaves, and widen that gap.
+    const gaps = new Array<number>(shape.layers).fill(0);
+    for (const { rel, i } of lines) { const k = shape.layer.get(rel.from) ?? 0; gaps[k] = Math.max(gaps[k]!, labels.get(i)?.w ?? 0); }
+    const room = PAGE - LAYER_GAP * (shape.layers - 1) - gaps.reduce((n, w) => n + w, 0);
+    let lo = CARD_MIN, hi = CARD_WIDEST;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (want.reduce((n, w) => n + Math.min(w, mid), 0) <= room) lo = mid; else hi = mid; }
+    cardMax = lo;
+  }
+  const sizes = new Map(cardFiles.map((e) => [e.id, fileCard(e, stack, cardMax, lane(e))]));
   const partition = (id: string): Record<string, string> => (shape ? { 'elk.partitioning.partition': String(2 * (shape.layer.get(id) ?? 0)) } : {});
   const boxes = new Map<string, NodeBox>();
   const titleId = (id: string): string => `\u0000title\u0000${id}`;
@@ -488,7 +524,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const part = new Map(roots.map((el) => [el.id, el.id]));
   const find = (id: string): string => { let p = id; while (part.get(p) !== p) p = part.get(p)!; return p; };
   for (const { rel } of lines) part.set(find(topOf(rel.from)), find(topOf(rel.to)));
-  const built = new Map(roots.map((el) => [el.id, build(el, 0, new Set())]));
+  let built = new Map(roots.map((el) => [el.id, build(el, 0, new Set())]));
   const parts = new Map<string, string[]>();
   for (const el of roots) parts.set(find(el.id), [...(parts.get(find(el.id)) ?? []), el.id]);
   const frame = { 'elk.padding': '[top=0,left=0,bottom=0,right=0]', 'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT' };
@@ -496,7 +532,13 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const joined = { ...layered, ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}), ...frame };
     const inside = (ids: string[]): unknown[] => edges.filter((e) => ids.includes(find(e.part)) || ids.includes(e.part)).map((e) => e.edge);
     // The layers of a code diagram are partitions, in order: the engine keeps each file in its own, and the turn points between them.
-    if (shape) return { id: 'root', layoutOptions: { ...joined, 'elk.partitioning.activate': 'true' }, children: [...built.values(), ...turns], edges: edges.map((e) => e.edge) };
+    // Files folded into a layer from further out keep the order of the chain inside it, top to bottom.
+    if (shape) {
+      const folded = shape.beyond.length > 0;
+      const children = [...built.values()];
+      if (folded) children.sort((x, y) => (shape.rank.get(x.id) ?? 0) - (shape.rank.get(y.id) ?? 0));
+      return { id: 'root', layoutOptions: { ...joined, 'elk.partitioning.activate': 'true', ...(folded ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES', 'elk.layered.crossingMinimization.forceNodeModelOrder': 'true' } : {}) }, children: [...children, ...turns], edges: edges.map((e) => e.edge) };
+    }
     if (parts.size <= 1) return { id: 'root', layoutOptions: joined, children: [...built.values()], edges: inside([...built.keys()]) };
     return {
       id: 'root',
@@ -506,17 +548,45 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     };
   };
   const elk = new (ELK as any)();
+  // ELK writes its results into the graph it is given, so each run gets a copy: a second run must not overwrite the first.
+  const run = (modelOrder: boolean): Promise<any> => elk.layout(structuredClone(graph(modelOrder))).catch(() => elk.layout(structuredClone(graph(false))));
   // Model order keeps the layout close to the order the spec lists things in.
   // ELK rejects it on some nested graphs, so the second attempt runs without it.
-  const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
+  let done = await run(true);
+  // Lines that arrive at one row each have a port, and their order on the side of the card is fixed before the
+  // engine runs. So the first layout tells where each line comes from, and the ports are put in that order, top to
+  // bottom, for a second layout: lines that reach one row from above arrive above, and do not cross on the way in.
+  // The second layout may move the cards again, so it is kept only when its lines cross less.
+  if ([...slots.values()].some((list) => list.filter((x) => x.from !== undefined).length > 1)) {
+    const routes = (node: any, out: Pt[][] = []): Pt[][] => {
+      for (const e of node.edges ?? []) out.push((e.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint]));
+      for (const c of node.children ?? []) routes(c, out);
+      return out;
+    };
+    const crossed = (node: any): number => { const all = routes(node); let n = 0; all.forEach((a, k) => { for (const b of all.slice(k + 1)) n += crossings(a, b); }); return n; };
+    const centre = new Map<string, number>();
+    const walk = (node: any): void => { for (const c of node.children ?? []) { centre.set(String(c.id), c.y + c.height / 2); walk(c); } };
+    walk(done);
+    const first = { done, built, ranks: [...slots.values()].map((list) => list.map((x) => x.rank)) };
+    for (const list of slots.values()) for (const x of list) if (x.from !== undefined) x.rank = centre.get(x.from) ?? x.rank;
+    built = new Map(roots.map((el) => [el.id, build(el, 0, new Set())]));
+    const second = await run(true);
+    if (crossed(second) < crossed(first.done)) done = second;
+    else {
+      [...slots.values()].forEach((list, k) => list.forEach((x, m) => { x.rank = first.ranks[k]![m]!; }));
+      built = new Map(roots.map((el) => [el.id, build(el, 0, new Set())]));
+    }
+  }
 
   const paths: EdgePath[] = [];
   /** The second half of each line that stays inside a layer: from its target out to the turn point. */
   const halves = new Map<number, Pt[]>();
+  const turnAt = new Map<number, Rect>();
   const read = (node: any): void => {
     for (const child of node.children ?? []) {
       const id = String(child.id);
-      if (id.startsWith('\u0000title\u0000')) Object.assign(boxes.get(id.slice(7))!.title!, { x: child.x, y: child.y });
+      if (id.startsWith('\u0000turn\u0000')) turnAt.set(Number(id.slice(6)), { x: child.x, y: child.y, w: child.width, h: child.height });
+      else if (id.startsWith('\u0000title\u0000')) Object.assign(boxes.get(id.slice(7))!.title!, { x: child.x, y: child.y });
       else if (boxes.has(id)) Object.assign(boxes.get(id)!, { x: child.x, y: child.y, w: child.width, h: child.height });
       read(child);
     }
@@ -533,14 +603,18 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     }
   };
   read(done);
-  // A line inside a layer is its two halves, joined at the turn point. Both halves run into that point along one
-  // level, so the point itself and the stretch they share are left out, and the line turns where the first half did.
+  // A line inside a layer is its two halves, joined at the turn point. When both halves reach the point on one
+  // level, the point and the stretch they share are left out, and the line turns where the first half did. When
+  // they reach the side of a box of words at two levels, the line runs down that side between them.
   for (const path of paths) {
-    const half = halves.get(spec.relationships.indexOf(path.rel));
+    const i = spec.relationships.indexOf(path.rel);
+    const half = halves.get(i);
     if (!half) continue;
     if (path.points.length < 2 || half.length < 2) { path.points = []; continue; }
-    // A line with words keeps the stretch out to the point, since its words sit on it.
-    path.points = [...(path.label ? path.points : path.points.slice(0, -1)), ...half.slice(0, -1).reverse()];
+    const p = path.points.at(-1)!, q = half.at(-1)!;
+    path.points = Math.abs(p.y - q.y) < 0.5 ? [...path.points.slice(0, -1), ...half.slice(0, -1).reverse()] : [...path.points, ...half.slice().reverse()];
+    const label = labels.get(i)!, at = turnAt.get(i);
+    if (label.lines.length && at) path.label = { x: at.x, y: at.y, w: label.w, h: label.h, lines: label.lines };
   }
   // A relationship the engine gave no route is kept with no points, so that it is counted as not drawn.
   for (const { rel } of lines) if (!paths.some((p) => p.rel === rel)) paths.push({ rel, points: [] });
