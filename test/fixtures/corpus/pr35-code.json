@@ -1,0 +1,97 @@
+{
+ "title": "See all commands: the page is written from the CLI's own tool list",
+ "type": "component",
+ "scope": "gh-wat-dis, at file level",
+ "direction": "RIGHT",
+ "elements": [
+  {
+   "id": "cli",
+   "type": "boundary",
+   "name": "gh-wat-dis CLI"
+  },
+  {
+   "id": "main",
+   "type": "component",
+   "kind": "module",
+   "name": "src/main.ts",
+   "description": "TOOLS, helpText",
+   "parent": "cli",
+   "status": "changed"
+  },
+  {
+   "id": "setup",
+   "type": "boundary",
+   "name": "Setup tools"
+  },
+  {
+   "id": "install",
+   "type": "component",
+   "kind": "module",
+   "name": "src/cli/install.ts",
+   "description": "skillList (new)",
+   "parent": "setup",
+   "status": "changed"
+  },
+  {
+   "id": "site",
+   "type": "boundary",
+   "name": "Site"
+  },
+  {
+   "id": "gen",
+   "type": "component",
+   "kind": "script",
+   "name": "scripts/site-commands.ts",
+   "description": "withAllCommands",
+   "parent": "site",
+   "status": "added"
+  },
+  {
+   "id": "page",
+   "type": "component",
+   "kind": "page",
+   "name": "docs/index.html",
+   "description": "See all commands block",
+   "parent": "site",
+   "status": "changed"
+  },
+  {
+   "id": "test",
+   "type": "component",
+   "kind": "test",
+   "name": "test/package.test.ts",
+   "description": "fails when page and CLI differ",
+   "status": "changed"
+  }
+ ],
+ "relationships": [
+  {
+   "from": "gen",
+   "to": "main",
+   "label": "Reads the tool list from",
+   "technology": "import TOOLS",
+   "status": "added"
+  },
+  {
+   "from": "gen",
+   "to": "page",
+   "label": "Writes the command list into",
+   "technology": "npm run site:commands",
+   "status": "added"
+  },
+  {
+   "from": "main",
+   "to": "install",
+   "label": "Lists the skills from",
+   "technology": "import skillList",
+   "status": "added"
+  },
+  {
+   "from": "test",
+   "to": "gen",
+   "label": "Checks the page against",
+   "technology": "import",
+   "status": "added"
+  }
+ ]
+}

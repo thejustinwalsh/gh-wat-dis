@@ -1,0 +1,69 @@
+{
+  "title": "Dense graph",
+  "type": "container",
+  "scope": "Everything",
+  "elements": [
+    {
+      "id": "n1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "n2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "n3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "n4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "n9",
+      "type": "container",
+      "name": "Inventory",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "n2",
+      "to": "n3",
+      "label": "Sends message 4 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "n3",
+      "to": "n2",
+      "label": "Sends message 5 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "n1",
+      "to": "n3",
+      "label": "Sends message 6 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "n3",
+      "to": "n4",
+      "label": "Sends message 7 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "n3",
+      "to": "n9",
+      "label": "Sends message 22 to",
+      "technology": "HTTPS"
+    }
+  ]
+}

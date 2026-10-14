@@ -1,0 +1,112 @@
+{
+  "title": "Lines that end on groups",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Shop"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Payments"
+    },
+    {
+      "id": "g3",
+      "type": "boundary",
+      "name": "Analytics"
+    },
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Web",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Orders",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "cc",
+      "type": "container",
+      "name": "Charges",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Refunds",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Warehouse",
+      "technology": "Rust",
+      "parent": "g3"
+    },
+    {
+      "id": "u",
+      "type": "person",
+      "name": "Auditor"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "g1",
+      "to": "g2",
+      "label": "Sends charges to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "g2",
+      "to": "g3",
+      "label": "Streams events to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "u",
+      "to": "g2",
+      "label": "Audits",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "g3",
+      "label": "Sends clicks to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "g3",
+      "to": "b",
+      "label": "Reads orders from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "d",
+      "label": "Shares ledger with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "g3",
+      "to": "g1",
+      "label": "Feeds dashboards in",
+      "technology": "HTTPS"
+    }
+  ]
+}

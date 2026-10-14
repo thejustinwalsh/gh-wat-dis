@@ -1,0 +1,166 @@
+{
+  "title": "A file with 25 symbols",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "big",
+      "type": "file",
+      "name": "src/big.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "big_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "big_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "big_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "big_3",
+          "kind": "trait"
+        },
+        {
+          "name": "big_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "big_5",
+          "kind": "type",
+          "status": "removed"
+        },
+        {
+          "name": "big_6",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "big_7",
+          "kind": "struct"
+        },
+        {
+          "name": "big_8",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "big_9",
+          "kind": "trait",
+          "status": "added"
+        },
+        {
+          "name": "big_10",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "big_11",
+          "kind": "type"
+        },
+        {
+          "name": "big_12",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "big_13",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "big_14",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "big_15",
+          "kind": "trait"
+        },
+        {
+          "name": "big_16",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "big_17",
+          "kind": "type",
+          "status": "removed"
+        },
+        {
+          "name": "big_18",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "big_19",
+          "kind": "struct"
+        },
+        {
+          "name": "big_20",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "big_21",
+          "kind": "trait",
+          "status": "added"
+        },
+        {
+          "name": "big_22",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "big_23",
+          "kind": "type"
+        },
+        {
+          "name": "big_24",
+          "kind": "fn",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "id": "u",
+      "type": "file",
+      "name": "src/user.ts",
+      "status": "affected"
+    },
+    {
+      "id": "v",
+      "type": "file",
+      "name": "src/v.ts",
+      "status": "affected"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "u",
+      "to": "big",
+      "toSymbol": "big_2",
+      "label": ""
+    },
+    {
+      "from": "v",
+      "to": "big",
+      "toSymbol": "big_20",
+      "label": ""
+    },
+    {
+      "from": "u",
+      "to": "big",
+      "toSymbol": "big_24",
+      "label": ""
+    }
+  ]
+}

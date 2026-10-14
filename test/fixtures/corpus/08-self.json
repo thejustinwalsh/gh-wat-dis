@@ -1,0 +1,33 @@
+{
+  "title": "Self relationship",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Alpha",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Beta",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "a",
+      "label": "Retries its own job on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Sends result to",
+      "technology": "HTTPS"
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "title": "Flow with replies and self calls",
+  "type": "dynamic",
+  "scope": "login",
+  "elements": [
+    {
+      "id": "u",
+      "type": "person",
+      "name": "User"
+    },
+    {
+      "id": "w",
+      "type": "container",
+      "name": "Web app",
+      "technology": "Rust"
+    },
+    {
+      "id": "i",
+      "type": "container",
+      "name": "Identity",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "datastore",
+      "name": "Sessions",
+      "technology": "Redis"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "u",
+      "to": "w",
+      "label": "Submits password",
+      "technology": "HTTPS",
+      "order": 1
+    },
+    {
+      "from": "w",
+      "to": "i",
+      "label": "Asks to verify",
+      "technology": "HTTPS",
+      "order": 2
+    },
+    {
+      "from": "i",
+      "to": "i",
+      "label": "Hashes and compares",
+      "technology": "HTTPS",
+      "order": 3
+    },
+    {
+      "from": "i",
+      "to": "d",
+      "label": "Stores session",
+      "technology": "HTTPS",
+      "order": 4
+    },
+    {
+      "from": "d",
+      "to": "i",
+      "label": "Returns session id",
+      "technology": "HTTPS",
+      "order": 5
+    },
+    {
+      "from": "i",
+      "to": "w",
+      "label": "Replies with token",
+      "technology": "HTTPS",
+      "order": 6
+    },
+    {
+      "from": "w",
+      "to": "w",
+      "label": "Sets cookie",
+      "technology": "HTTPS",
+      "order": 7
+    },
+    {
+      "from": "w",
+      "to": "u",
+      "label": "Shows dashboard",
+      "technology": "HTTPS",
+      "order": 8
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "title": "Flow across two groups",
+  "type": "dynamic",
+  "scope": "refund",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Shop"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Payments"
+    },
+    {
+      "id": "u",
+      "type": "person",
+      "name": "Agent"
+    },
+    {
+      "id": "w",
+      "type": "container",
+      "name": "Back office",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "o",
+      "type": "container",
+      "name": "Orders",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "p",
+      "type": "container",
+      "name": "Payments API",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "l",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "s",
+      "type": "system",
+      "name": "Stripe",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "u",
+      "to": "w",
+      "label": "Requests refund",
+      "technology": "HTTPS",
+      "order": 1
+    },
+    {
+      "from": "w",
+      "to": "o",
+      "label": "Loads order",
+      "technology": "HTTPS",
+      "order": 2
+    },
+    {
+      "from": "o",
+      "to": "p",
+      "label": "Asks to refund",
+      "technology": "HTTPS",
+      "order": 3
+    },
+    {
+      "from": "p",
+      "to": "s",
+      "label": "Reverses charge",
+      "technology": "HTTPS",
+      "order": 4
+    },
+    {
+      "from": "s",
+      "to": "p",
+      "label": "Confirms reversal",
+      "technology": "HTTPS",
+      "order": 5
+    },
+    {
+      "from": "p",
+      "to": "l",
+      "label": "Books refund",
+      "technology": "HTTPS",
+      "order": 6
+    },
+    {
+      "from": "p",
+      "to": "o",
+      "label": "Marks refunded",
+      "technology": "HTTPS",
+      "order": 7
+    },
+    {
+      "from": "o",
+      "to": "w",
+      "label": "Shows result",
+      "technology": "HTTPS",
+      "order": 8
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "title": "Self loops on every shape",
+  "type": "container",
+  "scope": "S",
+  "detail": "full",
+  "elements": [
+    {
+      "id": "p",
+      "type": "person",
+      "name": "Admin",
+      "description": "Runs the system",
+      "status": "added"
+    },
+    {
+      "id": "q",
+      "type": "queue",
+      "name": "Retry queue",
+      "technology": "SQS",
+      "description": "Holds failed jobs",
+      "status": "changed"
+    },
+    {
+      "id": "d",
+      "type": "datastore",
+      "name": "Ledger",
+      "technology": "Postgres",
+      "description": "Holds entries",
+      "status": "removed"
+    },
+    {
+      "id": "s",
+      "type": "system",
+      "name": "Partner",
+      "external": true,
+      "description": "Third party"
+    },
+    {
+      "id": "k",
+      "type": "container",
+      "name": "Worker",
+      "technology": "Rust",
+      "description": "Does jobs",
+      "status": "affected"
+    },
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Zone"
+    },
+    {
+      "id": "in",
+      "type": "container",
+      "name": "Inner",
+      "technology": "Rust",
+      "parent": "g",
+      "description": "Inside a group"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "p",
+      "to": "p",
+      "label": "Reviews own work",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "q",
+      "to": "q",
+      "label": "Requeues onto itself",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "d",
+      "to": "d",
+      "label": "Compacted itself",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "s",
+      "to": "s",
+      "label": "Retries itself",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "k",
+      "to": "k",
+      "label": "Schedules itself",
+      "technology": "HTTPS",
+      "status": "changed"
+    },
+    {
+      "from": "in",
+      "to": "in",
+      "label": "Loops inside",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "p",
+      "to": "k",
+      "label": "Starts",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "k",
+      "to": "q",
+      "label": "Takes from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "k",
+      "to": "d",
+      "label": "Wrote to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "k",
+      "to": "s",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "k",
+      "to": "in",
+      "label": "Signals",
+      "technology": "HTTPS"
+    }
+  ]
+}

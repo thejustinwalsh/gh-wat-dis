@@ -1,0 +1,75 @@
+{
+  "title": "Two cycles sharing a node",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "c",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "c",
+      "label": "Posts charges to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c",
+      "to": "a",
+      "label": "Returns receipts to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c",
+      "to": "d",
+      "label": "Emits events to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "e",
+      "label": "Forwards alerts to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "c",
+      "label": "Acknowledges to",
+      "technology": "HTTPS"
+    }
+  ]
+}

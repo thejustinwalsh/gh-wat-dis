@@ -1,0 +1,4 @@
+{"title":"Three imports between two files","type":"code","scope":"S","elements":[
+{"id":"a","type":"file","name":"src/a.ts","status":"changed","symbols":[{"name":"a0","kind":"fn","status":"changed"}]},
+{"id":"b","type":"file","name":"src/b.ts","status":"changed","symbols":[{"name":"b0","kind":"fn","status":"added"},{"name":"b1","kind":"fn","status":"removed"},{"name":"b2","kind":"fn"}]}],
+"relationships":[{"from":"a","to":"b","toSymbol":"b2","label":""},{"from":"a","to":"b","toSymbol":"b0","label":"","status":"added"},{"from":"a","to":"b","toSymbol":"b1","label":"","status":"removed"}]}

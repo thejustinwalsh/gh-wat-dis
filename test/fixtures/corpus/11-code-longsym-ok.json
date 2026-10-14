@@ -1,0 +1,42 @@
+{
+  "title": "Long symbol names",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "file",
+      "name": "packages/extremely/deeply/nested/path/that/keeps/going/and/going/src/internal/adapters/handler.generated.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "aVeryLongFunctionNameThatDescribesExactlyWhatItDoesInExcruciatingDetailAndThenSome",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "<T extends Record<string, unknown>>(x: T) => T & {a: \"b\"}",
+          "kind": "type",
+          "status": "added"
+        },
+        {
+          "name": "x"
+        }
+      ]
+    },
+    {
+      "id": "b",
+      "type": "file",
+      "name": "b.ts",
+      "status": "affected"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "b",
+      "to": "a",
+      "toSymbol": "aVeryLongFunctionNameThatDescribesExactlyWhatItDoesInExcruciatingDetailAndThenSome",
+      "label": ""
+    }
+  ]
+}

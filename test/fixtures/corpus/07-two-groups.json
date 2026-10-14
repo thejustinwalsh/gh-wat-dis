@@ -1,0 +1,59 @@
+{
+  "title": "Two groups, no link",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Group one"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Group two"
+    },
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Alpha",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Beta",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "x",
+      "type": "container",
+      "name": "Xi",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "y",
+      "type": "container",
+      "name": "Ypsilon",
+      "technology": "Rust",
+      "parent": "g2"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Sends to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "x",
+      "to": "y",
+      "label": "Sends to",
+      "technology": "HTTPS"
+    }
+  ]
+}

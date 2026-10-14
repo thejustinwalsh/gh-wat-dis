@@ -1,0 +1,56 @@
+{
+  "title": "Two files",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "file",
+      "name": "src/a.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "a_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "a_1",
+          "kind": "struct",
+          "status": "changed"
+        }
+      ]
+    },
+    {
+      "id": "b",
+      "type": "file",
+      "name": "src/b.ts",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "b_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "b_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "b_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "toSymbol": "b_1",
+      "label": ""
+    }
+  ]
+}

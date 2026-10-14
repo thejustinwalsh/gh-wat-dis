@@ -1,0 +1,162 @@
+{
+  "title": "Flow of 15 steps",
+  "type": "dynamic",
+  "scope": "Checkout",
+  "elements": [
+    {
+      "id": "p0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "p1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "p2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "p3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "p4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "p5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "p6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    },
+    {
+      "id": "p7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "p0",
+      "to": "p1",
+      "label": "Step 1 hands the request to",
+      "technology": "HTTPS",
+      "order": 1
+    },
+    {
+      "from": "p1",
+      "to": "p2",
+      "label": "Step 2 hands the request to",
+      "technology": "HTTPS",
+      "order": 2
+    },
+    {
+      "from": "p2",
+      "to": "p3",
+      "label": "Step 3 hands the request to",
+      "technology": "HTTPS",
+      "order": 3
+    },
+    {
+      "from": "p3",
+      "to": "p0",
+      "label": "Step 4 hands the request to",
+      "technology": "HTTPS",
+      "order": 4
+    },
+    {
+      "from": "p0",
+      "to": "p1",
+      "label": "Step 5 hands the request to",
+      "technology": "HTTPS",
+      "order": 5
+    },
+    {
+      "from": "p1",
+      "to": "p2",
+      "label": "Step 6 hands the request to",
+      "technology": "HTTPS",
+      "order": 6
+    },
+    {
+      "from": "p2",
+      "to": "p3",
+      "label": "Step 7 hands the request to",
+      "technology": "HTTPS",
+      "order": 7
+    },
+    {
+      "from": "p3",
+      "to": "p4",
+      "label": "Step 8 hands the request to",
+      "technology": "HTTPS",
+      "order": 8
+    },
+    {
+      "from": "p4",
+      "to": "p5",
+      "label": "Step 9 hands the request to",
+      "technology": "HTTPS",
+      "order": 9
+    },
+    {
+      "from": "p5",
+      "to": "p6",
+      "label": "Step 10 hands the request to",
+      "technology": "HTTPS",
+      "order": 10
+    },
+    {
+      "from": "p6",
+      "to": "p2",
+      "label": "Step 11 hands the request to",
+      "technology": "HTTPS",
+      "order": 11
+    },
+    {
+      "from": "p2",
+      "to": "p3",
+      "label": "Step 12 hands the request to",
+      "technology": "HTTPS",
+      "order": 12
+    },
+    {
+      "from": "p3",
+      "to": "p4",
+      "label": "Step 13 hands the request to",
+      "technology": "HTTPS",
+      "order": 13
+    },
+    {
+      "from": "p4",
+      "to": "p5",
+      "label": "Step 14 hands the request to",
+      "technology": "HTTPS",
+      "order": 14
+    },
+    {
+      "from": "p5",
+      "to": "p6",
+      "label": "Step 15 hands the request to",
+      "technology": "HTTPS",
+      "order": 15
+    }
+  ]
+}

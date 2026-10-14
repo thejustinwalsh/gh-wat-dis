@@ -1,0 +1,128 @@
+{
+  "title": "Three islands and two orphans",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "e0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "e1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "e2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "e3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "e4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "e5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "e6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    },
+    {
+      "id": "e7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust"
+    },
+    {
+      "id": "e8",
+      "type": "container",
+      "name": "Pricing",
+      "technology": "Rust"
+    },
+    {
+      "id": "o1",
+      "type": "container",
+      "name": "Orphan one",
+      "technology": "Rust"
+    },
+    {
+      "id": "o2",
+      "type": "datastore",
+      "name": "Orphan store",
+      "technology": "S3"
+    },
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Empty group"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "e0",
+      "to": "e1",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e1",
+      "to": "e2",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e3",
+      "to": "e4",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e4",
+      "to": "e5",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e5",
+      "to": "e3",
+      "label": "Returns results to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e6",
+      "to": "e7",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e6",
+      "to": "e8",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e7",
+      "to": "e8",
+      "label": "Sends jobs to",
+      "technology": "HTTPS"
+    }
+  ]
+}

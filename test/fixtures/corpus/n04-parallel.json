@@ -1,0 +1,80 @@
+{
+  "title": "Many lines between one pair",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "x",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Creates invoices in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Cancels invoices in",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Refunds through",
+      "technology": "gRPC",
+      "status": "added"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Queries balances from",
+      "technology": "HTTPS",
+      "status": "changed"
+    },
+    {
+      "from": "b",
+      "to": "a",
+      "label": "Notifies of payment",
+      "technology": "NATS",
+      "status": "added"
+    },
+    {
+      "from": "b",
+      "to": "a",
+      "label": "Asks for order detail",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "x",
+      "label": "Posts entries to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "x",
+      "label": "Reads history from",
+      "technology": "HTTPS",
+      "status": "affected"
+    }
+  ]
+}

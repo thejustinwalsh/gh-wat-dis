@@ -1,0 +1,14 @@
+{
+  "title": "One element",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Alone",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": []
+}

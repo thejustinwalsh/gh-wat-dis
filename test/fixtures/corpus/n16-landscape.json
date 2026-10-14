@@ -1,0 +1,152 @@
+{
+  "title": "Company landscape",
+  "type": "landscape",
+  "scope": "Acme",
+  "elements": [
+    {
+      "id": "e",
+      "type": "boundary",
+      "name": "Acme",
+      "kind": "Enterprise"
+    },
+    {
+      "id": "s0",
+      "type": "system",
+      "name": "Storefront",
+      "parent": "e"
+    },
+    {
+      "id": "s1",
+      "type": "system",
+      "name": "Warehouse",
+      "parent": "e"
+    },
+    {
+      "id": "s2",
+      "type": "system",
+      "name": "Finance",
+      "parent": "e"
+    },
+    {
+      "id": "s3",
+      "type": "system",
+      "name": "CRM",
+      "parent": "e"
+    },
+    {
+      "id": "s4",
+      "type": "system",
+      "name": "Data platform",
+      "parent": "e"
+    },
+    {
+      "id": "s5",
+      "type": "system",
+      "name": "Intranet",
+      "parent": "e"
+    },
+    {
+      "id": "p1",
+      "type": "person",
+      "name": "Customer"
+    },
+    {
+      "id": "p2",
+      "type": "person",
+      "name": "Clerk",
+      "parent": "e"
+    },
+    {
+      "id": "x1",
+      "type": "system",
+      "name": "Bank",
+      "external": true
+    },
+    {
+      "id": "x2",
+      "type": "system",
+      "name": "Tax office",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "p1",
+      "to": "s0",
+      "label": "Shops in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s0",
+      "to": "s1",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s0",
+      "to": "s2",
+      "label": "Reports sales to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s2",
+      "to": "x1",
+      "label": "Settles with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s2",
+      "to": "x2",
+      "label": "Files returns with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s3",
+      "to": "s0",
+      "label": "Reads customers from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "s0",
+      "label": "Copies data from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "s1",
+      "label": "Copies data from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "s2",
+      "label": "Copies data from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "s3",
+      "label": "Copies data from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "p2",
+      "to": "s5",
+      "label": "Reads news on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "p2",
+      "to": "s1",
+      "label": "Packs orders in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s1",
+      "to": "p1",
+      "label": "Ships parcels to",
+      "technology": "post"
+    }
+  ]
+}

@@ -1,0 +1,327 @@
+{
+  "title": "25 elements",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "G0",
+      "type": "boundary",
+      "name": "Domain 1"
+    },
+    {
+      "id": "G1",
+      "type": "boundary",
+      "name": "Domain 2"
+    },
+    {
+      "id": "G2",
+      "type": "boundary",
+      "name": "Domain 3"
+    },
+    {
+      "id": "G3",
+      "type": "boundary",
+      "name": "Domain 4"
+    },
+    {
+      "id": "e0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust",
+      "parent": "G1"
+    },
+    {
+      "id": "e1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "G1"
+    },
+    {
+      "id": "e2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "e3",
+      "type": "datastore",
+      "name": "Ledger",
+      "technology": "Postgres",
+      "parent": "G2"
+    },
+    {
+      "id": "e4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust",
+      "parent": "G3",
+      "status": "removed"
+    },
+    {
+      "id": "e5",
+      "type": "queue",
+      "name": "Search",
+      "technology": "Kafka",
+      "parent": "G0"
+    },
+    {
+      "id": "e6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust",
+      "parent": "G3"
+    },
+    {
+      "id": "e7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust",
+      "parent": "G1"
+    },
+    {
+      "id": "e8",
+      "type": "container",
+      "name": "Pricing",
+      "technology": "Rust",
+      "parent": "G2"
+    },
+    {
+      "id": "e9",
+      "type": "container",
+      "name": "Inventory",
+      "technology": "Rust",
+      "parent": "G0"
+    },
+    {
+      "id": "e10",
+      "type": "datastore",
+      "name": "Shipping",
+      "technology": "Postgres",
+      "parent": "G0",
+      "status": "added"
+    },
+    {
+      "id": "e11",
+      "type": "container",
+      "name": "Returns",
+      "technology": "Rust"
+    },
+    {
+      "id": "e12",
+      "type": "container",
+      "name": "Fraud",
+      "technology": "Rust",
+      "parent": "G0",
+      "status": "removed"
+    },
+    {
+      "id": "e13",
+      "type": "container",
+      "name": "Identity",
+      "technology": "Rust",
+      "parent": "G1"
+    },
+    {
+      "id": "e14",
+      "type": "container",
+      "name": "Sessions",
+      "technology": "Rust",
+      "parent": "G1"
+    },
+    {
+      "id": "e15",
+      "type": "container",
+      "name": "Profiles",
+      "technology": "Rust",
+      "parent": "G0"
+    },
+    {
+      "id": "e16",
+      "type": "queue",
+      "name": "Reviews",
+      "technology": "Kafka",
+      "parent": "G3"
+    },
+    {
+      "id": "e17",
+      "type": "datastore",
+      "name": "Recommender",
+      "technology": "Postgres"
+    },
+    {
+      "id": "e18",
+      "type": "container",
+      "name": "Mailer",
+      "technology": "Rust",
+      "parent": "G0"
+    },
+    {
+      "id": "e19",
+      "type": "container",
+      "name": "Scheduler",
+      "technology": "Rust",
+      "parent": "G0",
+      "status": "changed"
+    },
+    {
+      "id": "e20",
+      "type": "container",
+      "name": "Audit",
+      "technology": "Rust",
+      "parent": "G3"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "e0",
+      "to": "e1",
+      "label": "Calls step 1 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e1",
+      "to": "e2",
+      "label": "Calls step 2 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e1",
+      "to": "e3",
+      "label": "Calls step 3 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e0",
+      "to": "e4",
+      "label": "Calls step 4 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e0",
+      "to": "e5",
+      "label": "Calls step 5 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e3",
+      "to": "e6",
+      "label": "Calls step 6 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e0",
+      "to": "e7",
+      "label": "Calls step 7 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e5",
+      "to": "e8",
+      "label": "Calls step 8 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e0",
+      "to": "e9",
+      "label": "Calls step 9 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e9",
+      "to": "e10",
+      "label": "Calls step 10 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e3",
+      "to": "e11",
+      "label": "Calls step 11 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e3",
+      "to": "e12",
+      "label": "Calls step 12 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e8",
+      "to": "e13",
+      "label": "Calls step 13 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e12",
+      "to": "e14",
+      "label": "Calls step 14 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e4",
+      "to": "e15",
+      "label": "Calls step 15 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e13",
+      "to": "e16",
+      "label": "Calls step 16 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e16",
+      "to": "e17",
+      "label": "Calls step 17 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e13",
+      "to": "e18",
+      "label": "Calls step 18 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e18",
+      "to": "e19",
+      "label": "Calls step 19 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e5",
+      "to": "e20",
+      "label": "Calls step 20 of",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e13",
+      "to": "e3",
+      "label": "Syncs data 0 with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e20",
+      "to": "e12",
+      "label": "Syncs data 1 with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e15",
+      "to": "e6",
+      "label": "Syncs data 2 with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e10",
+      "to": "e13",
+      "label": "Syncs data 4 with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e14",
+      "to": "e4",
+      "label": "Syncs data 5 with",
+      "technology": "HTTPS"
+    }
+  ]
+}

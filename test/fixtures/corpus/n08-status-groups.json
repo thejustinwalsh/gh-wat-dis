@@ -1,0 +1,162 @@
+{
+  "title": "Statuses on groups and lines",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "ga",
+      "type": "boundary",
+      "name": "Added zone",
+      "status": "added"
+    },
+    {
+      "id": "gr",
+      "type": "boundary",
+      "name": "Removed zone",
+      "status": "removed"
+    },
+    {
+      "id": "gc",
+      "type": "boundary",
+      "name": "Changed zone",
+      "status": "changed"
+    },
+    {
+      "id": "gf",
+      "type": "boundary",
+      "name": "Affected zone",
+      "status": "affected"
+    },
+    {
+      "id": "a1",
+      "type": "container",
+      "name": "New API",
+      "technology": "Rust",
+      "parent": "ga",
+      "status": "added"
+    },
+    {
+      "id": "a2",
+      "type": "queue",
+      "name": "New queue",
+      "technology": "SQS",
+      "parent": "ga",
+      "status": "added"
+    },
+    {
+      "id": "r1",
+      "type": "container",
+      "name": "Old API",
+      "technology": "Rust",
+      "parent": "gr",
+      "status": "removed"
+    },
+    {
+      "id": "r2",
+      "type": "datastore",
+      "name": "Old store",
+      "technology": "MySQL",
+      "parent": "gr",
+      "status": "removed"
+    },
+    {
+      "id": "c1",
+      "type": "container",
+      "name": "Worker",
+      "technology": "Rust",
+      "parent": "gc",
+      "status": "changed"
+    },
+    {
+      "id": "c2",
+      "type": "container",
+      "name": "Scheduler",
+      "technology": "Rust",
+      "parent": "gc"
+    },
+    {
+      "id": "f1",
+      "type": "container",
+      "name": "Reports",
+      "technology": "Rust",
+      "parent": "gf",
+      "status": "affected"
+    },
+    {
+      "id": "p",
+      "type": "person",
+      "name": "Analyst"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a1",
+      "to": "a2",
+      "label": "Enqueues jobs on",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "c1",
+      "to": "a2",
+      "label": "Takes jobs from",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "r1",
+      "to": "r2",
+      "label": "Wrote jobs to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "c1",
+      "to": "r2",
+      "label": "Polled",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "c2",
+      "to": "c1",
+      "label": "Wakes",
+      "technology": "HTTPS",
+      "status": "changed"
+    },
+    {
+      "from": "c1",
+      "to": "f1",
+      "label": "Feeds",
+      "technology": "HTTPS",
+      "status": "affected"
+    },
+    {
+      "from": "p",
+      "to": "f1",
+      "label": "Reads",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "p",
+      "to": "r1",
+      "label": "Used to call",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "p",
+      "to": "a1",
+      "label": "Sends jobs to",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "ga",
+      "to": "gr",
+      "label": "Replaces",
+      "technology": "HTTPS",
+      "status": "added"
+    }
+  ]
+}
