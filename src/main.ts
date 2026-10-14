@@ -85,7 +85,7 @@ export const TOOLS: Tool[] = [
   { name: 'graph stats', group: GRAPH, effect: 'reads', usage: 'graph stats [spec.json|-]', description: 'Counts for a spec: elements, relationships, by type, by status, depth.' },
   { name: 'graph ids', group: GRAPH, effect: 'reads', usage: 'graph ids [spec.json|-]', description: 'One line for each element: id, type, status, name.' },
 
-  { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--report] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG fitted to GitHub's width, in the layout whose lines read best. --png adds a PNG to look at. --report prints the judgement as JSON." },
+  { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--report] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON." },
   { name: 'legend', group: RENDER, effect: 'reads', usage: 'legend [spec.json|-]', description: "A spec's relationships as a Markdown table, to sit under a diagram with numbered lines." },
   { name: 'blast', group: RENDER, effect: 'reads', usage: 'blast [facts.json|-] [--max-items 5] [--no-heading] [--no-links]', description: 'Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.' },
 

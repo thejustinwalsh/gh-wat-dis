@@ -26,21 +26,32 @@ Usage: npx gh-wat-dis diagram [spec.json|-] [options]
   --lint-only           check the spec and draw nothing
   --detail <level>      auto (default: descriptions only up to 5 elements), full, compact
   --labels <mode>       auto (default), text, numbered. Numbered lines need the table from "legend".
-  --direction <d>       down or right. Default: whichever reads better. A direction in the spec is a wish:
-                        the other one is drawn when it reads much better. This option is an order.
+  --direction <d>       down or right. Default: the direction the spec names, else the form of the diagram type.
+                        A direction named here or in the spec is never overridden.
   --report              print the judgement as JSON to stdout in place of the written paths: the size, the
-                        layout kept and why, the warnings, and the metrics of every layout tried
+                        layout kept and why, the rung, the warnings, and the metrics and failed gates of every layout tried
   --max-width <px>      width to fit (default 860, the GitHub issue body)
   --no-lint             draw without checking
 
 With no -o, a spec read from a file is drawn to <spec>.svg beside it and the path is printed.
 A spec read from stdin is drawn to stdout. Written paths go to stdout, lint messages to stderr.
 
-The spec is laid out several ways and the one that reads best is kept: short lines, few corners and
-crossings count as well as size. A layout that cannot draw every relationship from end to end is never kept.
-Stderr gets the size, then a "layout:" line with what was kept and why, then a "warning:" for each fault
-that is left. After the warnings, each "fix:" line is a filter or option the tool applied and judged again,
-with the size and the warnings it leaves. Only a fix that leaves fewer warnings is printed.
+Each type of diagram has one form. A code diagram runs left to right, so that a line ends on a symbol row.
+A flow reads in step order from the top left. The rest read from the first relationship in the spec, top down
+or left to right. The order of the relationships is the reading order: in a cycle, the line that returns to an
+element already drawn is the one drawn backwards.
+
+A layout must pass every gate: each relationship drawn from end to end on its own element or row, no line
+through text, nothing on top of anything else, and the whole image no wider than --max-width and no taller
+than 1.6 times that. The form is loosened one rung at a time until a layout passes: numbers on the lines or a
+long chain wrapped, then both, then compact cards. A code diagram tries its files in a column before it wraps.
+The first rung that passes is drawn. On one rung, the layout with the fewest crossings wins, then the least
+detour, then the fewest corners, then the shape nearest 1.6 wide to 1 tall.
+
+Stderr gets the size, then a "layout:" line with what was kept, the rung, and why each rung above it failed.
+When no rung passes, the nearest layout is drawn and the "layout:" line says so. Then a "warning:" for each
+fault that is left. After the warnings, each "fix:" line is a filter or option the tool applied and judged
+again, with the size and the warnings it leaves. Only a fix that leaves fewer warnings is printed.
 Exit 0 ok, 1 lint errors, 2 usage error.
 
 Shape the spec first with "npx gh-wat-dis graph --help".
@@ -149,7 +160,7 @@ export const main: Command = async (argv) => {
     console.log(JSON.stringify({
       svg: target, ...(args.png ? { png: args.png } : {}), width, height, maxWidth,
       direction: out.direction, labels: out.numbered ? 'numbered' : 'text', compact: out.compact,
-      why: out.report.why, warnings, fixes, candidates: out.report.candidates,
+      why: out.report.why, rung: out.report.rung, rungs: out.report.rungs, passed: out.report.passed, warnings, fixes, candidates: out.report.candidates,
     }, null, 2));
   }
   return 0;

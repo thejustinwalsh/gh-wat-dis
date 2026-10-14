@@ -1,11 +1,11 @@
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec } from '../spec.ts';
 import {
-  BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX, GROUP_PAD_X,
-  LANE_NAME_PX, PIPE_RX, groupLabelWidth,
+  BADGE_PX, CARD_DIR_PX, CARD_KIND_PX, CARD_NAME_X, CARD_PAD, CARD_PATH_PX, CARD_SYMBOL_PX, CYLINDER_RY, GROUP_KIND_PX, GROUP_NAME_PX,
+  LANE_NAME_PX, PIPE_RX,
 } from './layout.ts';
 import type { EdgePath, Layout, NodeBox, Pt, Rect } from './layout.ts';
-import { escapeXml, fit, monoWidth, textWidth, wrap } from './measure.ts';
+import { escapeXml, monoWidth, textWidth, wrap } from './measure.ts';
 import { FONT, MONO, applyTheme } from './theme.ts';
 import { judge } from './fit.ts';
 import type { FitOptions, Report } from './fit.ts';
@@ -93,21 +93,16 @@ function drawGroup(b: NodeBox): string {
   return status === 'removed' ? `<g class="gone">${out}</g>` : out;
 }
 
-/** Drawn above the edges, on a patch of the group's own fill, so a line that enters the group never strikes the text. */
+/** The name of a group, where the layout kept room for it: no line is routed through that place. */
 function drawGroupLabel(b: NodeBox): string {
-  if (b.light) return `<text class="ln" x="${n(b.title?.x ?? b.x + 10)}" y="${n(b.y + 18)}">${escapeXml(fit(b.el.name, LANE_NAME_PX, (b.w - 20) / 1.06, true).toUpperCase())}</text>`;
+  const t = b.title;
+  if (!t) return '';
+  if (b.light) return `<text class="ln" x="${n(t.x)}" y="${n(t.y + 10)}">${escapeXml(t.name)}</text>`;
   const status = active(b.el.status);
-  // `layout` makes a group wide enough for its label, so the two-line and cut forms are a last resort.
-  const room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w + 10 : 0);
-  const oneLine = groupLabelWidth(b.el) <= room;
-  const x = oneLine ? b.title?.x ?? b.x + GROUP_PAD_X : b.x + GROUP_PAD_X;
-  const name = fit(b.el.name, GROUP_NAME_PX, room, true), kind = fit(kindLine(b.el), GROUP_KIND_PX, room);
-  const nameY = b.y + (oneLine ? 26 : 21);
-  const w = oneLine ? groupLabelWidth(b.el) : Math.max(textWidth(name, GROUP_NAME_PX, true), textWidth(kind, GROUP_KIND_PX));
-  let out = `<rect class="f-${b.depth % 2 ? 'bg' : 'group'}" x="${n(x - 4)}" y="${n(nameY - 14)}" width="${n(w + 8)}" height="${oneLine ? 20 : 31}" rx="3"/>`
-    + `<text class="gn" x="${n(x)}" y="${n(nameY)}">${escapeXml(name)}`
-    + (oneLine ? `<tspan class="gk" dx="8">${escapeXml(kind)}</tspan></text>` : `</text><text class="gk" x="${n(x)}" y="${n(nameY + 15)}">${escapeXml(kind)}</text>`);
-  if (status === 'removed') out += `<path class="strike" d="M${n(x)} ${n(nameY - 4.5)}h${n(textWidth(name, GROUP_NAME_PX, true) / 1.08)}"/>`;
+  const nameY = t.y + 14;
+  let out = `<text class="gn" x="${n(t.x)}" y="${n(nameY)}">${escapeXml(t.name)}`
+    + (t.stacked ? `</text><text class="gk" x="${n(t.x)}" y="${n(nameY + 15)}">${escapeXml(t.kind)}</text>` : `<tspan class="gk" dx="8">${escapeXml(t.kind)}</tspan></text>`);
+  if (status === 'removed') out += `<path class="strike" d="M${n(t.x)} ${n(nameY - 4.5)}h${n(textWidth(t.name, GROUP_NAME_PX, true) / 1.08)}"/>`;
   return (status === 'removed' ? `<g class="gone">${out}</g>` : out) + (status ? badge(status, b.badge) : '');
 }
 
@@ -121,7 +116,6 @@ function drawFile(b: NodeBox): string {
   const status = active(b.el.status);
   const x = b.x + CARD_PAD + (status ? 15 : 0), headY = b.y + (card.stacked ? card.head - 11 : card.head / 2 + 4);
   let out = `<rect class="card f-bg" x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" rx="6"/>`;
-  if (card.lane) out += `<text class="ln" x="${n(b.title?.x ?? b.x + 2)}" y="${n(b.y - 6)}">${escapeXml(fit(card.lane, LANE_NAME_PX, b.w / 1.06 - 4, true).toUpperCase())}</text>`;
   if (status) out += mark(status, b.x + CARD_PAD + 4, headY + 0.5);
   out += card.stacked
     ? `<text class="fs" x="${n(x)}" y="${n(headY - 15)}">${escapeXml(card.dir)}</text><text class="fb" x="${n(x)}" y="${n(headY)}">${escapeXml(card.base)}</text>`
@@ -234,9 +228,6 @@ function keyItems(spec: DiagramSpec, boxes: NodeBox[], edges: EdgePath[], number
   if (boxes.some((b) => b.light)) {
     items.push({ w: 26, label: 'Part of the system', draw: (x, y) => `<rect class="lane" x="${n(x)}" y="${n(y)}" width="26" height="16" rx="3"/>` });
   }
-  if (boxes.some((b) => b.card?.lane)) {
-    items.push({ w: 36, label: 'Part of the system', draw: (x, y) => `<text class="ln" x="${n(x)}" y="${n(y + 12)}">NAME</text>` });
-  }
   const imports = edges.some((e) => !e.rel.label?.trim());
   if (edges.some((e) => e.rel.label?.trim())) items.push({ w: 30, label: spec.type === 'dynamic' ? 'Numbered step' : numbered ? 'Relationship, numbered in the table' : 'Relationship', draw: (x, y) => sample(x, y) });
   if (imports) items.push({ w: 30, label: 'Imports', draw: (x, y) => sample(x, y) });
@@ -283,7 +274,11 @@ function describe(spec: DiagramSpec, subtitle: string): string {
 }
 
 export interface RenderOptions extends FitOptions { theme?: ThemeName }
-export interface Rendered { svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean; report: Report }
+export interface Rendered {
+  svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean; report: Report;
+  /** The layout that was drawn, in the coordinates of the drawing: the title and the key are not part of it. */
+  layout: Layout;
+}
 
 export async function renderSvg(spec: DiagramSpec, opts: RenderOptions = {}): Promise<string> {
   return (await render(spec, opts)).svg;
@@ -336,5 +331,5 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
     + `<path class="rule" d="M${MARGIN} ${n(keyTop)}H${width - MARGIN}"/>`
     + `<text class="kh" x="${MARGIN}" y="${n(keyTop + 18)}">KEY</text>${key}`
     + '</svg>\n';
-  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact, report };
+  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact, report, layout: g };
 }

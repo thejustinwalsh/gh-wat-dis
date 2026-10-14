@@ -15,19 +15,19 @@ export interface FileCard {
   /** Height of the header. A long path puts its folders on a small line above the file name, and the header is taller. */
   head: number;
   stacked: boolean;
-  /** The name of the group the file is in, drawn above the card when the groups are not drawn as bands. */
-  lane?: string;
 }
+/** The name of a group, where the layout engine kept room for it. `stacked` puts the kind under the name. */
+export interface GroupTitle extends Rect { name: string; kind: string; stacked: boolean }
 export interface NodeBox {
   el: SpecElement;
   group: boolean;
   depth: number;
   x: number; y: number; w: number; h: number;
   lines: TextLine[];
-  /** Where the status badge is drawn. It lies inside the box, where no relationship line runs. */
+  /** Where the status badge is drawn: inside a leaf, and at the end of the title of a group. */
   badge?: Rect;
-  /** Where the name of a group is drawn: slid along the top of the group to a place no line runs through, when there is one. */
-  title?: Rect;
+  /** Set on a group. The layout engine places it as it places a box, so no line is routed through it. */
+  title?: GroupTitle;
   /** Set on a `file`. Its status is a mark in the header, so it has no badge. */
   card?: FileCard;
   /** A group in a code diagram: a tinted band with a small name, no border. */
@@ -40,26 +40,13 @@ export interface Layout {
   direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean;
   /** True when a long chain was cut and continued on a second row or column. */
   wrapped: boolean;
-  /** True when the groups of a code diagram are names above the cards. */
-  flat: boolean;
-  /**
-   * Relationships the drawing does not show as the spec states them: ELK gave no route, or a route
-   * that does not start on its source and end on its target. A layout with any is not one to keep.
-   */
-  broken: number;
-  /** Top down, the lines of a code diagram that join the same two files are drawn once. This counts the ones folded in. */
-  folded: number;
 }
 export interface LayoutOptions {
   detail?: Detail;
   direction?: 'DOWN' | 'RIGHT';
   numbered?: boolean;
-  /** Target width / height. When set, ELK may wrap a long chain onto a second row or column. */
+  /** Target width / height. When set, ELK may cut a long chain and continue it on the next row or column. */
   wrap?: number;
-  /** In a code diagram, name the group above each file card in place of a band around the group's files. */
-  flat?: boolean;
-  /** Widen a group whose name has a line through it, so the name has a clear place beside the lines. */
-  clearTitles?: boolean;
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -73,15 +60,11 @@ export const GROUP_NAME_PX = 13;
 export const GROUP_KIND_PX = 10.5;
 export const BADGE_PX = 9.5;
 export const BADGE_H = 16;
-/** A group keeps this much clear on each side of its label. */
-export const GROUP_PAD_X = 14;
 const BADGE_GAP = 10;
-/** How far a self-relationship reaches out of its element, and how much of the side it spans. */
-const LOOP_OUT = 30;
-const LOOP_SPAN = 34;
-const LOOP_SPAN_MAX = 48;
-/** ELK draws a self-loop about 10px deep. Its label is given this much more room so the larger loop fits. */
-const LOOP_PAD = LOOP_OUT - 10;
+/** A group title wider than this puts the kind under the name. */
+const TITLE_MAX = 300;
+/** Unconnected parts are packed toward this shape, a little wider than tall. */
+const PACK_ASPECT = 1.6;
 const PAD_X = 14;
 export const CARD_HEAD = 30;
 export const CARD_HEAD_STACKED = 42;
@@ -98,11 +81,9 @@ export const CARD_KIND_PX = 10;
 export const LANE_NAME_PX = 10.5;
 const CARD_MIN = 148;
 const CARD_MAX = 240;
-const CARD_ROWS_MAX = 8;
+export const CARD_ROWS_MAX = 8;
 /** Lines that end on one row or header sit this far apart, or closer when there are many. */
 const PORT_GAP = 6;
-/** Room above a card for the name of its group. */
-const LANE_CAP = 17;
 const LABEL_MAX = 170;
 const FULL_DETAIL_MAX = 5;
 const TOP_INSET: Record<string, number> = { person: 40, datastore: 2 * CYLINDER_RY + 8 };
@@ -219,126 +200,57 @@ function edgeLabel(rel: SpecRelationship, num?: number): { w: number; h: number;
   return { w: Math.ceil(w + 12), h: Math.ceil(y + 3), lines };
 }
 
-/** Width of a group's label on one line: name, then kind. */
+/** Width of a group's name and kind on one line. */
 export const groupLabelWidth = (el: SpecElement): number =>
   textWidth(el.name, GROUP_NAME_PX, true) + 8 + textWidth(kindLine(el), GROUP_KIND_PX);
-/** A light group shows its name alone, small and spaced. */
-export const laneLabelWidth = (el: SpecElement): number => textWidth(el.name, LANE_NAME_PX, true) * 1.06;
+/** A light group shows its name alone, small, in capitals and spaced. */
+export const laneLabelWidth = (name: string): number => textWidth(name, LANE_NAME_PX, true) * 1.06;
 
-/** The narrowest a group can be and still show its label on one line, with its badge beside it. */
-export function groupMinWidth(el: SpecElement, light = false): number {
-  if (light) return Math.ceil(laneLabelWidth(el) + 2 * 10);
+/**
+ * The title of a group, and the room the layout engine keeps for it with its status badge.
+ * The engine is given this size, so a group is never narrower than its title, the title is never cut,
+ * and no line is routed over it. A long title puts the kind under the name.
+ */
+function groupTitle(el: SpecElement, light: boolean): { title: GroupTitle; w: number; h: number } {
+  if (light) {
+    const name = el.name.toUpperCase();
+    const w = Math.ceil(laneLabelWidth(name));
+    return { title: { x: 0, y: 0, w, h: 13, name, kind: '', stacked: false }, w, h: 13 };
+  }
   const status = active(el.status);
-  return Math.ceil(groupLabelWidth(el) + 2 * GROUP_PAD_X + 2 + (status ? badgeWidth(status) + BADGE_GAP : 0));
+  const stacked = groupLabelWidth(el) > TITLE_MAX;
+  const kind = kindLine(el);
+  const w = Math.ceil(stacked ? Math.max(textWidth(el.name, GROUP_NAME_PX, true), textWidth(kind, GROUP_KIND_PX)) : groupLabelWidth(el));
+  const h = stacked ? 34 : 20;
+  return { title: { x: 0, y: 0, w, h, name: el.name, kind, stacked }, w: w + (status ? BADGE_GAP + badgeWidth(status) : 0), h };
 }
 
 /**
- * The badge of a group sits in the label row, as far right as it can without covering a line.
- * Lines cross a group to reach its children, so the row is searched for a clear place.
- * `hits` counts the lines under the best place found; `layout` widens the group when it is not 0.
+ * The lines to hand to the layout engine back to front, so that it never sees a cycle and never has
+ * to pick which line of one to draw against the flow. The elements are walked in the order given,
+ * and each one's lines in the order given: a line that returns to an element still being walked
+ * closes a cycle, and is the one drawn backwards. So the element listed first in a cycle is drawn first.
  */
-function groupBadge(b: NodeBox, edges: EdgePath[]): { rect: Rect; hits: number } | undefined {
-  const status = active(b.el.status);
-  if (!status) return undefined;
-  const w = badgeWidth(status);
-  const y = b.y + 13;
-  const right = b.x + b.w - 12 - w;
-  const left = Math.min(right, b.x + GROUP_PAD_X + groupLabelWidth(b.el) + BADGE_GAP);
-  const places: number[] = [];
-  for (let x = right; x >= left; x -= 2) places.push(x);
-  places.push(right + 2, right + 4, right + 6);
-  let best = { x: right, hits: Infinity };
-  for (const x of places) {
-    const hits = edges.filter((e) => crossesRect(e.points, { x, y, w, h: BADGE_H }, 4)).length;
-    if (hits < best.hits) best = { x, hits };
-    if (hits === 0) break;
-  }
-  return { rect: { x: best.x, y, w, h: BADGE_H }, hits: best.hits };
-}
-
-/**
- * Lines cross the top of a group to reach its children, and the name of the group sits there.
- * This slides the name right, as far as the badge or the corner, to the first place no line runs through.
- * When every place is crossed it stays at the left, and the judge counts the lines through it.
- */
-function groupTitle(b: NodeBox, edges: EdgePath[]): (Rect & { hits: number }) | undefined {
-  const lane = b.card?.lane;
-  if (!b.group && !lane) return undefined;
-  const w = b.light || lane ? laneLabelWidth(lane ? { ...b.el, name: lane } : b.el) : groupLabelWidth(b.el);
-  const left = b.x + (lane ? 2 : b.light ? 10 : GROUP_PAD_X);
-  const y = lane ? b.y - 16 : b.light ? b.y + 7 : b.y + 12, h = b.light || lane ? 13 : 20;
-  const right = Math.max(left, (b.badge ? b.badge.x - BADGE_GAP : b.x + b.w - (lane ? 2 : GROUP_PAD_X)) - w);
-  let best = { x: left, hits: Infinity };
-  for (let x = left; x <= right; x += 6) {
-    const hits = edges.filter((e) => crossesRect(e.points, { x, y, w, h }, 3)).length;
-    if (hits < best.hits) best = { x, hits };
-    if (hits === 0) break;
-  }
-  return { x: best.x, y, w, h, hits: best.hits };
-}
-
-type Side = 'N' | 'E' | 'S' | 'W';
-function sideOf(p: Pt, b: Rect): Side | undefined {
-  if (Math.abs(p.y - b.y) < 0.5) return 'N';
-  if (Math.abs(p.y - (b.y + b.h)) < 0.5) return 'S';
-  if (Math.abs(p.x - b.x) < 0.5) return 'W';
-  if (Math.abs(p.x - (b.x + b.w)) < 0.5) return 'E';
-  return undefined;
-}
-
-/**
- * ELK draws a self-relationship as a loop about 10px deep, too small to read.
- * This redraws it on the same side of the element, deeper and wider, and puts the label beyond it.
- * `placed` is the room ELK kept for the label, which `LOOP_PAD` made large enough for both.
- */
-function growLoop(path: EdgePath, box: NodeBox, placed: Rect | undefined, others: EdgePath[]): void {
-  const first = path.points[0], last = path.points.at(-1);
-  const label = path.label;
-  if (label && placed) {
-    label.x = placed.x + (placed.w - label.w) / 2;
-    label.y = placed.y + (placed.h - label.h) / 2;
-  }
-  if (!first || !last || path.points.length < 2) return;
-  const side = sideOf(first, box);
-  if (!side || side !== sideOf(last, box)) return;
-  const flat = side === 'N' || side === 'S';
-  const along = (p: Pt): number => (flat ? p.x : p.y);
-  const corner = box.el.type === 'person' ? 20 : 8;
-  let lo = (flat ? box.x : box.y) + corner, hi = (flat ? box.x + box.w : box.y + box.h) - corner;
-  const mid = (along(first) + along(last)) / 2;
-  // Stay clear of the other lines that end on this side.
-  for (const other of others) {
-    const ends = [other.rel.from === box.el.id ? other.points[0] : undefined, other.rel.to === box.el.id ? other.points.at(-1) : undefined];
-    for (const p of ends) {
-      if (!p || sideOf(p, box) !== side) continue;
-      if (along(p) < mid) lo = Math.max(lo, along(p) + 10); else hi = Math.min(hi, along(p) - 10);
+function backLines(starts: string[], lines: { rel: SpecRelationship; i: number }[]): Set<number> {
+  const out = new Map<string, { to: string; i: number }[]>();
+  for (const { rel, i } of lines) if (rel.from !== rel.to) out.set(rel.from, [...(out.get(rel.from) ?? []), { to: rel.to, i }]);
+  const state = new Map<string, 'open' | 'done'>();
+  const back = new Set<number>();
+  const visit = (id: string): void => {
+    state.set(id, 'open');
+    for (const { to, i } of out.get(id) ?? []) {
+      if (state.get(to) === 'open') back.add(i);
+      else if (!state.has(to)) visit(to);
     }
-  }
-  const span = Math.min(Math.max(Math.abs(along(last) - along(first)), LOOP_SPAN), LOOP_SPAN_MAX, Math.max(0, hi - lo));
-  if (span < 16) return;
-  const start = Math.max(lo, Math.min(mid - span / 2, hi - span));
-  const [a, z] = along(first) <= along(last) ? [start, start + span] : [start + span, start];
-  const out = side === 'N' ? box.y - LOOP_OUT : side === 'S' ? box.y + box.h + LOOP_OUT : side === 'W' ? box.x - LOOP_OUT : box.x + box.w + LOOP_OUT;
-  const edge = side === 'N' ? box.y : side === 'S' ? box.y + box.h : side === 'W' ? box.x : box.x + box.w;
-  const pt = (pos: number, depth: number): Pt => (flat ? { x: pos, y: depth } : { x: depth, y: pos });
-  path.points = [pt(a, edge), pt(a, out), pt(z, out), pt(z, edge)];
-  if (!label) return;
-  const centre = start + span / 2;
-  if (flat) {
-    label.x = centre - label.w / 2;
-    label.y = side === 'N' ? out - 5 - label.h : out + 5;
-  } else {
-    label.y = centre - label.h / 2;
-    label.x = side === 'W' ? out - 5 - label.w : out + 5;
-  }
+    state.set(id, 'done');
+  };
+  for (const id of starts) if (!state.has(id)) visit(id);
+  return back;
 }
 
 /** Length of a right-angled path. */
 export const pathLength = (points: Pt[]): number =>
   points.slice(1).reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
-
-const turn = (p: Pt): Pt => ({ x: p.y, y: p.x });
-const turnRect = (r: Rect): Rect => ({ x: r.y, y: r.x, w: r.h, h: r.w });
 
 /** True when a segment of `a` runs along a segment of `b`, less than `gap` away, for more than `over` pixels. */
 export function runsAlong(a: Pt[], b: Pt[], gap: number, over = 1): boolean {
@@ -350,74 +262,6 @@ export function runsAlong(a: Pt[], b: Pt[], gap: number, over = 1): boolean {
     }
   }
   return false;
-}
-
-/**
- * When ELK wraps a chain, it routes the cut line out past the end of the row, back along the
- * channel between the rows, and in from the far side. This draws the short way instead: out of
- * the near side of the source, along the same channel, and into the target. The ELK route stays
- * when the short one would touch another element, a group that holds neither end, or another line.
- */
-function shortenWrap(path: EdgePath, boxes: Map<string, NodeBox>, others: EdgePath[], direction: 'DOWN' | 'RIGHT'): void {
-  const from = boxes.get(path.rel.from)!, to = boxes.get(path.rel.to)!;
-  if (from === to || path.points.length < 6) return;
-  // The work is done as if rows run left to right. A top-down layout is turned on its side first.
-  const t = direction === 'DOWN';
-  const rect = (r: Rect): Rect => (t ? turnRect(r) : r);
-  const pts = t ? path.points.map(turn) : path.points;
-  const a = rect(from), z = rect(to);
-  if (z.y < a.y + a.h + 16) return;
-  let channel: number | undefined, longest = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const p = pts[i - 1]!, q = pts[i]!;
-    if (Math.abs(p.y - q.y) > 0.5 || p.y <= a.y + a.h + 6 || p.y >= z.y - 6 || Math.abs(p.x - q.x) <= longest) continue;
-    longest = Math.abs(p.x - q.x);
-    channel = p.y;
-  }
-  if (channel === undefined) return;
-  const holds = (g: NodeBox, b: NodeBox): boolean => {
-    const seen = new Set<string>();
-    for (let p: NodeBox | undefined = b; p && !seen.has(p.el.id); p = p.el.parent !== undefined ? boxes.get(p.el.parent) : undefined) {
-      if (p === g) return true;
-      seen.add(p.el.id);
-    }
-    return false;
-  };
-  const label = path.label;
-  const lw = label ? (t ? label.h : label.w) : 0, lh = label ? (t ? label.w : label.h) : 0;
-  const old = pathLength(pts);
-  // The first route that is clear wins: the channel ELK kept, then one a step above or below it,
-  // from the middle of the source or a quarter in, to the middle of the target or a quarter in.
-  const attempt = (y: number, ax: number, zx: number): boolean => {
-    if (y <= a.y + a.h + 6 || y >= z.y - 6) return false;
-    const short: Pt[] = Math.abs(ax - zx) < 1
-      ? [{ x: ax, y: a.y + a.h }, { x: ax, y: z.y }]
-      : [{ x: ax, y: a.y + a.h }, { x: ax, y }, { x: zx, y }, { x: zx, y: z.y }];
-    if (pathLength(short) > old * 0.7) return false;
-    const mid = short.length === 2 ? { x: ax, y: (a.y + a.h + z.y) / 2 } : { x: (ax + zx) / 2, y };
-    const spot: Rect = { x: mid.x - lw / 2, y: mid.y - lh / 2, w: lw, h: lh };
-    const inner = [{ x: ax, y: a.y + a.h + 1 }, ...short.slice(1, -1), { x: zx, y: z.y - 1 }];
-    for (const b of boxes.values()) {
-      if (b === from || b === to || (b.group && (holds(b, from) || holds(b, to)))) continue;
-      const r = rect(b);
-      if (crossesRect(inner, r, b.group ? 0 : 8)) return false;
-      if (label && !b.group && spot.x < r.x + r.w + 2 && spot.x + spot.w > r.x - 2 && spot.y < r.y + r.h + 2 && spot.y + spot.h > r.y - 2) return false;
-    }
-    for (const other of others) {
-      const o = t ? other.points.map(turn) : other.points;
-      if (runsAlong(short, o, 8) || (label && crossesRect(o, spot, 2))) return false;
-    }
-    path.points = t ? short.map(turn) : short;
-    if (label) Object.assign(label, t ? { x: spot.y, y: spot.x } : { x: spot.x, y: spot.y });
-    return true;
-  };
-  // A group name sits above the left of a card, so the line comes in right of the middle.
-  const named = !t && to.card?.lane !== undefined;
-  for (const step of [0, -14, 14, -28, 28]) {
-    for (const zf of named ? [0.75] : [0.5, 0.75, 0.25]) {
-      for (const af of [0.5, 0.25, 0.75]) if (attempt(channel + step, a.x + a.w * af, z.x + z.w * zf)) return;
-    }
-  }
 }
 
 /** Move an edge end from the bounding box onto the curved side of a cylinder or pipe. */
@@ -434,279 +278,267 @@ function snap(p: Pt, n: NodeBox): void {
   }
 }
 
-export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promise<Layout> {
-  const direction = opts.direction ?? (spec.direction === 'RIGHT' ? 'RIGHT' : 'DOWN');
-  const numbered = opts.numbered ?? spec.labels === 'numbered';
-  const detail = opts.detail ?? spec.detail ?? 'auto';
+/** True when the cards of a spec are drawn without their descriptions: when asked, and past 5 elements unless full detail is asked. */
+export function isCompact(spec: DiagramSpec, detail: Detail): boolean {
   const parents = new Set(spec.elements.map((e) => e.parent));
   const leaves = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node' && e.type !== 'file').length;
-  const compact = detail === 'compact' || (detail === 'auto' && leaves > FULL_DETAIL_MAX);
+  return detail === 'compact' || (detail === 'auto' && leaves > FULL_DETAIL_MAX);
+}
+
+export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promise<Layout> {
+  const direction = opts.direction ?? (spec.direction === 'RIGHT' ? 'RIGHT' : 'DOWN');
+  const down = direction === 'DOWN';
+  const numbered = opts.numbered ?? spec.labels === 'numbered';
+  const parents = new Set(spec.elements.map((e) => e.parent));
+  const compact = isCompact(spec, opts.detail ?? spec.detail ?? 'auto');
   // A code diagram is drawn tighter, and its groups are light bands.
   const code = spec.type === 'code';
   // One long path stacks every header, so the cards of a diagram match.
   const stack = spec.elements.some(longPath);
   const nodeW = compact && numbered ? NODE_W_FLOW : NODE_W;
-  const ids = new Set(spec.elements.map((e) => e.id));
   const byId = new Map(spec.elements.map((e) => [e.id, e]));
-  // Top down, lines arrive from above, where the name would be. So the flat form is for left to right only.
-  const flat = code && direction === 'RIGHT' && Boolean(opts.flat) && spec.elements.some((e) => e.parent !== undefined && ids.has(e.parent));
+  const position = new Map(spec.elements.map((e, i) => [e.id, i]));
   const kids = new Map<string | undefined, SpecElement[]>();
   for (const el of spec.elements) {
-    // Flat, the files stand alone and the groups are not laid out.
-    if (flat && parents.has(el.id)) continue;
-    const key = !flat && el.parent !== undefined && ids.has(el.parent) ? el.parent : undefined;
+    const key = el.parent !== undefined && byId.has(el.parent) ? el.parent : undefined;
     kids.set(key, [...(kids.get(key) ?? []), el]);
   }
-  const common = {
+  /** The element, then each group that holds it, outermost last. A parent cycle stops at the first repeat. */
+  const chain = (id: string): string[] => {
+    const out: string[] = [];
+    for (let p: string | undefined = id; p !== undefined && byId.has(p) && !out.includes(p); p = byId.get(p)!.parent) out.push(p);
+    return out;
+  };
+
+  // Elements in a parent cycle hang from nothing, and are not drawn. Nor is a relationship with an end that is not drawn.
+  const placed = new Set<string>();
+  const reach = (list: SpecElement[]): void => { for (const el of list) if (!placed.has(el.id)) { placed.add(el.id); reach(kids.get(el.id) ?? []); } };
+  reach(kids.get(undefined) ?? []);
+
+  // Shape. A flow reads in step order. Every other diagram reads in the order the spec lists its relationships.
+  const lines = spec.relationships.map((rel, i) => ({ rel, i })).filter(({ rel }) => placed.has(rel.from) && placed.has(rel.to));
+  if (spec.type === 'dynamic') lines.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
+  const back = backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
+  /** The two ends of a line as the layout engine gets them: source first. */
+  const flow = (rel: SpecRelationship, i: number): [string, string] => (back.has(i) ? [rel.to, rel.from] : [rel.from, rel.to]);
+  // Which elements have a line, themselves or inside them, and which have one arriving from beside them in their group.
+  const linked = new Set<string>(), fed = new Set<string>();
+  for (const { rel, i } of lines) {
+    const [a, z] = flow(rel, i).map(chain) as [string[], string[]];
+    for (const id of [...a, ...z]) linked.add(id);
+    // The group that holds both ends, and the child of it that the line arrives in.
+    const k = z.findIndex((id) => a.includes(id));
+    if (k === 0) continue;
+    const into = k < 0 ? z.at(-1)! : z[k - 1]!, from = k < 0 ? a.at(-1)! : a[a.indexOf(z[k]!) - 1];
+    if (from !== undefined && from !== into) fed.add(into);
+  }
+
+  const gap = (px: number): string => String(px);
+  const layered = {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
     'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.spacing.nodeNodeBetweenLayers': code ? '38' : numbered ? '14' : compact ? '18' : '26',
-    'elk.spacing.nodeNode': code ? '14' : compact ? '20' : '26',
-    'elk.spacing.edgeNode': '18',
-    'elk.spacing.edgeEdge': '14',
+    'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+    'elk.layered.spacing.nodeNodeBetweenLayers': gap(code ? 38 : numbered ? 14 : compact ? 18 : 26),
+    'elk.spacing.nodeNode': gap(code ? 14 : compact ? 20 : 26),
+    'elk.spacing.edgeNode': gap(18),
+    'elk.spacing.edgeEdge': gap(14),
     'elk.spacing.edgeLabel': '5',
     'elk.spacing.labelLabel': '6',
-    'elk.layered.spacing.edgeNodeBetweenLayers': compact ? '14' : '20',
-    'elk.layered.spacing.edgeEdgeBetweenLayers': '12',
+    // A self-relationship is a loop this far out of its element, large enough to read.
+    'elk.spacing.nodeSelfLoop': '26',
+    'elk.layered.spacing.edgeNodeBetweenLayers': gap(compact ? 14 : 20),
+    'elk.layered.spacing.edgeEdgeBetweenLayers': gap(12),
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
-    // A flow reads from its first step: when a reply closes a loop, the later step is the one drawn backwards.
-    // ELK's model-order cycle breaking throws on a graph with groups, so a flow with groups keeps the default.
-    ...(spec.type === 'dynamic' && !spec.elements.some((e) => e.parent !== undefined) ? { 'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER' } : {}),
     ...(opts.wrap ? { 'elk.aspectRatio': String(opts.wrap), 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.layered.wrapping.additionalEdgeSpacing': '14' } : {}),
   };
-  const boxes = new Map<string, NodeBox>();
-  // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
-  const build = (el: SpecElement, depth: number, seen: Set<string>, widen: Map<string, number>): any => {
-    const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
-    const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
-    if (!group && el.type === 'file') {
-      const { w, h: cardH, card } = fileCard(el, stack);
-      const lane = flat && el.parent !== undefined ? byId.get(el.parent)?.name : undefined;
-      if (lane) card.lane = lane;
-      const cap = lane ? LANE_CAP : 0, h = cardH + cap;
-      boxes.set(el.id, { el, group, depth, x: 0, y: 0, w, h, lines: [], card });
-      // Left to right, a line ends on the row it concerns: each row and the header has a port on both sides.
-      if (direction !== 'RIGHT') return { id: el.id, width: w, height: h };
-      // Each line gets a port of its own, a few pixels from the next, so two lines never merge into
-      // one and a reader can follow each from its file to its row.
-      const port = (row: number, dy: number): unknown[] => (['w', 'e'] as const).flatMap((side) => {
-        const n = Math.max(1, slots.get(slotKey(el.id, row, side))?.length ?? 0);
-        const gap = n > 1 ? Math.min(PORT_GAP, (CARD_ROW - 8) / (n - 1)) : 0;
-        return Array.from({ length: n }, (_, k) => ({
-          id: portId(el.id, row, side, k), x: side === 'w' ? 0 : w, y: dy + cap + (k - (n - 1) / 2) * gap, width: 0, height: 0,
-          layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
-        }));
-      });
-      return {
-        id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
-        ports: [...port(-1, card.head / 2), ...card.rows.flatMap((r, i) => port(i, r.dy))],
-      };
-    }
-    const light = code && group;
-    const text = group ? { h: light ? 48 : 64, lines: [] } : leafText(el, compact, nodeW);
-    const emptyW = Math.max(light ? 120 : 160, groupMinWidth(el, light));
-    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: group ? emptyW : nodeW, h: text.h, lines: text.lines, ...(light ? { light } : {}) });
-    if (!group) return { id: el.id, width: nodeW, height: text.h };
-    const below = new Set(seen).add(el.id);
-    const side = light ? 10 : compact ? 14 : 18;
-    return {
-      id: el.id,
-      width: emptyW,
-      height: text.h,
-      layoutOptions: {
-        ...common,
-        'elk.padding': `[top=${light ? 28 : compact ? 38 : 46},left=${side},bottom=${side},right=${side + (widen.get(el.id) ?? 0)}]`,
-      },
-      children: children.map((c) => build(c, depth + 1, below, widen)),
-    };
+  // Parts with no line between them are packed as rectangles. A layered layout is for parts that are joined.
+  const packed = {
+    'elk.algorithm': 'rectpacking',
+    'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+    'elk.aspectRatio': String(opts.wrap ?? PACK_ASPECT),
+    'elk.spacing.nodeNode': gap(code ? 14 : compact ? 20 : 26),
   };
-  /** The node, or the port of the symbol row or the header, that one end of a line attaches to. */
-  const end = (i: number, id: string, symbol: string | undefined, side: 'w' | 'e'): string => {
-    const b = boxes.get(id)!;
-    if (!b.card || direction !== 'RIGHT') return id;
-    const row = rowOf(b.el, symbol);
-    return portId(id, row, side, Math.max(0, slots.get(slotKey(id, row, side))?.indexOf(i) ?? 0));
-  };
-  // Top down there are no rows to end on, so several lines between the same two files would run side by side.
-  // The first one stands for them all. A line the change added or removed keeps its own.
-  const skip = new Set<number>();
-  if (code && direction === 'DOWN') {
-    const seen = new Set<string>();
-    spec.relationships.forEach((rel, i) => {
-      const key = `${rel.from}\0${rel.to}\0${rel.status ?? ''}\0${rel.label}`;
-      if (byId.get(rel.from)?.type === 'file' && byId.get(rel.to)?.type === 'file' && seen.has(key)) skip.add(i);
-      seen.add(key);
-    });
-  }
-  // Which lines end on each side of each row and header, in the order the other end appears in the spec.
-  const portId = (id: string, row: number, side: 'w' | 'e', k: number): string => `${id}\u0000${row}\u0000${side}\u0000${k}`;
-  const slotKey = (id: string, row: number, side: 'w' | 'e'): string => `${id}\u0000${row}\u0000${side}`;
+
+  // Symbol rows are ports. Lines that leave one row together share a port, and each line that
+  // arrives gets its own, a few pixels from the next, so a reader can follow each to its end.
+  type Side = 'w' | 'e';
   const rowOf = (el: SpecElement, symbol: string | undefined): number => {
     const row = symbol === undefined ? -1 : (el.symbols ?? []).findIndex((s) => s.name === symbol);
     return row < CARD_ROWS_MAX ? row : -1;
   };
-  const slots = new Map<string, number[]>();
-  const position = new Map(spec.elements.map((e, i) => [e.id, i]));
-  spec.relationships.forEach((rel, i) => {
-    if (skip.has(i)) return;
-    for (const [id, symbol, side] of [[rel.from, rel.fromSymbol, 'e'], [rel.to, rel.toSymbol, 'w']] as const) {
-      const el = byId.get(id);
-      if (el?.type !== 'file') continue;
-      const key = slotKey(id, rowOf(el, symbol), side);
-      slots.set(key, [...(slots.get(key) ?? []), i]);
-    }
-  });
-  for (const list of slots.values()) {
-    const other = (i: number): number => { const r = spec.relationships[i]!; return (position.get(r.from) ?? 0) + (position.get(r.to) ?? 0); };
-    list.sort((a, b) => other(a) - other(b) || a - b);
-  }
+  const slots = new Map<string, { name: string; rank: number }[]>();
+  const portId = (id: string, row: number, side: Side, name: string): string => `${id}\u0000${row}\u0000${side}\u0000${name}`;
+  /**
+   * The port one end of a line uses. Left to right, a line leaves on the right and arrives on the left; one drawn
+   * backwards does the reverse, and a loop stays on the right. Top down the files stand in a column and every
+   * line runs down their right side, which is the only way it can still end on a row.
+   */
+  const port = (rel: SpecRelationship, i: number, end: 'from' | 'to'): string => {
+    const el = byId.get(rel[end])!;
+    if (el.type !== 'file' || parents.has(el.id)) return el.id;
+    const loop = rel.from === rel.to, rev = back.has(i);
+    const side: Side = down ? 'e' : end === 'from' ? (rev ? 'w' : 'e') : loop || rev ? 'e' : 'w';
+    const row = rowOf(el, end === 'from' ? rel.fromSymbol : rel.toSymbol);
+    const name = end === 'from' ? `out${rel.status ?? ''}` : `in${i}`;
+    const key = `${el.id}\u0000${row}\u0000${side}`;
+    const list = slots.get(key) ?? slots.set(key, []).get(key)!;
+    if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : position.get(rel.from) ?? 0 });
+    return portId(el.id, row, side, name);
+  };
   const labels = new Map<number, ReturnType<typeof edgeLabel>>();
-  const elk = new (ELK as any)();
-  const run = async (widen: Map<string, number>): Promise<any> => {
-    boxes.clear();
-    const children = (kids.get(undefined) ?? []).map((el) => build(el, 0, new Set(), widen));
-    // In a flow the steps go to ELK in step order, which is the order it keeps.
-    const inOrder = spec.relationships.map((rel, i) => ({ rel, i }));
-    if (spec.type === 'dynamic') inOrder.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
-    const edges = inOrder.flatMap(({ rel, i }) => {
-      if (!boxes.has(rel.from) || !boxes.has(rel.to) || skip.has(i)) return [];
-      const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
-      labels.set(i, label);
-      const pad = rel.from === rel.to ? LOOP_PAD : 0;
-      const ends = { sources: [end(i, rel.from, rel.fromSymbol, 'e')], targets: [end(i, rel.to, rel.toSymbol, 'w')] };
-      if (!label.lines.length) return [{ id: `e${i}`, ...ends }];
-      return [{ id: `e${i}`, ...ends, labels: [{ id: `l${i}`, text: rel.label, width: label.w + pad, height: label.h + pad, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] }];
-    });
-    // Model order keeps the layout close to the order the spec lists things in.
-    // ELK rejects it on some nested graphs, so the second attempt runs without it.
-    const graph = (modelOrder: boolean): unknown => ({
-      id: 'root',
+  const topOf = (id: string): string => chain(id).at(-1)!;
+  // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
+  const edges: { part: string; edge: any }[] = lines.map(({ rel, i }) => {
+    const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
+    labels.set(i, label);
+    const a = port(rel, i, 'from'), z = port(rel, i, 'to');
+    return { part: topOf(rel.from), edge: {
+      id: `e${i}`, sources: [back.has(i) ? z : a], targets: [back.has(i) ? a : z],
+      ...(label.lines.length ? { labels: [{ id: `l${i}`, text: rel.label, width: label.w, height: label.h, layoutOptions: { 'elk.edgeLabels.inline': 'true' } }] } : {}),
+    } };
+  });
+
+  const boxes = new Map<string, NodeBox>();
+  const titleId = (id: string): string => `\u0000title\u0000${id}`;
+  /** Groups whose title sits in the padding at the top, with how far in. The rest have a title the engine placed. */
+  const strips = new Map<string, { x: number; y: number }>();
+  const isGroup = (el: SpecElement): boolean => (kids.get(el.id) ?? []).length > 0 || el.type === 'boundary' || el.type === 'node';
+  const build = (el: SpecElement, depth: number, seen: Set<string>): any => {
+    const children = seen.has(el.id) ? [] : (kids.get(el.id) ?? []);
+    const group = children.length > 0 || el.type === 'boundary' || el.type === 'node';
+    if (!group && el.type === 'file') {
+      const { w, h, card } = fileCard(el, stack);
+      boxes.set(el.id, { el, group, depth, x: 0, y: 0, w, h, lines: [], card });
+      const ports: unknown[] = down ? [{ id: portId(el.id, -2, 'w', 'top'), x: w / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } }] : [];
+      for (const [row, dy] of [[-1, card.head / 2] as const, ...card.rows.map((r, i) => [i, r.dy] as const)]) for (const side of ['w', 'e'] as const) {
+        const list = [...(slots.get(`${el.id}\u0000${row}\u0000${side}`) ?? [])].sort((a, b) => a.rank - b.rank);
+        const step = list.length > 1 ? Math.min(PORT_GAP, (CARD_ROW - 8) / (list.length - 1)) : 0;
+        list.forEach((slot, k) => ports.push({
+          id: portId(el.id, row, side, slot.name), x: side === 'w' ? 0 : w, y: dy + (k - (list.length - 1) / 2) * step, width: 0, height: 0,
+          layoutOptions: { 'elk.port.side': side === 'w' ? 'WEST' : 'EAST' },
+        }));
+      }
+      return { id: el.id, width: w, height: h, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' }, ports };
+    }
+    const light = code && group;
+    const text = group ? { h: light ? 48 : 64, lines: [] } : leafText(el, compact, nodeW);
+    if (!group) {
+      boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: nodeW, h: text.h, lines: text.lines });
+      return { id: el.id, width: nodeW, height: text.h };
+    }
+    const { title, w: titleW, h: titleH } = groupTitle(el, light);
+    const side = light ? 10 : compact ? 14 : 18, top = light ? 8 : 10;
+    const emptyW = Math.max(light ? 120 : 160, titleW + 2 * side);
+    boxes.set(el.id, { el, group, depth, x: 0, y: 0, w: emptyW, h: text.h, lines: [], title, ...(light ? { light } : {}) });
+    if (!children.length) { strips.set(el.id, { x: side, y: top }); return { id: el.id, width: emptyW, height: text.h }; }
+    const below = new Set(seen).add(el.id);
+    const nodes = children.map((c) => build(c, depth + 1, below));
+    // Left to right, lines enter a group through its sides, never through its top: the title sits there, in the padding.
+    // The same holds for a group that no line touches. Top down, lines come in through the top, so the title is a box
+    // of its own in a first row of the group, and the engine routes round it as it does round any box.
+    const strip = !down || !linked.has(el.id);
+    if (strip) strips.set(el.id, { x: side, y: top });
+    else {
+      nodes.unshift({ id: titleId(el.id), width: titleW, height: titleH });
+      for (const c of children) {
+        if (fed.has(c.id)) continue;
+        const onto = c.type === 'file' && !isGroup(c) ? portId(c.id, -2, 'w', 'top') : isGroup(c) && (kids.get(c.id) ?? []).length && linked.has(c.id) ? titleId(c.id) : c.id;
+        edges.push({ part: topOf(el.id), edge: { id: `t${edges.length}`, sources: [titleId(el.id)], targets: [onto] } });
+      }
+    }
+    return {
+      id: el.id,
       layoutOptions: {
-        ...common,
-        ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}),
-        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-        'elk.padding': '[top=0,left=0,bottom=0,right=0]',
-        'elk.json.edgeCoords': 'ROOT',
-        'elk.json.shapeCoords': 'ROOT',
+        ...(linked.has(el.id) ? layered : packed),
+        'elk.padding': `[top=${strip ? top + titleH + 8 : top},left=${side},bottom=${side},right=${side}]`,
+        ...(strip ? { 'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${titleW + 2 * side},${text.h})` } : {}),
       },
-      children,
-      edges,
-    });
-    const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
-    const place = (node: any): void => {
-      for (const child of node.children ?? []) {
-        const b = boxes.get(child.id)!;
-        // The card starts under the name of its group.
-        const cap = b.card?.lane ? LANE_CAP : 0;
-        Object.assign(b, { x: child.x, y: child.y + cap, w: child.width, h: child.height - cap });
-        place(child);
-      }
+      children: nodes,
     };
-    place(done);
-    return done;
   };
-  /** True when the point lies on the border of the box, as ELK placed it. */
-  const touches = (p: Pt, b: NodeBox): boolean => {
-    const cap = b.card?.lane ? LANE_CAP : 0, top = b.y - cap, bottom = b.y + b.h, t = 2;
-    const inX = p.x >= b.x - t && p.x <= b.x + b.w + t, inY = p.y >= top - t && p.y <= bottom + t;
-    return (inY && (Math.abs(p.x - b.x) < t || Math.abs(p.x - (b.x + b.w)) < t)) || (inX && (Math.abs(p.y - top) < t || Math.abs(p.y - bottom) < t));
-  };
-  let broken = 0;
-  const read = (done: any): EdgePath[] => {
-    const paths: EdgePath[] = [];
-    const loops: { path: EdgePath; placed?: Rect }[] = [];
-    const walk = (node: any): void => {
-      for (const child of node.children ?? []) walk(child);
-      for (const edge of node.edges ?? []) {
-        const i = Number(String(edge.id).slice(1));
-        const rel = spec.relationships[i]!;
-        const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint])
-          .map((p: Pt) => ({ x: p.x, y: p.y }));
-        const placed = edge.labels?.[0];
-        const label = labels.get(i)!;
-        const path: EdgePath = { rel, points, label: placed ? { x: placed.x, y: placed.y, w: label.w, h: label.h, lines: label.lines } : undefined };
-        paths.push(path);
-        if (rel.from === rel.to) loops.push({ path, placed: placed ? { x: placed.x, y: placed.y, w: placed.width, h: placed.height } : undefined });
-      }
+
+  // Parts of the drawing with no line between them are laid out one by one and packed side by side.
+  const roots = kids.get(undefined) ?? [];
+  const part = new Map(roots.map((el) => [el.id, el.id]));
+  const find = (id: string): string => { let p = id; while (part.get(p) !== p) p = part.get(p)!; return p; };
+  for (const { rel } of lines) part.set(find(topOf(rel.from)), find(topOf(rel.to)));
+  const built = new Map(roots.map((el) => [el.id, build(el, 0, new Set())]));
+  const parts = new Map<string, string[]>();
+  for (const el of roots) parts.set(find(el.id), [...(parts.get(find(el.id)) ?? []), el.id]);
+  const frame = { 'elk.padding': '[top=0,left=0,bottom=0,right=0]', 'elk.json.edgeCoords': 'ROOT', 'elk.json.shapeCoords': 'ROOT' };
+  const graph = (modelOrder: boolean): unknown => {
+    const joined = { ...layered, ...(modelOrder ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES' } : {}), ...frame };
+    const within = (ids: string[]): unknown[] => edges.filter((e) => ids.includes(find(e.part)) || ids.includes(e.part)).map((e) => e.edge);
+    if (parts.size <= 1) return { id: 'root', layoutOptions: joined, children: [...built.values()], edges: within([...built.keys()]) };
+    return {
+      id: 'root',
+      layoutOptions: { ...packed, ...frame, 'elk.spacing.nodeNode': gap(26) },
+      children: [...parts.values()].map((ids, k) => (ids.length === 1 && !linked.has(ids[0]!) ? built.get(ids[0]!)
+        : { id: `\u0000part\u0000${k}`, layoutOptions: joined, children: ids.map((id) => built.get(id)), edges: within(ids) })),
     };
-    walk(done);
-    for (const { path, placed } of loops) growLoop(path, boxes.get(path.rel.from)!, placed, paths.filter((p) => p !== path));
-    if (opts.wrap) for (const path of paths) shortenWrap(path, boxes, paths.filter((p) => p !== path), direction);
-    broken = spec.relationships.filter((rel, i) => boxes.has(rel.from) && boxes.has(rel.to) && !skip.has(i)).length - paths.length;
-    for (const path of paths) {
-      if (path.points.length < 2) { broken++; continue; }
-      if (path.rel.from !== path.rel.to && !(touches(path.points[0]!, boxes.get(path.rel.from)!) && touches(path.points.at(-1)!, boxes.get(path.rel.to)!))) broken++;
-      // ELK ends a line on the room kept for a group name above a card. It goes on to the card.
-      const onto = boxes.get(path.rel.to)!, tip = path.points.at(-1)!;
-      if (onto.card?.lane && Math.abs(tip.y - (onto.y - LANE_CAP)) < 0.5) tip.y = onto.y;
-      snap(path.points[0]!, boxes.get(path.rel.from)!);
-      snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
-    }
-    return paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
   };
-  // ELK sizes a group from its children alone, and does not know about the label or the badge.
-  // A group narrower than its label, or one whose label row has no place for the badge that is
-  // clear of lines, is laid out again with that much more padding on the right.
-  // (`elk.nodeSize.minimum` would do the first in one pass, but elkjs 0.12 swaps its width and
-  // height on a group with children in a top-down layout.)
-  const widen = new Map<string, number>();
-  const roomed = new Set<string>(), titled = new Set<string>();
-  let done: any, paths: EdgePath[] = [];
-  for (let pass = 0; pass < 7; pass++) {
-    done = await run(widen);
-    paths = read(done);
-    let again = false;
-    // Deepest first: a group that grows makes the groups around it grow too.
-    const groups = [...boxes.values()].filter((g) => g.group).sort((a, z) => z.depth - a.depth);
-    const gained = new Map<string | undefined, number>();
-    for (const b of groups) {
-      const inside = gained.get(b.el.id) ?? 0;
-      const missing = Math.max(0, Math.ceil(groupMinWidth(b.el, b.light) - b.w - inside));
-      if (missing > 0) { widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + missing); again = true; }
-      gained.set(b.el.parent, Math.max(gained.get(b.el.parent) ?? 0, inside + missing));
+  const elk = new (ELK as any)();
+  // Model order keeps the layout close to the order the spec lists things in.
+  // ELK rejects it on some nested graphs, so the second attempt runs without it.
+  const done = await elk.layout(graph(true)).catch(() => elk.layout(graph(false)));
+
+  const paths: EdgePath[] = [];
+  const read = (node: any): void => {
+    for (const child of node.children ?? []) {
+      const id = String(child.id);
+      if (id.startsWith('\u0000title\u0000')) Object.assign(boxes.get(id.slice(7))!.title!, { x: child.x, y: child.y });
+      else if (boxes.has(id)) Object.assign(boxes.get(id)!, { x: child.x, y: child.y, w: child.width, h: child.height });
+      read(child);
     }
-    if (!again) {
-      for (const b of groups) {
-        const found = groupBadge(b, paths);
-        if (!found || found.hits === 0 || roomed.has(b.el.id)) continue;
-        roomed.add(b.el.id);
-        widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + found.rect.w + BADGE_GAP);
-        again = true;
-      }
+    for (const edge of node.edges ?? []) {
+      if (!String(edge.id).startsWith('e')) continue;
+      const i = Number(String(edge.id).slice(1));
+      const rel = spec.relationships[i]!;
+      const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint]).map((p: Pt) => ({ x: p.x, y: p.y }));
+      if (back.has(i)) points.reverse();
+      const placed = edge.labels?.[0];
+      const label = labels.get(i)!;
+      paths.push({ rel, points, label: placed ? { x: placed.x, y: placed.y, w: label.w, h: label.h, lines: label.lines } : undefined });
     }
-    if (!again && opts.clearTitles) {
-      for (const b of groups) {
-        b.badge = groupBadge(b, paths)?.rect;
-        const title = groupTitle(b, paths);
-        if (!title || title.hits === 0 || titled.has(b.el.id)) continue;
-        titled.add(b.el.id);
-        widen.set(b.el.id, (widen.get(b.el.id) ?? 0) + Math.ceil(title.w) + 12);
-        again = true;
-      }
-    }
-    if (!again) break;
-  }
-  let width: number = done.width ?? 0, height: number = done.height ?? 0;
-  if (opts.wrap) {
-    // A shortened line leaves the channel ELK kept for it at the edge of the drawing empty.
-    const rects: Rect[] = [...boxes.values(), ...paths.flatMap((p) => [...p.points.map((q) => ({ x: q.x, y: q.y, w: 0, h: 0 })), ...(p.label ? [p.label] : [])])];
-    const left = Math.min(...rects.map((r) => r.x)), top = Math.min(...rects.map((r) => r.y));
-    width = Math.max(...rects.map((r) => r.x + r.w)) - left;
-    height = Math.max(...rects.map((r) => r.y + r.h)) - top;
-    for (const b of boxes.values()) { b.x -= left; b.y -= top; }
+  };
+  read(done);
+  // A relationship the engine gave no route is kept with no points, so that it is counted as not drawn.
+  for (const { rel } of lines) if (!paths.some((p) => p.rel === rel)) paths.push({ rel, points: [] });
+  // The engine centres a title box over the boxes under it. It is moved to the left of its row, as far as the
+  // row is empty: the row was kept for it, and the move stops at the first line or label, so it cannot cover one.
+  for (const b of boxes.values()) {
+    const t = b.title;
+    if (!t || strips.has(b.el.id)) continue;
+    const row: Rect = { x: b.x, y: t.y - 4, w: t.x - b.x, h: t.h + 8 };
+    let left = b.x + (b.light ? 10 : compact ? 14 : 18);
     for (const p of paths) {
-      for (const q of p.points) { q.x -= left; q.y -= top; }
-      if (p.label) { p.label.x -= left; p.label.y -= top; }
+      for (let i = 1; i < p.points.length; i++) {
+        const far = Math.max(p.points[i - 1]!.x, p.points[i]!.x);
+        if (far < t.x && crossesRect([p.points[i - 1]!, p.points[i]!], row)) left = Math.max(left, far + 10);
+      }
+      if (p.label && p.label.x < t.x && p.label.y < row.y + row.h && p.label.y + p.label.h > row.y) left = Math.max(left, p.label.x + p.label.w + 10);
     }
+    t.x = Math.min(t.x, left);
   }
-  for (const b of boxes.values()) b.badge = b.group ? groupBadge(b, paths)?.rect : leafBadge(b);
-  for (const b of boxes.values()) { const title = groupTitle(b, paths); if (title) b.title = { x: title.x, y: title.y, w: title.w, h: title.h }; }
+  for (const b of boxes.values()) {
+    const at = strips.get(b.el.id);
+    if (b.title && at) Object.assign(b.title, { x: b.x + at.x, y: b.y + at.y });
+    const status = active(b.el.status);
+    b.badge = b.title ? (status && !b.light ? { x: b.title.x + b.title.w + BADGE_GAP, y: b.title.y + 2, w: badgeWidth(status), h: BADGE_H } : undefined) : leafBadge(b);
+  }
+  for (const path of paths) {
+    if (path.points.length < 2) continue;
+    snap(path.points[0]!, boxes.get(path.rel.from)!);
+    snap(path.points.at(-1)!, boxes.get(path.rel.to)!);
+  }
+  paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
   // A wrap that cut nothing gives the same drawing as no wrap.
   const wrapped = Boolean(opts.wrap) && paths.some((p) => {
     const a = boxes.get(p.rel.from)!, z = boxes.get(p.rel.to)!;
-    return a !== z && (direction === 'RIGHT' ? z.y >= a.y + a.h && z.x < a.x : z.x >= a.x + a.w && z.y < a.y);
+    if (a === z || back.has(spec.relationships.indexOf(p.rel))) return false;
+    return down ? z.x >= a.x + a.w && z.y < a.y : z.y >= a.y + a.h && z.x < a.x;
   });
-  return { width, height, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, flat, broken, folded: skip.size };
+  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped };
 }

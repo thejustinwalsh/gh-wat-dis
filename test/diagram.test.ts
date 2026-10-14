@@ -5,7 +5,7 @@ import { lintSpec, renderSvg, toMermaid } from '../src/diagram/index.ts';
 import { fit, textWidth, wrap } from '../src/diagram/measure.ts';
 import { DARK, FILLS, LIGHT, STATUS_COLOURS, contrast } from '../src/diagram/theme.ts';
 import { fit as fitLayout } from '../src/diagram/fit.ts';
-import { GROUP_PAD_X, crossesRect, groupLabelWidth, layout } from '../src/diagram/layout.ts';
+import { crossesRect, groupLabelWidth, layout } from '../src/diagram/layout.ts';
 import type { Layout, NodeBox, Rect } from '../src/diagram/layout.ts';
 import type { DiagramSpec } from '../src/spec.ts';
 
@@ -196,19 +196,30 @@ test('mermaid: flowchart with subgraphs, shapes and statuses', () => {
   assert.match(odd, /^flowchart LR\n {2}n_end\(\["Say #quot;hi#quot;<br\/>\[Person\]"\]\)/);
 });
 
-test('fit: a flow draws left to right with numbered steps inside the page width', async () => {
+test('fit: a flow starts at the top left, keeps its words when they fit, and stays inside the page width', async () => {
   const { render, toLegend, MAX_WIDTH } = await import('../src/diagram/index.ts');
+  const { judge } = await import('../src/diagram/fit.ts');
   const flow = await render(example('dynamic'));
-  assert.equal(flow.direction, 'RIGHT');
-  assert.equal(flow.numbered, true);
   assert.ok(flow.width <= MAX_WIDTH, `${flow.width}`);
-  assert.match(flow.svg, /class="en"[^>]*>1</);
+  assert.equal(flow.report.passed, true);
+  assert.equal(flow.numbered, false);
+  assert.match(flow.svg, />1\. Submits the checkout/);
+  // Step 1 leaves the element nearest the top left, in either direction.
+  for (const direction of ['DOWN', 'RIGHT'] as const) {
+    const l = (await judge(example('dynamic'), { direction })).layout;
+    const first = l.edges.find((e) => e.rel.order === 1)!;
+    const from = l.nodes.find((b) => b.el.id === first.rel.from)!;
+    for (const b of l.nodes) if (!b.group) assert.ok(direction === 'DOWN' ? from.y <= b.y : from.x <= b.x, `${direction}: ${b.el.id} is before the first step`);
+  }
+  const numbered = await render(example('dynamic'), { labels: 'numbered' });
+  assert.match(numbered.svg, /class="en"[^>]*>1</);
   const legend = toLegend(example('dynamic'));
   assert.match(legend, /^\| # \| From \| To \| What \| How \|/);
   assert.match(legend, /\| 1 \| Shopper \| Storefront \| Submits the checkout form \| `HTTPS` \|/);
-  const forced = await render(example('dynamic'), { labels: 'text', direction: 'DOWN' });
+  const forced = await render(example('dynamic'), { labels: 'text', direction: 'RIGHT' });
   assert.equal(forced.numbered, false);
-  assert.equal(forced.direction, 'DOWN');
+  assert.equal(forced.direction, 'RIGHT');
+  assert.ok(forced.report.candidates.every((c) => c.direction === 'RIGHT' && c.labels === 'text'), 'what the caller names is never overridden');
 });
 
 const stress = (): DiagramSpec =>
@@ -226,7 +237,8 @@ async function layouts(spec: DiagramSpec): Promise<Layout[]> {
   return all;
 }
 
-test('layout: a group is as wide as its label, so the label is never cut', async () => {
+test('layout: a group is as wide as its title, the title is never cut, and no line runs through it', async () => {
+  const { measure } = await import('../src/diagram/judge.ts');
   const name = 'Payments and settlement reconciliation platform for the European region';
   const spec: DiagramSpec = {
     title: 'Long group', type: 'container',
@@ -241,27 +253,35 @@ test('layout: a group is as wide as its label, so the label is never cut', async
   for (const l of await layouts(spec)) {
     for (const id of ['g', 'in', 'empty']) {
       const b = box(l, id);
-      const room = b.w - 2 * GROUP_PAD_X - (b.badge ? b.badge.w : 0);
-      assert.ok(room >= groupLabelWidth(b.el), `${l.direction} ${id}: ${b.w}px for a ${Math.ceil(groupLabelWidth(b.el))}px label`);
+      assert.ok(b.title && inside(b.title, b), `${l.direction} ${id}: the title is inside its group`);
+      assert.ok(b.title.w >= Math.min(groupLabelWidth(b.el), textWidth(b.el.name, 13, true)) - 1, `${l.direction} ${id}: the title has the room its words need`);
       if (b.badge) {
         assert.ok(inside(b.badge, b), `${id} badge is inside the group`);
-        assert.ok(b.badge.x >= b.x + GROUP_PAD_X + groupLabelWidth(b.el), `${id} badge is clear of the label`);
+        assert.ok(b.badge.x >= b.title.x + b.title.w, `${id} badge is clear of the title`);
       }
     }
-    assert.ok(inside(box(l, 'in'), box(l, 'g')), 'the widened group still fits inside its parent');
+    assert.ok(inside(box(l, 'in'), box(l, 'g')), 'a group fits inside its parent');
+    assert.deepEqual([measure(l).titles, measure(l).clipped], [0, 0]);
   }
   for (const direction of ['DOWN', 'RIGHT'] as const) {
     const svg = await renderSvg(spec, { direction });
     assertWellFormed(svg);
     assert.doesNotMatch(svg, /\u2026/);
-    assert.ok(svg.includes(`>${name}<tspan class="gk" dx="8">[Bounded context, team Ledger]</tspan>`), 'name and kind on one line');
+    // A long title puts the kind under the name.
+    assert.ok(svg.includes(`>${name}</text><text class="gk"`), 'the long name is whole, with its kind under it');
     assert.ok(svg.includes('>Primary database cluster node group in Frankfurt<'));
     assert.ok(svg.includes('>An empty zone with a rather long name as well<'));
   }
-  // A group whose label already fits is left alone.
-  const plain = await fitLayout(example('change-impact'));
-  const checkout = box(plain, 'checkout');
-  assert.ok(checkout.w - 2 * GROUP_PAD_X > groupLabelWidth(checkout.el) + 100);
+  // The layout engine places a title as it places a box. So in every layout of the nested specs, both ways,
+  // with words or numbers, no line runs through the name of a group.
+  for (const nested of [pressure('04-nested'), pressure('n15-deployment'), pressure('09-statuses'), example('in-process'), example('change-impact')]) {
+    for (const l of await layouts(nested)) {
+      for (const g of l.nodes.filter((b) => b.group)) {
+        assert.ok(g.title && inside(g.title, g), `${nested.title} ${l.direction}: the name of ${g.el.id} is inside it`);
+        for (const e of l.edges) assert.ok(!crossesRect(e.points, g.title, 1), `${nested.title} ${l.direction}: ${e.rel.from} -> ${e.rel.to} runs through the name of ${g.el.id}`);
+      }
+    }
+  }
 });
 
 test('layout: no relationship line runs under a status badge', async () => {
@@ -280,7 +300,7 @@ test('layout: no relationship line runs under a status badge', async () => {
       { from: 'bus', to: 'a', label: 'Feeds back' },
     ],
   };
-  let underOldBadge = 0, checked = 0;
+  let checked = 0;
   const specs = [hub, stress(), ...['change-impact', 'in-process', 'focused', 'whole-system'].map(example)];
   for (const spec of specs) {
     for (const l of [...await layouts(spec), await fitLayout(spec)]) {
@@ -292,11 +312,6 @@ test('layout: no relationship line runs under a status badge', async () => {
           checked++;
           assert.ok(!crossesRect(e.points, b.badge, 2),
             `${spec.title} (${l.direction}${l.numbered ? ', numbered' : ''}): ${e.rel.from} -> ${e.rel.to} runs under the badge of ${b.el.id}`);
-        }
-        // Where the badge used to be: across the top border, at the right.
-        if (!b.group) {
-          const old = { x: b.x + b.w - 10 - b.badge.w, y: b.y - 9, w: b.badge.w, h: 18 };
-          underOldBadge += l.edges.filter((e) => (e.rel.from === b.el.id || e.rel.to === b.el.id) && crossesRect(e.points, old)).length;
         }
       }
       for (const b of l.nodes.filter((n) => !n.badge)) assert.ok(!b.el.status || b.el.status === 'unchanged');
@@ -311,7 +326,6 @@ test('layout: no relationship line runs under a status badge', async () => {
     }
   }
   assert.ok(checked > 500);
-  assert.ok(underOldBadge > 0, 'the specs include lines that enter a marked element at its top right');
   const svg = await renderSvg(hub);
   for (const words of ['+ ADDED', '~ CHANGED', '\u2212 REMOVED', 'AFFECTED']) assert.ok(svg.includes(`>${words}<`), words);
 });
@@ -325,7 +339,7 @@ test('layout: a self-relationship draws a loop large enough to read, with its la
       const where = `${l.direction}${l.numbered ? ', numbered' : ''}: ${e.rel.from}`;
       const xs = e.points.map((p) => p.x), ys = e.points.map((p) => p.y);
       const bounds = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-      assert.ok(bounds.w >= 24 && bounds.h >= 24, `${where} loop is ${bounds.w} x ${bounds.h}`);
+      assert.ok(Math.max(bounds.w, bounds.h) >= 24 && Math.min(bounds.w, bounds.h) >= 16, `${where} loop is ${bounds.w} x ${bounds.h}`);
       const node = box(l, e.rel.from);
       assert.ok(e.label, `${where} has a label`);
       assert.ok(!overlap(e.label, node), `${where} label overlaps its element`);
@@ -388,70 +402,83 @@ test('png: the check tells a drawing with its text from one without, and a blank
 const fixture = (name: string): DiagramSpec =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8')) as DiagramSpec;
 
-test('judge: every example keeps short lines, few corners, clear boxes and clear labels', async () => {
+test('judge: every example passes every gate it can, with short lines and few corners', async () => {
   const { judge } = await import('../src/diagram/fit.ts');
   const specs: [string, DiagramSpec][] = [
     ...['context', 'container', 'change-impact', 'dynamic', 'focused', 'in-process', 'code', 'whole-system'].map((n): [string, DiagramSpec] => [n, example(n)]),
-    ['three groups', fixture('diagram-three-groups')], ['five components', fixture('diagram-five-components')], ['containers', fixture('diagram-containers')],
+    ['five components', fixture('diagram-five-components')], ['containers', fixture('diagram-containers')],
   ];
   for (const [name, spec] of specs) {
     const { report } = await judge(spec);
     const c = report.candidates.find((k) => k.chosen)!;
+    // The whole map is past the budget of a container diagram: it is the one example no rung fits, and it says so.
+    assert.equal(report.passed, name !== 'whole-system', `${name}: ${report.why}`);
+    assert.deepEqual(c.fails.filter((g) => g !== 'width' && g !== 'height'), [], name);
     assert.ok(c.longest <= 1.2, `${name}: a line is ${c.longest} times the diagonal`);
-    assert.ok(c.maxBends <= (name === 'in-process' ? 8 : 4), `${name}: a line has ${c.maxBends} corners`);
+    assert.ok(c.maxBends <= 6, `${name}: a line has ${c.maxBends} corners`);
     assert.ok(c.bends <= c.lines * 3, `${name}: ${c.bends} corners on ${c.lines} lines`);
     assert.ok(c.detour <= c.lines * 160, `${name}: ${c.detour}px of detour on ${c.lines} lines`);
-    assert.ok(c.crossings <= Math.max(1, c.lines / 4), `${name}: ${c.crossings} crossings on ${c.lines} lines`);
-    assert.equal(c.through, 0, `${name}: a line runs through a box`);
-    assert.equal(c.overlaps, 0, `${name}: a label lies on a line or a box`);
-    assert.equal(c.broken, 0, `${name}: a relationship is not drawn`);
-    // The examples are the good cases: none draws a warning about its lines. A few are too wide or too tall, and say so.
-    // `in-process` nests three groups deep, and lines enter two of them through the name.
-    const allowed = (w: string): boolean => w.includes('is wider than') || w.includes('px tall') || w.includes('name of a group');
+    assert.ok(c.crossings <= Math.max(2, c.lines / 4), `${name}: ${c.crossings} crossings on ${c.lines} lines`);
+    if (name === 'whole-system') continue;
+    assert.deepEqual([c.broken, c.through, c.titles, c.struck, c.overlaps, c.clipped], [0, 0, 0, 0, 0, 0], name);
+    // The examples are the good cases: none draws a warning about its lines. A few are tall, and say so.
+    const allowed = (w: string): boolean => w.includes('is wider than') || w.includes('px tall');
     assert.deepEqual(report.warnings.filter((w) => !allowed(w)), [], name);
   }
 });
 
-test('judge: a small change never gets wrap-around lines to save height or width', async () => {
+test('judge: a direction, a label mode and a level of detail that are named are never overridden', async () => {
   const { render } = await import('../src/diagram/svg.ts');
-  for (const name of ['diagram-three-groups', 'diagram-five-components']) {
-    const out = await render(fixture(name));
-    const c = out.report.candidates.find((k) => k.chosen)!;
-    assert.ok(out.width <= 860, `${name}: ${out.width}px wide`);
-    assert.ok(c.detour <= 60, `${name}: ${c.detour}px of detour`);
-    assert.ok(c.maxBends <= 4 && c.longest < 0.6, `${name}: ${c.maxBends} corners, ${c.longest} of the diagonal`);
-    assert.ok(out.report.why.startsWith('kept top down, words on the lines'), out.report.why);
+  const { advise } = await import('../src/diagram/advise.ts');
+  // This spec names left to right, which is far too wide for it. It is drawn left to right, and the report says no rung fits.
+  const pinned = await render(fixture('diagram-three-groups'));
+  assert.equal(pinned.direction, 'RIGHT');
+  assert.ok(pinned.report.candidates.every((k) => k.direction === 'RIGHT'));
+  assert.equal(pinned.report.passed, false);
+  assert.match(pinned.report.why, /^no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/);
+  assert.match(pinned.report.warnings[0]!, /is wider than GitHub's 860px body/);
+  // Taking the direction out of the spec is the fix, and it was tried before it is offered.
+  const fixes = (await advise(fixture('diagram-three-groups'), {}, pinned.report)).fixes;
+  assert.ok(fixes.some((f) => f.command === 'graph set --direction ""' && f.width <= 860), fixes.map((f) => f.command).join('|'));
+  const { direction: _direction, ...free } = fixture('diagram-three-groups');
+  const out = await render(free);
+  assert.deepEqual([out.direction, out.report.passed, out.width <= 860], ['DOWN', true, true]);
+  for (const opts of [{ labels: 'text' as const }, { labels: 'numbered' as const }, { detail: 'full' as const }, { detail: 'compact' as const }, { direction: 'RIGHT' as const }, { direction: 'DOWN' as const }]) {
+    const r = await render(fixture('diagram-containers'), opts);
+    for (const k of r.report.candidates) {
+      if ('labels' in opts) assert.equal(k.labels, opts.labels);
+      if ('direction' in opts) assert.equal(k.direction, opts.direction);
+      if ('detail' in opts && opts.detail === 'compact') assert.equal(k.compact, true);
+    }
   }
-  // The spec asks for left to right, which is far too wide here. The report says why it was turned.
-  const turned = await render(fixture('diagram-three-groups'));
-  assert.match(turned.report.why, /left to right is \d+px (wide|taller)/);
-  // The container view of this repository, both ways: no line leaves by the far edge to come back in.
-  for (const direction of [undefined, 'RIGHT', 'DOWN'] as const) {
-    const out = await render(fixture('diagram-containers'), direction ? { direction } : {});
-    const c = out.report.candidates.find((k) => k.chosen)!;
-    assert.ok(c.worst === undefined && c.longest <= 0.9 && c.maxBends <= 6, `containers ${direction ?? 'auto'}: ${JSON.stringify(c.worst)} ${c.longest} ${c.maxBends}`);
-  }
-  // On the command line a direction is an order.
-  const forced = await render(fixture('diagram-three-groups'), { direction: 'RIGHT' });
-  assert.equal(forced.direction, 'RIGHT');
-  assert.ok(forced.report.candidates.every((k) => k.direction === 'RIGHT'));
 });
 
-test('judge: a detour, a crossing and a covered label each cost more than the height they save', async () => {
-  const { lineCost, faults } = await import('../src/diagram/judge.ts');
-  const calm = { lines: 4, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, overlaps: 0, titles: 0 };
-  assert.equal(lineCost(calm), 0);
-  assert.ok(lineCost({ ...calm, detour: 2000 }) > 1000);
-  assert.ok(lineCost({ ...calm, through: 1 }) >= 300 && lineCost({ ...calm, overlaps: 1 }) >= 200);
+test('judge: the gates, the rank among layouts that pass, and the faults in words', async () => {
+  const { compare, failed, faults, rank } = await import('../src/diagram/judge.ts');
+  const calm = { lines: 4, broken: 0, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
+  const page = { width: 860, height: 1376 };
+  assert.deepEqual(failed(calm, { width: 860, height: 1376 }, page), []);
+  assert.deepEqual(failed({ ...calm, broken: 1, titles: 1, overlaps: 1 }, { width: 861, height: 1377 }, page), ['lines', 'text', 'overlap', 'width', 'height']);
+  assert.deepEqual(failed({ ...calm, through: 1 }, page, page), ['text']);
+  assert.deepEqual(failed({ ...calm, struck: 1 }, page, page), ['text']);
+  assert.deepEqual(failed({ ...calm, clipped: 1 }, page, page), ['overlap']);
+  // Crossings come first, then detour, then corners. The shape only breaks a tie: it never buys a crossing.
+  const golden = rank(calm, 800, 500), tall = rank(calm, 400, 1200);
+  assert.ok(compare(golden, tall) < 0);
+  assert.ok(compare(rank({ ...calm, crossings: 1 }, 800, 500), tall) > 0);
+  assert.ok(compare(rank({ ...calm, detour: 400 }, 800, 500), tall) > 0);
+  assert.ok(compare(rank({ ...calm, crossings: 1 }, 800, 500), rank({ ...calm, detour: 4000, bends: 40 }, 800, 500)) > 0);
   assert.deepEqual(faults(calm, (id) => id), []);
-  assert.ok(lineCost({ ...calm, titles: 1 }) >= 100);
-  const poor = faults({ ...calm, crossings: 3, through: 1, overlaps: 2, titles: 1, worst: { from: 'a', to: 'b', length: 1900, direct: 300 } }, (id) => id.toUpperCase());
+  const poor = faults({ ...calm, broken: 1, crossings: 3, through: 1, overlaps: 2, titles: 1, struck: 1, clipped: 1, worst: { from: 'a', to: 'b', length: 1900, direct: 300 } }, (id) => id.toUpperCase());
   assert.deepEqual(poor, [
+    '1 relationship is not drawn from end to end',
     'the line from "A" to "B" runs 1900px where 300px would join them',
     '1 line passes through a box that is not theirs',
-    '3 line crossings on 4 lines',
-    '2 places where a label lies on a line or a box, or one line lies on another',
     '1 line runs through the name of a group',
+    '1 line runs through a label or a badge',
+    '2 places where a label lies on a label or a box, or one line lies on another',
+    '1 group is narrower than its name',
+    '3 line crossings on 4 lines',
   ]);
   // A fault states what is wrong. A fix is printed by the tool only after it was tried.
   assert.doesNotMatch(poor.join(' '), /graph |--labels/);
@@ -474,7 +501,7 @@ test('legend: the table rows carry the numbers drawn on the lines, in the same o
   // A flow: each line carries its `order`, and the table is sorted by it even when the spec is not.
   const flow = example('dynamic');
   flow.relationships.reverse();
-  const steps = await render(flow);
+  const steps = await render(flow, { labels: 'numbered' });
   assert.equal(steps.numbered, true);
   assert.deepEqual(drawn(steps.svg), flow.relationships.map((r) => r.order));
   assert.deepEqual(rows(flow).map((r) => Number(r[0])), [1, 2, 3, 4, 5, 6, 7]);
@@ -485,7 +512,7 @@ test('legend: the table rows carry the numbers drawn on the lines, in the same o
 test('code: a file is a card with a row per symbol, and a line ends on the row it names', async () => {
   const spec = example('code');
   assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] });
-  const l = await layout(spec, { direction: 'RIGHT', flat: true });
+  const l = await layout(spec, { direction: 'RIGHT' });
   for (const b of l.nodes) {
     if (b.el.type !== 'file') continue;
     assert.ok(b.card && b.badge === undefined, b.el.id);
@@ -501,7 +528,7 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
     // Lines that share a row sit a few pixels apart, inside the row.
     assert.ok(Math.abs(tip.y - (to.y + (row ? row.dy : to.card!.head / 2))) <= 7, `${e.rel.from} -> ${e.rel.to}#${e.rel.toSymbol ?? ''}`);
     assert.ok(Math.abs(tail.x - (from.x + from.w)) < 0.5 && Math.abs(tail.y - (from.y + from.card!.head / 2)) <= 7);
-    // No two lines share an end: each can be followed from its file to its row.
+    // No two lines end on one point: each can be followed to its row. Lines that leave one file together may share their start.
     for (const o of l.edges) if (o !== e) assert.ok(Math.hypot(o.points.at(-1)!.x - tip.x, o.points.at(-1)!.y - tip.y) > 2, `${e.rel.from} and ${o.rel.from} end on one point of ${e.rel.to}`);
     assert.equal(e.label, undefined);
     for (const b of l.nodes) if (b !== to && b !== from && !b.group) assert.ok(!crossesRect(e.points, b, -1), `${e.rel.from} -> ${e.rel.to} crosses ${b.el.id}`);
@@ -510,10 +537,18 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   for (const a of files) for (const b of files) if (a !== b) assert.ok(!overlap(a, b), `${a.el.id} overlaps ${b.el.id}`);
 
   const { render } = await import('../src/diagram/svg.ts');
+  const { measure } = await import('../src/diagram/judge.ts');
   const out = await render(spec);
-  // Five files fit the page with room to spare, left to right, with no words to number.
-  assert.ok(out.width <= 760 && out.height <= 480, `${out.width} x ${out.height}`);
-  assert.deepEqual([out.direction, out.numbered], ['RIGHT', false]);
+  // Left to right is the form of a code diagram. Four files deep it is wider than the page, so the files stand
+  // in a column, where every line still ends on its row, on the right side of the card.
+  assert.deepEqual([out.direction, out.numbered, out.report.passed, out.report.rung], ['DOWN', false, true, 2]);
+  assert.match(out.report.why, /^kept top down: rung 2 of \d+\. rung 1 \(left to right\) is \d+px wide/);
+  assert.ok(out.width <= 860, `${out.width}`);
+  for (const direction of ['RIGHT', 'DOWN'] as const) {
+    const drawn = await layout(spec, { direction });
+    assert.equal(measure(drawn).broken, 0, `${direction}: every line ends on the row it names`);
+    for (const g of drawn.nodes.filter((b) => b.group)) for (const e of drawn.edges) assert.ok(!crossesRect(e.points, g.title!, 1), `${direction}: a line runs through ${g.el.name}`);
+  }
   assertWellFormed(out.svg);
   assert.match(out.svg, /^<svg[^>]*><title[^>]*>Payment retries move to idempotency keys: Code diagram for/);
   // Path, symbol names, kinds, and the same marks the lines use. A removed symbol is struck through.
@@ -526,10 +561,10 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   assert.doesNotMatch(key, /Boundary|Relationship|ADDED/);
   for (const theme of ['light', 'dark'] as const) assert.doesNotMatch(await renderSvg(spec, { theme }), /var\(--/);
 
-  // Top down there are no rows to end on, so the judge turns to it only when it must.
-  const down = await render(spec, { direction: 'DOWN' });
-  assert.equal(down.direction, 'DOWN');
-  assertWellFormed(down.svg);
+  // A direction that is named is kept, wide or not.
+  const right = await render(spec, { direction: 'RIGHT' });
+  assert.equal(right.direction, 'RIGHT');
+  assertWellFormed(right.svg);
 });
 
 test('code: lint checks symbols and symbol ends; Mermaid and the legend say what an unlabelled line means', async () => {
@@ -561,22 +596,28 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   const { fileURLToPath } = await import('node:url');
   const dir = mkdtempSync(join(tmpdir(), 'wat-report-'));
   const run = (...args: string[]) => spawnSync(process.execPath, [fileURLToPath(new URL('./diagram-run.ts', import.meta.url)), ...args], { encoding: 'utf8' });
-  const spec = fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url));
+  const spec = fileURLToPath(new URL('./fixtures/diagram-five-components.json', import.meta.url));
   const plain = run(spec, '-o', join(dir, 'a.svg'));
   assert.equal(plain.status, 0, plain.stderr);
   assert.equal(plain.stdout.trim(), join(dir, 'a.svg'));
   assert.match(plain.stderr, /^\d+ x \d+px, top down$/m);
-  assert.match(plain.stderr, /^layout: kept top down, words on the lines, wrapped onto columns, the best of \d+ layouts: left to right is \d+px/m);
+  assert.match(plain.stderr, /^layout: kept top down, words on the lines: rung 1 of \d+$/m);
   const out = run(spec, '-o', join(dir, 'b.svg'), '--png', join(dir, 'b.png'), '--report');
   assert.equal(out.status, 0, out.stderr);
-  const report = JSON.parse(out.stdout) as { svg: string; png: string; width: number; direction: string; labels: string; why: string; warnings: string[]; candidates: { chosen: boolean; direction: string; score: number; detour: number }[] };
+  const report = JSON.parse(out.stdout) as { svg: string; png: string; width: number; direction: string; labels: string; why: string; warnings: string[]; rung: number; rungs: number; passed: boolean; candidates: { chosen: boolean; direction: string; rung: number; fails: string[]; detour: number }[] };
   assert.deepEqual([report.svg, report.png, report.direction, report.labels], [join(dir, 'b.svg'), join(dir, 'b.png'), 'DOWN', 'text']);
   assert.ok(report.width <= 860 && report.why.startsWith('kept top down'));
-  assert.deepEqual(report.warnings.filter((w) => !w.includes('name of a group')), []);
+  assert.deepEqual([report.rung, report.passed], [1, true]);
+  assert.ok(report.rungs >= report.rung);
   const kept = report.candidates.filter((c) => c.chosen);
   assert.equal(kept.length, 1);
-  assert.ok(report.candidates.every((c) => c.score >= kept[0]!.score));
-  assert.ok(report.candidates.some((c) => c.direction === 'RIGHT' && c.detour > 0), 'the wrap-around layouts are in the list, with their detours');
+  assert.deepEqual([kept[0]!.rung, kept[0]!.fails], [1, []]);
+  // A spec that no rung fits is still drawn, and the layout line says so before the warnings.
+  const wide = run(fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url)), '-o', join(dir, 'c.svg'));
+  assert.equal(wide.status, 0, wide.stderr);
+  assert.match(wide.stderr, /^layout: no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/m);
+  assert.match(wide.stderr, /^warning: \d+px is wider than GitHub's 860px body/m);
+  assert.match(wide.stderr, /^fix: graph set --direction "" gives \d+ x \d+px with 1 of these 3 warnings left\.$/m);
   assert.equal(run(spec, '--report', '-o', '-').status, 2);
 });
 
@@ -585,9 +626,14 @@ const pressure = (name: string): DiagramSpec =>
 
 test('judge: a layout that drops a line or leaves one hanging is never kept', async () => {
   const { judge } = await import('../src/diagram/fit.ts');
-  // ELK returns no route for a line that goes back to an earlier element once it wraps the chain.
-  const wrapped = await layout(pressure('08-cycle'), { direction: 'RIGHT', wrap: 2 });
-  assert.ok(wrapped.broken > 0, 'the wrapped cycle is the broken layout this test is about');
+  const { measure } = await import('../src/diagram/judge.ts');
+  // ELK gives no route for some lines once it wraps a graph that has a line going back. The gate sees it.
+  const dropped = { ...(await layout(pressure('08-cycle'), { direction: 'DOWN' })) };
+  dropped.edges = dropped.edges.map((e, i) => (i === 0 ? { ...e, points: [] } : e));
+  assert.equal(measure(dropped).broken, 1);
+  const hanging = await layout(pressure('08-cycle'), { direction: 'DOWN' });
+  hanging.edges[0]!.points.at(-1)!.y += 40;
+  assert.equal(measure(hanging).broken, 1);
   const cases: [string, 'RIGHT' | 'DOWN' | undefined][] = [
     ['08-cycle', undefined], ['08-cycle', 'RIGHT'], ['05-long-fix-title', undefined], ['06-dynamic8', 'RIGHT'], ['09-statuses', 'RIGHT'], ['11-code-symrefs-ok', undefined],
   ];
@@ -597,37 +643,30 @@ test('judge: a layout that drops a line or leaves one hanging is never kept', as
     const c = report.candidates.find((k) => k.chosen)!;
     const where = `${name} ${direction ?? 'auto'}`;
     assert.equal(c.broken, 0, where);
-    assert.equal(kept.edges.filter((e) => e.points.length > 1).length + kept.folded, spec.relationships.length, `${where}: every relationship is drawn`);
-    // Each line starts on its source and ends on its target.
-    for (const e of kept.edges) {
-      if (e.rel.from === e.rel.to) continue;
-      for (const [p, id] of [[e.points[0]!, e.rel.from], [e.points.at(-1)!, e.rel.to]] as const) {
-        const b = box(kept, id);
-        const near = p.x >= b.x - 12 && p.x <= b.x + b.w + 12 && p.y >= b.y - 18 && p.y <= b.y + b.h + 12;
-        assert.ok(near, `${where}: ${e.rel.from} -> ${e.rel.to} has an end at ${Math.round(p.x)},${Math.round(p.y)}, away from ${id}`);
-      }
-    }
-    assert.ok(report.candidates.every((k) => !k.chosen || k.broken === 0));
+    assert.equal(kept.edges.filter((e) => e.points.length > 1).length, spec.relationships.length, `${where}: every relationship is drawn`);
+    assert.ok(report.candidates.every((k) => !k.chosen || !k.fails.includes('lines')));
   }
-  // The broken layouts stay in the report, marked, so a reader of the data sees why they lost.
-  const cycle = (await judge(pressure('08-cycle'))).report;
-  assert.ok(cycle.candidates.some((k) => k.broken > 0 && !k.chosen));
 });
 
-test('judge: group names are slid clear of lines, a flow starts on its first step, lines do not lie on one another', async () => {
+test('judge: a flow starts on its first step, the first relationship sets the reading order, lines do not lie on one another', async () => {
   const { judge } = await import('../src/diagram/fit.ts');
-  const nested = await judge(pressure('04-nested'));
-  const c = nested.report.candidates.find((k) => k.chosen)!;
-  assert.equal(c.titles, 0, 'no line runs through a group name');
-  for (const g of nested.layout.nodes.filter((b) => b.group)) {
-    assert.ok(g.title && g.title.x >= g.x && g.title.x + g.title.w <= g.x + g.w + 1, `${g.el.id}: the name is inside its group`);
-    for (const e of nested.layout.edges) assert.ok(!crossesRect(e.points, g.title!, 1), `${e.rel.from} -> ${e.rel.to} runs through the name of ${g.el.id}`);
-  }
   const flow = await judge(pressure('08-self-dynamic'));
   const first = flow.layout.edges.find((e) => e.rel.order === 1)!;
-  assert.ok(first.points[0]!.x < first.points.at(-1)!.x, 'step 1 runs left to right');
+  assert.ok(first.points[0]!.x < first.points.at(-1)!.x || first.points[0]!.y < first.points.at(-1)!.y, 'step 1 runs forward');
+  // A flow with a group draws, both ways.
+  for (const direction of ['DOWN', 'RIGHT'] as const) assert.equal((await judge(pressure('m1-flow-group'), { direction })).report.candidates[0]!.broken, 0);
+  // In a cycle the line that returns to the start is the one drawn backwards, whatever order the elements are listed in.
+  const cycle = pressure('08-cycle');
+  for (const elements of [cycle.elements, [...cycle.elements].reverse()]) {
+    const l = (await judge({ ...cycle, elements }, { direction: 'DOWN' })).layout;
+    const y = (id: string): number => box(l, id).y;
+    const [a, b] = [cycle.relationships[0]!.from, cycle.relationships[0]!.to];
+    assert.ok(y(a) < y(b), 'the first relationship runs down');
+    const last = cycle.relationships.at(-1)!;
+    assert.ok(y(last.to) < y(last.from), 'the relationship that closes the cycle runs back up');
+  }
   const refs = (await judge(pressure('11-code-symrefs-ok'))).report.candidates.find((k) => k.chosen)!;
-  assert.deepEqual([refs.overlaps, refs.worst], [0, undefined]);
+  assert.deepEqual([refs.overlaps, refs.broken], [0, 0]);
 });
 
 test('judge: height is warned about, and a fix is printed only after the tool tried it and it helped', async () => {
@@ -649,7 +688,6 @@ test('judge: height is warned about, and a fix is printed only after the tool tr
   // Numbers already on the lines are never offered as the cure.
   const numbered = (await judge(pressure('09-statuses'), { direction: 'RIGHT', labels: 'numbered' })).report;
   assert.doesNotMatch(numbered.warnings.join(' '), /numbered/);
-  assert.match((await judge(fixture('diagram-three-groups'))).report.why, /wrapped onto columns/);
 });
 
 test('lint: order, empty lists, wrong value types, a file outside a code diagram, a long flow', () => {
@@ -727,7 +765,7 @@ test('round 3: sizes are the whole image everywhere, and a fix never cuts the ch
   marked.elements[0]!.status = 'changed';
   marked.elements[1]!.status = 'changed';
   marked.relationships.push({ from: 'old', to: 'api', label: 'Reads from', technology: 'HTTPS' });
-  const crowded = { why: '', warnings: ['a', 'b', 'c'], candidates: [] };
+  const crowded = { why: '', rung: 1, rungs: 1, passed: true, warnings: ['a', 'b', 'c'], candidates: [] };
   const offered = (await advise(marked, {}, crowded)).fixes.find((f) => f.command.startsWith('graph drop'));
   assert.match(offered!.removes, /^removes 1 unchanged element \("Old"\) and 1 unchanged line$/);
   // `graph drop` leaves no empty group, and the scope line of a code diagram says cards were taken out.

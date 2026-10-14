@@ -74,14 +74,14 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
   }
   if (splitGroups(spec).length > 1) add('graph split', () => { const v = split(spec); return [v.overview, ...v.details.map((d) => d.spec)]; }, opts, true);
   const long = spec.elements.filter((e) => kids(spec).has(e.id) && [...e.name].length > GROUP_NAME_MAX);
-  if (long.length && report.warnings.some((w) => w.includes('name of a group'))) {
+  if (long.length) {
     add(`shorten the group name${long.length === 1 ? '' : 's'} ${long.map((e) => `"${[...e.name].slice(0, 24).join('')}…"`).join(', ')} to ${GROUP_NAME_MAX} characters or fewer`,
       () => ({ ...spec, elements: spec.elements.map((e) => (long.includes(e) ? { ...e, name: [...e.name].slice(0, GROUP_NAME_MAX).join('') } : e)) }));
   }
   if (chosen?.labels === 'text' && spec.type !== 'dynamic' && (opts.labels ?? spec.labels ?? 'auto') !== 'auto') add('--labels auto', () => spec, { ...opts, labels: 'auto' });
+  // A direction that was named is never overridden, so leaving it off is a fix like any other.
   if (opts.direction) add(`no --direction ${opts.direction.toLowerCase()}`, () => spec, { ...opts, direction: undefined });
-  // A code diagram keeps the direction its spec names. The other one is a fix like any other.
-  else if (spec.type === 'code' && spec.direction) add(`graph set --direction ${spec.direction === 'RIGHT' ? 'DOWN' : 'RIGHT'}`, () => ({ ...spec, direction: spec.direction === 'RIGHT' ? 'DOWN' : 'RIGHT' }));
+  else if (spec.direction) add('graph set --direction ""', () => { const { direction: _direction, ...rest } = spec; return rest; });
   if (opts.detail === 'full') add('no --detail full', () => spec, { ...opts, detail: undefined });
 
   const fixes: (Fix & { score: number })[] = [];
