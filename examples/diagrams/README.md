@@ -10,7 +10,7 @@ Each `.json` is a diagram spec (`src/spec.ts`). Each `.svg` beside it is what `d
 | `change-impact.json` | A change, using every status: added, changed, removed, affected, unchanged. |
 | `dynamic.json` | A dynamic diagram: relationships carry `order` and render as numbered steps. |
 | `whole-system.json` | 27 elements at component level. Too big to read in a pull request; `diagram` warns about it. |
-| `focused.json` | `whole-system.json` cut down to the change by the pipeline below. |
+| `focused.json` | The diagram of the issue on the site: the Payments worker and the Orders database change, and the Orders API is affected. Top down, so it stays readable on a phone. |
 | `code.json` | A code diagram of the same change: files as cards, a row for each symbol the change touched, lines that end on the symbol a file imports. `graph from-facts --level file` writes one from impact facts. |
 
 ## Redraw
@@ -21,24 +21,10 @@ for f in context container change-impact dynamic whole-system focused code; do
 done
 ```
 
-## How `focused.json` was made
+## Cutting a large map down to the change
 
 ```sh
 npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 examples/diagrams/whole-system.json \
   | npx gh-wat-dis graph collapse --to-type container \
-  | npx gh-wat-dis graph set --type container \
-      --title "Payment retries move to idempotency keys" --scope "the payment retry change" \
-  > examples/diagrams/focused.json
-npx gh-wat-dis diagram examples/diagrams/focused.json
-```
-
-`focus` keeps the five changed, added and removed components, their neighbours one hop away, and the
-containers and system that hold them. `collapse` folds each container's components into the container
-and merges their relationships. `set` renames the result. 27 elements become 5.
-
-Inspect a spec before choosing a filter:
-
-```sh
-npx gh-wat-dis graph stats examples/diagrams/whole-system.json
-npx gh-wat-dis graph ids examples/diagrams/whole-system.json | grep -v unchanged
+  | npx gh-wat-dis diagram -o change.svg
 ```

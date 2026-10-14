@@ -292,7 +292,7 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">2 · What changes in the system</span>
-        <figure><img src="assets/focused.svg" width="709" height="849" alt="Container diagram: the Order service and the Payment service change, and the Payment service gains a relationship to the Orders database for payment keys."></figure>
+        <figure><img src="assets/focused.svg" width="492" height="1019" alt="Container diagram: the Payments worker changes to charge once for each event, it gains a line to the Orders database, which stores payment keys, and the Orders API, which imports retryCharge, is affected."></figure>
       </div>
       <div class="block">
         <span class="tag">3 · Facts from tools, labeled</span>
@@ -464,7 +464,7 @@ Links read
     <div class="gallery">
       <figure><img src="assets/dynamic.svg" width="712" height="884" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps read in order from the top left, each with its words.</figcaption></figure>
       <figure><img src="assets/change-impact.svg" width="702" height="1104" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
-      <figure><img src="assets/in-process.svg" width="758" height="1247" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with a number on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge carries a number, and a table under the image names its ABI or protocol.</figcaption></figure>
+      <figure><img src="assets/in-process.svg" width="827" height="1340" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
     </div>
   </div>
 </section>

@@ -1,87 +1,19 @@
 {
-  "title": "Payment retries move to idempotency keys",
+  "title": "Payments worker charges once for each event",
   "type": "container",
-  "scope": "the payment retry change",
+  "scope": "the duplicate charge fix",
+  "direction": "DOWN",
   "elements": [
-    {
-      "id": "checkout",
-      "type": "system",
-      "name": "Checkout platform",
-      "description": "Takes orders, collects payment and arranges fulfilment"
-    },
-    {
-      "id": "orders",
-      "type": "container",
-      "name": "Order service",
-      "technology": "Rust, Axum",
-      "description": "Owns the order lifecycle from basket to fulfilment",
-      "parent": "checkout",
-      "meta": {
-        "collapsed": 5
-      },
-      "status": "changed"
-    },
-    {
-      "id": "payments",
-      "type": "container",
-      "name": "Payment service",
-      "technology": "Rust, Axum",
-      "description": "Authorises and captures card payments",
-      "parent": "checkout",
-      "meta": {
-        "collapsed": 3
-      },
-      "status": "changed"
-    },
-    {
-      "id": "inventory",
-      "type": "container",
-      "name": "Inventory service",
-      "technology": "Rust, Tonic",
-      "description": "Reserves and releases stock",
-      "parent": "checkout",
-      "meta": {
-        "collapsed": 1
-      }
-    },
-    {
-      "id": "orders-db",
-      "type": "datastore",
-      "name": "Orders database",
-      "technology": "PostgreSQL 16",
-      "description": "Stores orders, payments and stock reservations",
-      "parent": "checkout"
-    }
+    { "id": "stripe", "type": "system", "name": "Stripe", "external": true, "description": "Retries a webhook when the reply takes over 10 s" },
+    { "id": "shop", "type": "system", "name": "Shop", "description": "Takes orders and payments" },
+    { "id": "payments-worker", "type": "container", "name": "Payments worker", "technology": "TypeScript, Node.js", "description": "Charges once for each event.id", "parent": "shop", "status": "changed" },
+    { "id": "orders-api", "type": "container", "name": "Orders API", "technology": "TypeScript, Node.js", "description": "Refunds and reconciles with retryCharge", "parent": "shop", "status": "affected" },
+    { "id": "orders-db", "type": "datastore", "name": "Orders database", "technology": "PostgreSQL 16", "description": "Stores payment keys", "parent": "shop", "status": "changed" }
   ],
   "relationships": [
-    {
-      "from": "orders",
-      "to": "inventory",
-      "label": "Reserves stock",
-      "technology": "gRPC"
-    },
-    {
-      "from": "orders",
-      "to": "payments",
-      "label": "Authorises payment with an idempotency key; Retried failed authorisations",
-      "technology": "gRPC",
-      "meta": {
-        "merged": 2
-      },
-      "status": "changed"
-    },
-    {
-      "from": "orders",
-      "to": "orders-db",
-      "label": "Reads and writes orders",
-      "technology": "SQL"
-    },
-    {
-      "from": "payments",
-      "to": "orders-db",
-      "label": "Reads and writes payment keys",
-      "technology": "SQL",
-      "status": "added"
-    }
+    { "from": "stripe", "to": "payments-worker", "label": "Delivers payment events to", "technology": "HTTPS webhook" },
+    { "from": "payments-worker", "to": "orders-db", "label": "Stores payment keys in", "technology": "SQL", "status": "added" },
+    { "from": "orders-api", "to": "payments-worker", "label": "Retries charges with", "technology": "retryCharge import", "status": "affected" },
+    { "from": "orders-api", "to": "orders-db", "label": "Reads and writes orders", "technology": "SQL" }
   ]
 }
