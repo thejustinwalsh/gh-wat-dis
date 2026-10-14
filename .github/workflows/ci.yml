@@ -34,3 +34,45 @@ jobs:
           npx -y -p "$GITHUB_WORKSPACE"/gh-wat-dis-*.tgz gh-wat-dis install --dry-run
           npx -y -p "$GITHUB_WORKSPACE"/gh-wat-dis-*.tgz gh-wat-dis diagram "$GITHUB_WORKSPACE/examples/diagrams/dynamic.json" -o flow.svg
           test -s flow.svg
+
+  # The PNG that `diagram --png` draws depends on the fonts of the machine, and the rasterizer leaves
+  # text out without an error when it finds none. This draws every example on each system, checks the
+  # pixels, and keeps the images so a person can look at them.
+  png:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install the packed tarball the way a consumer does
+        run: |
+          npm pack
+          mkdir consumer
+          mv gh-wat-dis-*.tgz consumer/gh-wat-dis.tgz
+          mv consumer "$RUNNER_TEMP/consumer"
+          cd "$RUNNER_TEMP/consumer"
+          npm init -y > /dev/null
+          npm install ./gh-wat-dis.tgz
+      - name: Draw every example spec to PNG and check the pixels
+        run: node scripts/check-png.ts --bin "$RUNNER_TEMP/consumer/node_modules/gh-wat-dis/dist/bin.js" --out png-out
+      - name: Add the report to the run summary
+        if: always()
+        run: test -f png-out/report.md && cat png-out/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: diagram-png-${{ matrix.os }}
+          path: |
+            png-out/*.png
+            png-out/report.md
+          if-no-files-found: error

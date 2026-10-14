@@ -357,3 +357,30 @@ test('png: a drawing comes out as a PNG at twice the size, with fixed colours', 
   assert.deepEqual([...image.png.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
   assert.deepEqual([image.width, image.height], [Number(size[1]) * 2, Number(size[2]) * 2]);
 });
+
+test('png: the check tells a drawing with its text from one without, and a blank one', async () => {
+  const { toPng, drawsText } = await import('../src/tools/raster.ts');
+  const { renderSvg } = await import('../src/diagram/svg.ts');
+  const { checkPng, decodePng } = await import('../scripts/check-png.ts');
+  const spec = JSON.parse(readFileSync(new URL('../examples/diagrams/dynamic.json', import.meta.url), 'utf8')) as never;
+  const svg = await renderSvg(spec, { theme: 'light' });
+  const image = toPng(svg);
+  const decoded = decodePng(image.png);
+  assert.deepEqual([decoded.width, decoded.height, decoded.rgba.length], [image.width, image.height, image.width * image.height * 4]);
+
+  // A machine with no usable font draws no text and reports no error. This fails there, by design.
+  assert.ok(drawsText(), 'the rasterizer found no font on this machine, so PNG previews hold no text');
+  const good = checkPng('dynamic', svg, image.png);
+  assert.deepEqual(good.problems, []);
+  assert.ok(good.textPixels > good.characters * 20, `${good.textPixels} pixels for ${good.characters} characters`);
+
+  // The same drawing as a machine with no font would produce it.
+  const noText = toPng(svg.replace(/<text\b[^>]*>[\s\S]*?<\/text>/g, ''));
+  assert.match(checkPng('dynamic', svg, noText.png).problems.join('\n'), /no text was drawn: 0 pixels differ/);
+
+  const size = /viewBox="0 0 (\d+) (\d+)"/.exec(svg)!;
+  const blank = toPng(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size[1]} ${size[2]}" width="${size[1]}" height="${size[2]}"/>`);
+  assert.match(checkPng('dynamic', svg, blank.png).problems.join('\n'), /the PNG is blank: it holds 1 colour/);
+  assert.match(checkPng('dynamic', svg.replace(/viewBox="0 0 \d+/, 'viewBox="0 0 10'), image.png).problems.join('\n'), /twice the SVG viewBox/);
+  assert.match(checkPng('dynamic', svg, new TextEncoder().encode('<svg/>')).problems.join('\n'), /not a PNG/);
+});

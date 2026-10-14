@@ -233,10 +233,22 @@ function checkConfig(cwd: string): Check {
   return { status: 'ok', name: 'repository config', detail: `${use}; ${cfg.architecture?.elements?.length ?? 0} architecture elements mapped` };
 }
 
+/** The rasterizer loaded and drew, and left the text out. It raises no error of its own for that. */
+class NoFont extends Error {}
+const NO_FONT_ACTION: Record<string, string> = {
+  linux: 'install a sans-serif font, for example: sudo apt-get install fonts-dejavu-core',
+  win32: 'install Segoe UI or Arial for all users (C:\\Windows\\Fonts)',
+  darwin: 'restore Helvetica in Font Book',
+};
+
 async function checkTools(): Promise<Check[]> {
   const probes: [name: string, load: () => Promise<void>][] = [
     ['diagrams', async () => { await import('elkjs/lib/elk.bundled.js'); }],
-    ['diagram previews', async () => { (await import('../tools/raster.ts')).toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'); }],
+    ['diagram previews', async () => {
+      const { toPng, drawsText } = await import('../tools/raster.ts');
+      toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>');
+      if (!drawsText()) throw new NoFont();
+    }],
     ['TypeScript analysis', async () => {
       const { parse, Lang } = await import('@ast-grep/napi');
       parse(Lang.TypeScript, 'export const a = 1');
@@ -251,7 +263,10 @@ async function checkTools(): Promise<Check[]> {
   const res: Check[] = [];
   for (const [name, load] of probes) {
     try { await load(); res.push({ status: 'ok', name, detail: 'working' }); }
-    catch (e) { res.push({ status: 'fix', name, detail: `a part of ${PKG.name} did not load: ${errorMessage(e).split('\n')[0]}`, action: `install ${PKG.name} again. If it still fails, report it: ${PKG.bugs}` }); }
+    catch (e) {
+      if (e instanceof NoFont) { res.push({ status: 'fix', name, detail: 'PNG previews come out with no text, because this machine has no font the rasterizer can use. SVG output is not affected', action: NO_FONT_ACTION[process.platform] ?? NO_FONT_ACTION.linux! }); continue; }
+      res.push({ status: 'fix', name, detail: `a part of ${PKG.name} did not load: ${errorMessage(e).split('\n')[0]}`, action: `install ${PKG.name} again. If it still fails, report it: ${PKG.bugs}` });
+    }
   }
   return res;
 }
