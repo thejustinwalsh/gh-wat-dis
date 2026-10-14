@@ -159,7 +159,47 @@ test('lint catches what GitHub would break', () => {
   assert.equal(errors.length, 3);
   const ms = lintBody('Goal.\n\n> [!NOTE]\n> x\n\n![d](./a.svg)\n', { kind: 'milestone', exists: () => true });
   assert.equal(ms.errors.length, 2);
+  assert.deepEqual(ms.warnings, [], 'a milestone image gets one finding, not a second one about centring');
   assert.equal(lintBody('', { kind: 'issue' }).errors[0]?.msg, 'body is empty');
+});
+
+// What a milestone description renders was read from GitHub's pages for issue #5. The description
+// below is the shape of this repository's own milestone, which the milestone page renders in full.
+test('lint milestone: the format passes, and each element the milestones list would garble is named', () => {
+  const format = [
+    'Anyone can run `npx gh-wat-dis install` and have an agent write issues in the format.', '',
+    '**Done when**', '- `npx gh-wat-dis doctor` prints nothing to fix (#3)', '- #17 is closed', '- https://tjw.dev/gh-wat-dis/ returns 200', '',
+    '**Tracking:** #1', '**In scope:** the ten wat skills', '**Out of scope:** [Enterprise Server](https://docs.github.com/enterprise-server)', '',
+  ].join('\n');
+  assert.deepEqual(lintBody(format, { kind: 'milestone' }), { errors: [], warnings: [] });
+
+  const of = (text: string) => lintBody(`Goal.\n\n${text}\n`, { kind: 'milestone' });
+  const errors: [string, RegExp][] = [
+    ['> [!WARNING]\n> Breaks the config.', /an alert shows there as "> \[!NOTE\]"/],
+    ['<details>\n<summary>More</summary>\n\nx\n\n</details>', /an HTML block shows there as its tags/],
+    ['<img src="https://example.com/a.png" alt="a">', /an HTML block/],
+    ['![Overview](https://example.com/a.svg)', /gh uploads no attachment for a milestone/],
+    ['```mermaid\nflowchart LR\n  a --> b\n```', /no milestone was found that draws Mermaid/],
+  ];
+  for (const [text, msg] of errors) {
+    const res = of(text);
+    assert.match(res.errors[0]?.msg ?? '', msg, text);
+    assert.match(res.errors[0]!.msg, /tracking issue/, 'every error says where the element goes');
+  }
+  const warnings: [string, RegExp][] = [
+    ['## Scope\n- the CLI', /a heading shows there as "## \.\.\."/],
+    ['- [ ] Publish to npm\n- [x] Site is up', /boxes nobody can tick/],
+    ['| Element | State |\n|---|---|\n| CLI | done |', /a table shows there as pipes and dashes/],
+  ];
+  for (const [text, msg] of warnings) {
+    const res = of(text);
+    assert.deepEqual(res.errors, [], text);
+    assert.match(res.warnings[0]?.msg ?? '', msg, text);
+  }
+  // The same elements are fine in an issue, and an element inside a code block is only text.
+  assert.deepEqual(lintBody('Goal.\n\n## Do\n- [ ] Publish\n\n| a | b |\n|---|---|\n| 1 | 2 |\n', { kind: 'issue' }), { errors: [], warnings: [] });
+  assert.deepEqual(of('```text\n## Scope\n- [ ] a\n> [!NOTE]\n<details>\n```'), { errors: [], warnings: [] });
+  assert.deepEqual(of('- a list item with a rule below\n\n---'), { errors: [], warnings: [] });
 });
 
 test('related: product names and plain words in backticks are not identifiers', () => {

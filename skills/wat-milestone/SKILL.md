@@ -15,7 +15,7 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, capacity). List open milestones to avoid a clash. Milestones run in sequence: the new one is the next version after the highest that exists. Do not set a due date.
 2. **Get the goal** in one sentence. If the user gives a list of features, ask what a user or the system can do when it ships.
 3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
-4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements a milestone description cannot render.
+4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements that break on the milestone page or in the milestones list.
 5. **Show the draft**, wait for a yes, then create:
    ```bash
    gh api repos/{owner}/{repo}/milestones -f title="<title>" -F description=@.wat-tmp/milestone.md

@@ -6,8 +6,10 @@ Use the richest element that carries the information in the fewest words. Check 
 
 | Element | Issue / PR body, comments | Milestone description |
 |---|---|---|
-| Tables, bold, lists, links, emoji | Yes | Yes |
-| Task lists `- [ ]` | Yes. Progress shows in lists only when they sit in the body. | No progress effect |
+| Bold, lists, links, inline code | Yes | Yes on the milestone page. The milestones list prints the source as plain text. |
+| Tables, emoji | Yes | Do not use: not checked |
+| Task lists `- [ ]` | Yes. Progress shows in lists only when they sit in the body. | Do not use: boxes nobody can tick, no progress effect |
+| Issue reference `#12` | Yes, a link | Plain text, no link. A full issue URL becomes a link. |
 | Alerts `> [!NOTE]` `[!TIP]` `[!IMPORTANT]` `[!WARNING]` `[!CAUTION]` | Yes. Cannot nest inside lists or tables. | Do not use |
 | `<details><summary>` | Yes. Leave a blank line after `</summary>`. | Do not use |
 | Attached SVG / PNG (`gh --attach`) | Yes | No |
@@ -18,6 +20,8 @@ Use the richest element that carries the information in the fewest words. Check 
 | Permalink code embeds | Comments, same repo, commit SHA link on its own line | No |
 | Math `$..$` | Yes | No |
 | `<picture>` light/dark sources | Yes | No |
+
+The milestone column was read from GitHub's pages: see "Milestone" in [formats.md](formats.md) for what was checked and where.
 
 ## Choose the element
 
