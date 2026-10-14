@@ -8,15 +8,17 @@ import type { LiveLabel } from './labels.ts';
 import { issueRows } from './issues.ts';
 import type { RawListIssue } from './issues.ts';
 import { byVersion, milestoneStatus } from './milestone.ts';
-import type { RawIssue } from './milestone.ts';
+import type { MilestoneStatus, RawIssue } from './milestone.ts';
 import { issueNumbers, survey, surveyRows } from './survey.ts';
 import type { RawMilestone, RawSurveyIssue } from './survey.ts';
-import { readRelations, relate } from './relations.ts';
+import { apiMessage, readRelations, relate } from './relations.ts';
 import type { Api } from './relations.ts';
 import { analyzeLinks } from './links.ts';
 import type { Closure, Commit, Mention, Ref } from './links.ts';
 import { POINTS_KEY, findRelated, toMarkdown } from './related.ts';
 import type { Row } from './related.ts';
+import { CHECK_IDS, LEFT_TO_AGENT, audit, auditText, selectChecks } from './audit.ts';
+import type { MergedPr, OpenPr, RawAuditIssue, RawBlocker } from './audit.ts';
 
 const exec = promisify(execFile);
 
@@ -214,10 +216,12 @@ export async function labels(argv: string[]): Promise<number> {
 
 const RELATIONS_USAGE = `Usage: npx gh-wat-dis relations <issue>                                   parent, sub-issues, blocked by, blocking (JSON)
        npx gh-wat-dis relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]
-These are GitHub's own relations. They show in the issue sidebar and in filters such as is:blocked.`;
+These are GitHub's own relations. They show in the issue sidebar and in filters such as is:blocked.
+An issue has one parent: --parent on an issue that has another parent replaces it, and prints the old and the new one.`;
 
 const api: Api = async <T>(args: string[]): Promise<T> => {
-  const { stdout } = await exec('gh', ['api', ...args], { maxBuffer: 32 * 1024 * 1024 });
+  let stdout: string;
+  try { ({ stdout } = await exec('gh', ['api', ...args], { maxBuffer: 32 * 1024 * 1024 })); } catch (e) { throw new Error(apiMessage(e)); }
   return (stdout.trim() ? JSON.parse(stdout) : null) as T;
 };
 const issueNumber = (s: string | undefined): number => {
@@ -246,6 +250,29 @@ export async function relateCmd(argv: string[]): Promise<number> {
   return results.every((r) => r.ok) ? 0 : 1;
 }
 
+type RawMilestoneRow = { title: string; number: number; state: string; description: string | null };
+type PrRow = { number: number; title: string; updatedAt: string; isDraft: boolean; closingIssuesReferences: { number: number }[] };
+
+async function openPrList(): Promise<OpenPr[]> {
+  const prs = await gh<PrRow[]>(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,title,updatedAt,isDraft,closingIssuesReferences']);
+  return prs.map((p) => ({ number: p.number, title: p.title, updatedAt: p.updatedAt, isDraft: p.isDraft, closes: p.closingIssuesReferences.map((r) => r.number) }));
+}
+
+/** The issues that block each of these, open and closed. An issue GitHub counts no blocker for costs no call. */
+async function blockersOf(repo: string, issues: { number: number; issue_dependencies_summary?: { total_blocked_by: number } }[]): Promise<Map<number, RawBlocker[]>> {
+  const out = new Map<number, RawBlocker[]>();
+  await Promise.all(issues.filter((i) => i.issue_dependencies_summary?.total_blocked_by !== 0).map(async (i) => {
+    try { out.set(i.number, await api<RawBlocker[]>([`repos/${repo}/issues/${i.number}/dependencies/blocked_by`])); } catch { out.set(i.number, []); }
+  }));
+  return out;
+}
+
+async function milestoneReport(repo: string, found: RawMilestoneRow, openTitles: string[], openPrs: OpenPr[], stalledAfterDays?: number): Promise<MilestoneStatus> {
+  const items = await api<(RawIssue & { issue_dependencies_summary?: { total_blocked_by: number } })[]>([`repos/${repo}/issues?milestone=${found.number}&state=all&per_page=100`, '--paginate']);
+  const blockedBy = await blockersOf(repo, items.filter((i) => !i.pull_request && i.state === 'open'));
+  return milestoneStatus({ milestone: found, openMilestones: openTitles, items, blockedBy, openPrs, now: new Date(), stalledAfterDays });
+}
+
 const MILESTONE_USAGE = `Usage: npx gh-wat-dis milestone [<title>] [--stalled-after 7]
 Prints the numbers for a status report as JSON: issue counts (pull requests and the tracking issue are not counted),
 what is in review, what is blocked and by what, the done-when conditions, and a status: done, blocked, stalled or moving.
@@ -255,25 +282,49 @@ export async function milestone(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['help'], strings: ['stalled-after'], aliases: { '-h': '--help' } });
   if (args.help) { console.log(MILESTONE_USAGE); return 0; }
   const { repo } = repoInfo();
-  type M = { title: string; number: number; state: string; description: string | null };
-  const all = await api<M[]>([`repos/${repo}/milestones?state=all&per_page=100`]);
+  const all = await api<RawMilestoneRow[]>([`repos/${repo}/milestones?state=all&per_page=100`]);
   const openTitles = all.filter((m) => m.state === 'open').map((m) => m.title);
   const want = args._[0] ?? [...openTitles].sort(byVersion)[0];
   const found = all.find((m) => m.title === want);
   if (!found) throw new UsageError(want ? `no milestone "${want}". Milestones: ${all.map((m) => m.title).join(', ') || 'none'}` : 'this repository has no open milestone');
-  const items = await api<RawIssue[]>([`repos/${repo}/issues?milestone=${found.number}&state=all&per_page=100`, '--paginate']);
-  const openIssues = items.filter((i) => !i.pull_request && i.state === 'open');
-  const blockedBy = new Map<number, { number: number; title: string; state: string }[]>();
-  await Promise.all(openIssues.map(async (i) => {
-    try { blockedBy.set(i.number, await api([`repos/${repo}/issues/${i.number}/dependencies/blocked_by`])); } catch { blockedBy.set(i.number, []); }
-  }));
-  const prs = await gh<{ number: number; closingIssuesReferences: { number: number }[] }[]>(['pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,closingIssuesReferences']);
-  const out = milestoneStatus({
-    milestone: found, openMilestones: openTitles, items, blockedBy,
-    openPrs: prs.map((p) => ({ number: p.number, closes: p.closingIssuesReferences.map((r) => r.number) })),
-    now: new Date(), stalledAfterDays: args['stalled-after'] ? Number(args['stalled-after']) : undefined,
-  });
+  const out = await milestoneReport(repo, found, openTitles, await openPrList(), args['stalled-after'] ? Number(args['stalled-after']) : undefined);
   console.log(JSON.stringify(out, null, 2));
+  return 0;
+}
+
+const AUDIT_USAGE = `Usage: npx gh-wat-dis audit [--check <name,name>] [--text]
+Runs the maintenance checks that can be counted and prints, as JSON, one group for each check with one finding
+for each item: the item, its number, the measured value and the reason. --text prints a table. It changes nothing.
+The stale thresholds come from triage.staleIssueDays and triage.stalePrDays in the config.
+  --check <names>   run some checks only. A name is a check, or the part before a dash: "stale" runs stale-issues and stale-prs.
+Checks: ${CHECK_IDS.join(', ')}
+Left to the agent, and named in the output: ${LEFT_TO_AGENT.map((a) => a.check).join(', ')}`;
+
+export async function auditCmd(argv: string[]): Promise<number> {
+  const args = parseArgs(argv, { booleans: ['text', 'json', 'help'], strings: ['check'], aliases: { '-h': '--help' } });
+  if (args.help) { console.log(AUDIT_USAGE); return 0; }
+  const checks = selectChecks(args.check);
+  const cfg = loadConfig();
+  const { repo } = repoInfo();
+  const wants = (...ids: string[]): boolean => checks.some((c) => ids.includes(c));
+  const milestoneChecks = wants('milestone-status', 'finished-milestone', 'milestone-description');
+  const [issueList, milestones, openPrs, mergedPrs, live] = await Promise.all([
+    api<RawAuditIssue[]>([`repos/${repo}/issues?state=open&per_page=100`, '--paginate']),
+    api<RawMilestoneRow[]>([`repos/${repo}/milestones?state=open&per_page=100`]),
+    milestoneChecks || wants('stale-prs', 'orphan-prs') ? openPrList() : [],
+    wants('done-but-open')
+      ? gh<{ number: number; title: string; body: string | null; closingIssuesReferences: { number: number }[] }[]>(['pr', 'list', '--state', 'merged', '--limit', '200', '--json', 'number,title,body,closingIssuesReferences'])
+        .then((prs): MergedPr[] => prs.map((p) => ({ number: p.number, title: p.title, body: p.body, closes: p.closingIssuesReferences.map((r) => r.number) })))
+      : [],
+    wants('labels') ? gh<LiveLabel[]>(['label', 'list', '--limit', '300', '--json', 'name,description,color']) : [],
+  ]);
+  const openTitles = milestones.map((m) => m.title);
+  const [statuses, blockers] = await Promise.all([
+    milestoneChecks ? Promise.all(milestones.map((m) => milestoneReport(repo, m, openTitles, openPrs))) : [],
+    wants('blocked-chains') ? blockersOf(repo, issueList.filter((i) => !i.pull_request)) : new Map<number, RawBlocker[]>(),
+  ]);
+  const report = audit({ repo, cfg, now: new Date(), openMilestones: openTitles, issues: issueList, openPrs, mergedPrs, labels: live, milestones: statuses, blockers, checks });
+  process.stdout.write(args.text ? auditText(report) : JSON.stringify(report, null, 2) + '\n');
   return 0;
 }
 

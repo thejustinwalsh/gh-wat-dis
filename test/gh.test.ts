@@ -229,9 +229,9 @@ test('relations: reads all four kinds and sends database ids when it writes', as
   assert.equal(rel.parent?.number, 1);
   assert.deepEqual(rel.blockedBy.map((r) => r.number), [3]);
   calls.length = 0;
-  const res = await relate(api, 'o/r', 7, { parent: 1, blockedBy: [3] });
+  const res = await relate(api, 'o/r', 7, { parent: 2, blockedBy: [3] });
   assert.ok(res.every((r) => r.ok));
-  assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/1/sub_issues' && c.includes('sub_issue_id=1007')));
+  assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/2/sub_issues' && c.includes('sub_issue_id=1007')));
   assert.ok(calls.some((c) => c[0] === 'repos/o/r/issues/7/dependencies/blocked_by' && c.includes('issue_id=1003')));
 });
 
@@ -363,4 +363,129 @@ test('survey: counts what open issues lack and describes bodies without rating t
   const user = survey({ ...input, cfg: defaultConfig({ owner: 'o', name: 'r' }), organization: false });
   assert.deepEqual([user.owner, user.types.source, user.labels.surfaces], ['user', 'label', 0]);
   assert.equal(user.counts.noType, 3, 'on a user repository the type is a label, and "bug" is one');
+});
+
+test('relate: a new parent replaces the old one and reports both; a failure carries GitHub\'s message', async () => {
+  const { apiMessage, relate } = await import('../src/gh/relations.ts');
+  const issue = (n: number) => ({ number: n, title: `t${n}`, state: 'open', id: 1000 + n });
+  const calls: string[][] = [];
+  const mock = (parent: number | null, fail?: unknown) => async <T>(args: string[]): Promise<T> => {
+    calls.push(args);
+    const path = args[0]!;
+    if (args.includes('POST')) { if (fail) throw new Error(apiMessage(fail)); return null as T; }
+    if (path.endsWith('/parent')) { if (parent === null) throw new Error('Not Found (HTTP 404)'); return issue(parent) as T; }
+    return issue(Number(path.split('/').pop())) as T;
+  };
+
+  const moved = await relate(mock(1), 'o/r', 7, { parent: 5 });
+  assert.deepEqual(moved, [{ action: 'set parent #5 of #7', ok: true, detail: 'parent was #1, now #5' }]);
+  const post = calls.find((c) => c.includes('POST'))!;
+  assert.equal(post[0], 'repos/o/r/issues/5/sub_issues');
+  assert.ok(post.includes('sub_issue_id=1007') && post.includes('replace_parent=true'));
+
+  assert.equal((await relate(mock(null), 'o/r', 7, { parent: 5 }))[0]!.detail, 'parent was none, now #5');
+
+  calls.length = 0;
+  assert.deepEqual(await relate(mock(5), 'o/r', 7, { parent: 5 }), [{ action: 'set parent #5 of #7', ok: true, detail: '#5 is already the parent' }]);
+  assert.ok(!calls.some((c) => c.includes('POST')), 'nothing is written when the parent is already set');
+
+  const refused = {
+    message: 'Command failed: gh api repos/o/r/issues/5/sub_issues -X POST -F sub_issue_id=1007',
+    stdout: '{"message":"Validation failed","errors":[{"message":"Sub issue may only have one parent"}],"status":"422"}',
+    stderr: 'gh: Validation failed (HTTP 422)\n',
+  };
+  const failed = await relate(mock(1, refused), 'o/r', 7, { parent: 5 });
+  assert.deepEqual(failed, [{ action: 'set parent #5 of #7', ok: false, detail: 'Validation failed: Sub issue may only have one parent (HTTP 422)' }]);
+  assert.equal(apiMessage({ message: 'Command failed: gh api x', stdout: '', stderr: 'gh: Not Found (HTTP 404)\n' }), 'Not Found (HTTP 404)');
+  assert.equal(apiMessage(new Error('spawn gh ENOENT')), 'spawn gh ENOENT');
+});
+
+test('audit: one group for each check, one finding for each item, and the reading stays with the agent', async () => {
+  const { CHECK_IDS, audit, auditText, selectChecks } = await import('../src/gh/audit.ts');
+  const { milestoneStatus } = await import('../src/gh/milestone.ts');
+  const { defaultConfig } = await import('../src/cli/config.ts');
+  const cfg = defaultConfig({ owner: 'o', name: 'r' });
+  cfg.labels.surfaces = [{ name: 'site', description: 's' }];
+  const now = new Date('2026-10-13T12:00:00Z');
+  const full = ['task', 'site', 'major', 'm'];
+  const raw = (number: number, updated: string, labels: string[] = full, extra: object = {}) => ({
+    number, title: `t${number}`, state: 'open', comments: 0, updated_at: `${updated}T00:00:00Z`, closed_at: null,
+    labels: labels.map((name) => ({ name })), milestone: { title: 'v1' } as { title: string } | null, issue_dependencies_summary: { total_blocked_by: 0 }, ...extra,
+  });
+  const issues = [
+    raw(1, '2026-10-12', ['task'], { sub_issues_summary: { total: 3, completed: 1 } }),
+    raw(2, '2026-03-01'),
+    raw(3, '2026-10-10', ['task', 'bug', 'site', 'wontfix']),
+    raw(4, '2026-10-10'),
+    raw(5, '2026-10-10'),
+    raw(6, '2026-10-10', full, { milestone: null }),
+    raw(7, '2026-01-01', full, { pull_request: {} }),
+  ];
+  const statusOf = (title: string, number: number, description: string, items: object[]) => milestoneStatus({
+    milestone: { title, number, state: 'open', description }, openMilestones: ['v1', 'v2'], items: items as never, blockedBy: new Map(), openPrs: [], now,
+  });
+  const milestones = [
+    statusOf('v1', 1, 'Goal.\n\n**Tracking:** #1', [...issues.filter((i) => i.milestone), { ...raw(20, '2026-09-01'), state: 'closed', closed_at: '2026-09-20T00:00:00Z' }]),
+    statusOf('v2', 2, 'Later.', [{ ...raw(30, '2026-09-01'), state: 'closed', closed_at: '2026-09-01T00:00:00Z' }]),
+  ];
+  const input = {
+    repo: 'o/r', cfg, now, openMilestones: ['v2', 'v1'], issues, milestones,
+    openPrs: [
+      { number: 40, title: 'old draft', updatedAt: '2026-09-01T00:00:00Z', isDraft: true, closes: [] },
+      { number: 41, title: 'fresh', updatedAt: '2026-10-12T00:00:00Z', isDraft: false, closes: [4] },
+    ],
+    mergedPrs: [
+      { number: 50, title: 'linked', body: 'Closes #4', closes: [4] },
+      { number: 51, title: 'part', body: 'First half.\n\nRefs #5\nRefs #1\nRefs #6\nSee #2 for context.', closes: [] },
+      { number: 52, title: 'part two', body: '`Refs #2` in code is not a reference.\n\nRefs #5', closes: [] },
+    ],
+    labels: [
+      ...['task', 'bug', 'feature', 'agents', 'site'].map((name) => ({ name, description: 'x', color: '000000' })),
+      { name: 'wontfix', description: '', color: 'ffffff' },
+    ],
+    blockers: new Map([
+      [4, [{ number: 20, title: 't20', state: 'closed', updated_at: '2026-09-20T00:00:00Z' }, { number: 5, title: 't5', state: 'open', updated_at: '2026-10-10T00:00:00Z' }]],
+      [5, [{ number: 2, title: 't2', state: 'open', updated_at: '2026-03-01T00:00:00Z' }]],
+    ]),
+  };
+
+  const report = audit(input);
+  assert.deepEqual(report.checks.map((c) => c.check), [...CHECK_IDS]);
+  assert.deepEqual([report.currentMilestone, report.thresholds], ['v1', { staleIssueDays: 60, stalePrDays: 14, stalledAfterDays: 7 }]);
+  const of = (id: string) => report.checks.find((c) => c.check === id)!.findings;
+  const pairs = (id: string) => of(id).map((f) => [f.item, f.reason]);
+
+  assert.deepEqual(of('stale-issues'), [{ item: '#2', kind: 'issue', number: 2, title: 't2', value: 226, unit: 'days', reason: 'No update in 226 days.' }], 'pull requests in the issue list are not issues');
+  assert.deepEqual(pairs('stale-prs'), [['#40', 'No update in 42 days, and it is a draft.']]);
+  assert.deepEqual(pairs('missing-fields'), [['#3', 'Missing: one type, priority, size.']], 'a tracking issue needs a type only');
+  assert.deepEqual(of('milestone-status').map((f) => [f.item, f.kind, f.value, f.unit]), [['v1', 'milestone', 23, 'days']], 'a later milestone that has not started is not a finding');
+  assert.match(of('milestone-status')[0]!.reason, /^Stalled\. No issue closed in 23 days/);
+  assert.deepEqual(pairs('finished-milestone'), [['v2', 'All 1 issues are closed.']]);
+  assert.deepEqual(pairs('orphan-prs'), [['#40', 'Closes no issue.']]);
+  assert.deepEqual(pairs('done-but-open'), [
+    ['#4', 'Pull request #50 is linked to it and merged.'],
+    ['#5', 'Merged pull requests #51, #52 name it with Refs. Read them: is the work finished?'],
+  ], 'Refs counts in the current milestone only, never for a tracking issue, and never from code');
+  const labels = of('labels');
+  assert.ok(labels.some((f) => f.item === 'critical' && /GitHub has none/.test(f.reason)));
+  assert.ok(labels.some((f) => f.item === 'site' && /^Drifted from the config/.test(f.reason)));
+  assert.deepEqual(labels.filter((f) => /^Outside/.test(f.reason)).map((f) => [f.item, f.value, f.unit, f.number]), [['wontfix', 1, 'issues', null]]);
+  assert.deepEqual(pairs('blocked-chains'), [
+    ['#5', 'Blocked by #2, which has no update in 226 days.'],
+    ['#4', 'Blocked by #20, which is closed.'],
+  ], 'an open blocker that moves is not a finding');
+  assert.deepEqual(pairs('milestone-description'), [['v2', 'The description has no Tracking line.']]);
+  assert.equal(report.count, report.checks.reduce((n, c) => n + c.findings.length, 0));
+  assert.deepEqual(report.leftToAgent.map((a) => a.check), ['awaiting-author', 'format-drift', 'out-of-date-facts', 'done-when', 'refs-finished']);
+
+  const clean = audit({ ...input, issues: [raw(4, '2026-10-10')], openPrs: [], mergedPrs: [], blockers: new Map(), milestones: [], checks: selectChecks('stale,orphan-prs') });
+  assert.deepEqual(clean.checks.map((c) => [c.check, c.count]), [['stale-issues', 0], ['stale-prs', 0], ['orphan-prs', 0]]);
+  assert.deepEqual(selectChecks('milestone'), ['milestone-status', 'milestone-description']);
+  assert.throws(() => selectChecks('speling'), /no check "speling"/);
+
+  const text = auditText(report);
+  for (const c of report.checks) assert.ok(text.includes(`${c.title} (${c.count})`), `the table has ${c.title}`);
+  assert.match(text, /#2 {2}No update in 226 days\. {2}t2/);
+  assert.match(text, /Left to the agent/);
+  assert.match(auditText(clean), /Stale issues \(0\).*\n {2}none/);
 });
