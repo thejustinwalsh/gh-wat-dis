@@ -46,16 +46,16 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 5. **Compose, then read what the renderer reports.** You state the structure, and the renderer keeps to it:
    - **Order the relationships as you would tell them.** The drawing starts at the source of the first relationship and reads on from there. In a cycle, the relationship that returns to an element already drawn is the one drawn backwards. A flow reads in `order`.
    - **Group with `parent`.** A group is as wide as its name, and no line is routed through the name. Keep a group name under 40 characters.
-   - **Name a `direction` only when it matters.** A direction in the spec or on the command line is never overridden. Leave it out and each type takes its own form: a code diagram runs left to right so that a line ends on a symbol row, and the other types run top down or left to right, whichever reads better.
-   - **Stay inside the budget of the type**, in elements that are not groups and in relationships: context 8 and 10, container and component 12 and 16, code 8 files and 14 lines, flow 8 steps, deployment and landscape 12 and 14. Lint warns past it and names the filter that brings the spec back in, with what the filter leaves. `graph from-facts` stays inside it and says in the scope line what it left out.
+   - **Name a `direction` only when it matters.** A direction in the spec or on the command line is never overridden. Leave it out and each type takes its own form: a code diagram is layers of files left to right so that a line ends on a symbol row, and the other types run top down or left to right, whichever reads better.
+   - **Stay inside the budget of the type**, in elements that are not groups and in relationships: context 8 and 10, container and component 12 and 16, code 8 files and 14 lines in at most three layers, flow 8 steps, deployment and landscape 12 and 14. Lint warns past it and names the filter that brings the spec back in, with what the filter leaves. `graph from-facts` stays inside it and says in the scope line what it left out.
 
-   A layout must pass every gate: each relationship is drawn from end to end on its own element or row, no line runs through text, nothing lies on top of anything else, and the whole image is at most 860px wide and 1376px tall. The renderer starts from the form of the type and loosens it one rung at a time: numbers on the lines or a long chain wrapped, then both, then compact cards. A code diagram tries its files in a column before it wraps. It draws the first rung that passes. Stderr has these lines:
+   A layout must pass every gate: each relationship is drawn from end to end on its own element or row, no line runs through text, nothing lies on top of anything else, and the whole image is at most 860px wide and 1376px tall. The renderer starts from the form of the type and loosens it one rung at a time: numbers on the lines or a long chain wrapped, then both, then compact cards. A code diagram is never wrapped. It draws the first rung that passes. When that drawing is taller than 900px and the wrapped one on the next rung has a better shape with lines as calm, it draws the wrapped one. Stderr has these lines:
    - The size of the whole image, title and key included: `681 x 766px, top down`. Every size the tool prints is this measure.
    - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`. Row n of the table is the line that carries the number n.
    - `layout:` what was kept, the rung, and why each rung above it failed: `kept top down, numbers on the lines: rung 2 of 3. rung 1 (as written) is 968px wide`.
-   - `layout: no layout passes every check on any of the 3 rungs. Drew the nearest: …` means the spec is past what one picture holds. The image is still written. Apply a `fix:` or cut the spec before you attach it.
+   - `layout: no layout passes every check on any of the 3 rungs. Drew the nearest: …` means the spec is past what one picture holds. The image is still written, in the layout with the calmest lines. Apply a `fix:` or cut the spec before you attach it.
    - `warning:` one for each fault that is left: an image wider than 860px or taller than 900px, a line that runs far out of its way, three or more crossings, and each gate the drawing fails. A drawing with no warning needs no filter. Look at it all the same (step 6): the checks do not see everything a reader does.
-   - `fix:` a filter or an option that the tool applied to your spec, drew and judged again, with the size of the image it gives, the warnings it leaves, and what it takes out. Only a fix that leaves fewer warnings is printed. No fix removes an element or a line that the change added, changed or removed. Run the first one whose removals your text can do without, then render again:
+   - `fix:` a filter or an option that the tool applied to your spec, drew and judged again, with the size of the image it gives, the warnings it leaves, and what it takes out. Only a fix that leaves fewer warnings, or that makes a drawing pass which no rung could, is printed. No fix removes an element or a line that the change added, changed or removed. Run the first one whose removals your text can do without, then render again:
      ```text
      warning: 902px is wider than GitHub's 860px body, so text will shrink
      warning: 6 line crossings on 17 lines
@@ -190,7 +190,9 @@ What the facts cannot prove is not drawn: a call through a re-exporting module i
 
 The scope line under the title says how many changed source files are drawn, names the two largest left out, and counts moved files, source in a language the tools do not read, and other changed files. Stderr lists the first six of each kind left out. When the largest file left out matters to the change, raise `--max-files` or say so in the body. When no source file changed, the command exits 1 and there is no code diagram to draw.
 
-A code diagram runs left to right, and every line ends on the row or the header it concerns. When the files are too many deep for the page, they stand in a column and the lines run down the right side of the cards, still ending on their rows. Leave `direction` out of a code spec so the renderer can do this.
+A code diagram has one form: layers of files by import depth, left to right. A file stands to the left of what it imports, so every line runs to the right and ends on the row or the header it concerns. Files that import one another share a layer, and the lines between them turn beside the cards, on their right. The name of a group is a small label at the top of each of its cards: groups take no room of their own. Leave `direction` out of a code spec.
+
+A code diagram holds three layers. `graph from-facts` keeps the three that hold the file with the most change, leaves out the files that stand further out, then the last file of a layer too tall for one image, and names them in the scope line. In a spec you write, list the file the diagram is about first, and keep the imports three files deep: lint names the files to drop when they are deeper, and `graph split` writes one diagram for each group.
 
 When the lines would pass the budget of 14, the lines between one pair of files are drawn as fewer, down to one line to the file, and the scope line says so. A line is never left out: no line between two cards still means no import.
 
@@ -218,9 +220,9 @@ Then open the JSON and fix what the facts cannot know. Set the `title` to name t
 
 - A line between two files may have an empty `label`: it means an import, and the key says so.
 - A card draws 8 rows at most: six changed symbols and up to two unmarked ones. Name a symbol among the first 8 when a line must end on it.
-- The name of a group is drawn once, at the top of its band.
+- Give a file a `parent` to label its card with the name of that group.
 - Do not pass `--labels numbered` for a code diagram: its lines have no words to look up.
-- About four files side by side fit the page. Past eight files, make two diagrams: `graph split` writes one per group.
+- Three layers of cards fit the page, and cards are wider when there are fewer layers. Past eight files, make two diagrams: `graph split` writes one per group.
 
 ## Overview plus scoped views
 
