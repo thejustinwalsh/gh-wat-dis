@@ -49,11 +49,11 @@ const CHECK = 'Check';
 
 /** Every tool, in the order help prints them. The first word of `name` is the command. */
 export const TOOLS: Tool[] = [
-  { name: 'install', group: SETUP, effect: 'local', usage: 'install [--project] [--client <names>] [--mcp user|project|skip] [--dry-run] [--force]', description: 'Copy the wat skills to where each agent harness looks, then run the doctor checks.' },
+  { name: 'install', group: SETUP, effect: 'local', usage: 'install [--project] [--client <names>] [--mcp user|project|skip] [--no-config] [--dry-run] [--force]', description: 'Set up gh-wat-dis in one step: copy the wat skills to where each agent harness looks, write this repository\'s config when it has none, then run the doctor checks.' },
   { name: 'uninstall', group: SETUP, effect: 'local', usage: 'uninstall [--project] [--client <names>] [--dry-run]', description: 'Remove the skill directories this package installed.' },
-  { name: 'init', group: SETUP, effect: 'local', usage: 'init [--use always|ask|never] [--dry-run] [--force]', description: 'Write the repository config at .agents/gh-wat-dis/config.json: policy, labels, issue types, milestones, architecture map.' },
+  { name: 'init', group: SETUP, effect: 'local', usage: 'init [--use always|ask|never] [--dry-run] [--force]', description: 'Write the repository config at .agents/gh-wat-dis/config.json again. install writes it the first time; use this with --force for a fresh one.' },
   { name: 'mcp', group: SETUP, effect: 'local', usage: 'mcp <client> | mcp --apply [--scope user|project] [--dry-run]', description: 'Print the GitHub MCP server config for a harness, or write it for every harness found here. Stores no token.' },
-  { name: 'doctor', group: SETUP, effect: 'local', usage: 'doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip] [--fix] [--sandbox cache|network|dep|skip]', description: 'Check the runtime, gh, the skills, the GitHub MCP server, the config, the optional tools and whether a harness sandbox stops npx. Offers a fix where it has one; --fix applies the ones that need no choice.' },
+  { name: 'doctor', group: SETUP, effect: 'local', usage: 'doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]', description: 'Check the runtime, gh, the skills, the GitHub MCP server, the config and the optional tools. Offers a fix where it has one, and installs an optional tool when asked.' },
 
   { name: 'impact', group: FACTS, effect: 'reads', usage: 'impact [--base <ref>] [--head <ref>] [--working-tree] [--depth N] [--no-complexity]', description: 'Facts about a change: files, changed symbols, dependents, elements, contracts, owners, files that usually change together, and complexity moved (when cccc is installed). Each fact names its source.' },
   { name: 'reach', group: FACTS, effect: 'reads', usage: 'reach <path|path#symbol|symbol>... [--depth N]', description: 'Who depends on a file or an exported symbol. Needs no diff.' },
@@ -65,7 +65,7 @@ export const TOOLS: Tool[] = [
   { name: 'links', group: FACTS, effect: 'reads', usage: 'links (--pr <n> | --body-file <file>) [--closes <n,n>|none] [--text]', description: 'Which issues a pull request closes on merge and which it only mentions, from the body and the commit messages. Exits non-zero when that differs from --closes.' },
   { name: 'relations', group: FACTS, effect: 'reads', usage: 'relations <issue>', description: "An issue's parent, sub-issues, blocked by and blocking, from GitHub's native relations." },
   { name: 'milestone', group: FACTS, effect: 'reads', usage: 'milestone [<title>] [--stalled-after 7]', description: 'Status numbers for a milestone: counts, what is in review, what is blocked, the done-when conditions, the tracking issue. No dates.' },
-  { name: 'labels', group: FACTS, effect: 'reads', usage: 'labels [--text]', description: 'The agents, surface and type labels the config wants, compared with the labels on GitHub.' },
+  { name: 'labels', group: FACTS, effect: 'reads', usage: 'labels [--text]', description: 'The agents, surface, priority, size and type labels the config wants, compared with the labels on GitHub.' },
 
   { name: 'relate', group: WRITE, effect: 'github', usage: 'relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]', description: 'Set or remove a native relation between issues: parent, blocked by, blocks.' },
   { name: 'labels apply', group: WRITE, effect: 'github', usage: 'labels apply [--prune] [--dry-run]', description: 'Create and update the labels the config wants. --prune also deletes the others.' },

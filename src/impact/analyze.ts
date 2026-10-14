@@ -190,7 +190,8 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     path: e.path, status: e.status, ...(e.oldPath ? { oldPath: e.oldPath } : {}),
     insertions: e.insertions, deletions: e.deletions, ...(e.binary ? { binary: true } : {}),
     kind: graph.nodes.get(e.path)?.isTest ? 'test' : kindOf(e.path), language: languageOf(e.path), element: els.of(e.path),
-    owners: ownersOf(co, e.path).owners, churn90d: hist.churn.get(e.path) ?? 0, hunkFunctions: e.hunkFunctions,
+    owners: ownersOf(co, e.path).owners, churn90d: hist.churn.get(e.path) ?? 0, // git names the enclosing function from the hunk header. Outside the languages it knows, that line is a CSS rule or a paragraph.
+    hunkFunctions: languageOf(e.path) ? e.hunkFunctions : [],
     provenance: 'exact', source: 'git',
   }));
 

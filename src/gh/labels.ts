@@ -1,13 +1,13 @@
-// Labels mean two things: "agents", and the product surface an issue touches.
+// Labels mean four things: "agents", the product surface an issue touches, its priority and its size.
 // Type is a GitHub issue type where the repository has them (organizations). A repository under
-// a user account has none, so there each type is a label too. Priority is a person's call and is never a label.
+// a user account has none, so there each type is a label too. A person decides the priority; its label records it.
 
-import { AGENTS_LABEL, TYPE_LABELS, proposeSurfaces, typeLabel } from '../cli/config.ts';
-import { ROLE_COLORS, surfaceColor } from './color.ts';
+import { AGENTS_LABEL, PRIORITY_LABELS, SIZE_LABELS, TYPE_LABELS, priorityNames, proposeSurfaces, sizeNames, typeLabel } from '../cli/config.ts';
+import { ROLE_COLORS, priorityColor, sizeColor, surfaceColor } from './color.ts';
 import type { Config } from '../cli/config.ts';
 
 export interface LiveLabel { name: string; description: string; color: string }
-export interface WantedLabel extends LiveLabel { role: 'type' | 'agents' | 'surface' }
+export interface WantedLabel extends LiveLabel { role: 'type' | 'agents' | 'surface' | 'priority' | 'size' }
 export interface LabelPlan {
   /** Where the surface list came from: the config, or a proposal from the architecture map. */
   surfacesFrom: 'config' | 'architecture' | 'none';
@@ -22,6 +22,9 @@ export function wantedLabels(cfg: Config): { labels: WantedLabel[]; surfacesFrom
   const configured = cfg.labels?.surfaces ?? [];
   const surfaces = configured.length ? configured : proposeSurfaces(cfg);
   const agents = cfg.labels?.agents || AGENTS_LABEL.name;
+  const describe = (known: { name: string; description: string }[], name: string, i: number, kind: string): string => known.find((k) => k.name === name)?.description ?? known[i]?.description ?? `${kind}: ${name}`;
+  const priorities = priorityNames(cfg);
+  const sizes = sizeNames(cfg);
   return {
     surfacesFrom: configured.length ? 'config' : surfaces.length ? 'architecture' : 'none',
     labels: [
@@ -31,6 +34,8 @@ export function wantedLabels(cfg: Config): { labels: WantedLabel[]; surfacesFrom
         return { role: 'type', name, description: TYPE_LABELS[name]?.description ?? `Type: ${t}`, color };
       }) : []),
       { role: 'agents', name: agents, description: AGENTS_LABEL.description, color: ROLE_COLORS.agents },
+      ...priorities.map((name, i): WantedLabel => ({ role: 'priority', name, description: describe(PRIORITY_LABELS, name, i, 'Priority'), color: priorityColor(i, priorities.length) })),
+      ...sizes.map((name, i): WantedLabel => ({ role: 'size', name, description: describe(SIZE_LABELS, name, i, 'Size'), color: sizeColor(i, sizes.length) })),
       ...surfaces.map((l, i): WantedLabel => ({ role: 'surface', name: l.name, description: l.description.slice(0, 100), color: (l.color ?? surfaceColor(i)).replace(/^#/, '').toLowerCase() })),
     ],
   };

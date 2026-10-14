@@ -17,7 +17,7 @@ Read `.agents/gh-wat-dis/config.json` at the repository root.
 | File exists, `policy.use` is `always` | Use gh-wat-dis. Do not ask. |
 | File exists, `policy.use` is `ask` | Ask once per session, then follow the answer. |
 | File exists, `policy.use` is `never` | Stop. Work without gh-wat-dis. |
-| File does not exist | Ask the user: use gh-wat-dis once, configure this repo (`npx gh-wat-dis init`), or skip. |
+| File does not exist | Ask the user: use gh-wat-dis once, configure this repo (`npx gh-wat-dis install`), or skip. |
 
 The config also holds the project defaults: labels, issue types, milestone naming, the architecture map. Config values win over the defaults in these skills.
 

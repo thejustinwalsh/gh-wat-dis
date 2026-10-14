@@ -32,6 +32,21 @@ const SURFACE = { l: 0.78, c: 0.1, start: 200 };
  */
 export const surfaceColor = (index: number): string => oklchHex(SURFACE.l, SURFACE.c, (SURFACE.start + index * GOLDEN_ANGLE) % 360);
 
+/**
+ * Priority labels run from red to yellow: the most urgent is red and the least is yellow, with even steps
+ * of hue between them. Lightness rises with the hue, so the scale also reads without colour.
+ */
+export function priorityColor(index: number, count: number): string {
+  const t = count > 1 ? index / (count - 1) : 0;
+  return oklchHex(0.62 + 0.26 * t, 0.2 - 0.03 * t, 27 + 73 * t);
+}
+
+/** Size labels share one hue, teal. The smallest is dim and grey, the largest is the brightest and most saturated. */
+export function sizeColor(index: number, count: number): string {
+  const t = count > 1 ? index / (count - 1) : 1;
+  return oklchHex(0.56 + 0.3 * t, 0.04 + 0.11 * t, 190);
+}
+
 /** Type and agents labels are more saturated than surfaces, and keep the meaning their hue has in a diff or an editor. */
 export const ROLE_COLORS = {
   bug: oklchHex(0.66, 0.2, 27),

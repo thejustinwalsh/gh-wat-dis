@@ -68,6 +68,23 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       if (local && exists && !exists(target)) err(l.n, `image file "${target}" does not exist next to the body. gh --attach has nothing to upload.`);
     }
   }
+  // A diagram on a line of its own is centred: <div align="center">, a blank line, the image, a blank line, </div>.
+  const OPEN = /^\s*<div\s+align=["']center["']\s*>\s*$/i;
+  const CLOSE = /^\s*<\/div>\s*$/i;
+  L.forEach((l, i) => {
+    if (l.kind === 'code' || l.kind === 'fence' || !/^\s*!\[[^\]]*\]\([^)]+\)\s*$/.test(l.t)) return;
+    const before = L[i - 1];
+    const after = L[i + 1];
+    if ((before && OPEN.test(before.t)) || (after && CLOSE.test(after.t))) {
+      err(l.n, 'leave a blank line between <div align="center"> and the image, and between the image and </div>. GitHub does not render the image without them.');
+      return;
+    }
+    const prev = L.slice(0, i).reverse().find((x) => x.kind !== 'blank');
+    const next = L.slice(i + 1).find((x) => x.kind !== 'blank');
+    if (!(prev && OPEN.test(prev.t) && next && CLOSE.test(next.t))) {
+      warn(l.n, 'this image is not centred. Wrap it: <div align="center">, a blank line, the image, a blank line, </div>.');
+    }
+  });
   for (const l of L) {
     if (l.kind === 'fence' && l.lang === 'mermaid') {
       const type = (L[l.n]?.t ?? '').split(/\s+/)[0];
@@ -108,6 +125,13 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       }
       if (start >= 0 && close >= 0 && !L.slice(start, close).some((l) => l.kind === 'fence')) {
         warn(first0.n, '"Agent context" holds no code block. GitHub shows a copy button only on a code block: put the content in one fenced block.');
+      }
+      if (start >= 0 && close >= 0) {
+        const inner = L.slice(openIdx + 1, close);
+        const fences = inner.filter((l) => l.kind === 'fence').length;
+        const loose = inner.find((l) => l.kind === 'text' || l.kind === 'heading');
+        if (fences > 2) warn(first0.n, '"Agent context" holds more than one code block. An agent copies one block: merge them into one fenced `text` block.');
+        else if (fences && loose) warn(loose.n, '"Agent context" has text outside its code block. That text is not copied with the block: move it inside.');
       }
       const next = L[openIdx + 1];
       if (next && next.kind !== 'blank' && !/<\/details>/i.test(next.t)) {

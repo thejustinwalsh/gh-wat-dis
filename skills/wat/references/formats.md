@@ -27,7 +27,11 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 > [!WARNING]
 > <Only if one thing blocks or breaks. Else omit.>
 
+<div align="center">
+
 ![<Diagram title>](./<name>.svg)
+
+</div>
 
 ## System
 <1 to 3 sentences. Which elements and relationships this touches, and why the design goes this way.>
@@ -85,7 +89,11 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 > [!WARNING]
 > <Only for a breaking change, a migration, or a required deploy order. Else omit.>
 
+<div align="center">
+
 ![<Diagram title>](./<name>.svg)
+
+</div>
 
 ## System
 <1 to 3 sentences. The design decision and the reason. Name the option you rejected if a reviewer would ask.>
@@ -130,6 +138,7 @@ Refs #<m>
 ````
 
 - Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
+- **Centre every diagram.** Put the image line inside `<div align="center">` and `</div>`, with a blank line after the opening tag and before the closing one, as the template shows. GitHub then centres it in the body. Without the blank lines the image does not render. An image inside a table cell, such as a before and after pair, stays as it is.
 - A before and after pair is one good way to show a change a person can see. It is a choice, not a rule: see "Before and after" below.
 - Link lines go last, after the agent block, one issue per line.
   - `Closes #n`: the issue closes when the PR merges. Use it only for an issue this PR finishes.

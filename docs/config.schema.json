@@ -78,7 +78,7 @@
       "properties": {
         "agents": {
           "type": "string",
-          "description": "The label for agent memory, agentic workflows and work managed by autonomous agents."
+          "description": "The label for an issue an agent owns, or one that holds a prompt an agent runs on a schedule: agent orchestration and maintenance."
         },
         "surfaces": {
           "type": "array",
@@ -113,6 +113,20 @@
               }
             }
           }
+        },
+        "priorities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Priority label names, most urgent first. Default: critical, major, minor, nit. Colours run from red to yellow."
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Size label names, smallest first. Default: s, m, l, xl. One hue, brightest for the largest."
         }
       }
     },

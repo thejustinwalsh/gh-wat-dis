@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
-import { PKG, PKG_ROOT, UsageError, parseArgs, readJson, repoRoot } from './util.ts';
+import { CONFIG_REL, PKG, PKG_ROOT, UsageError, parseArgs, readJson, repoRoot } from './util.ts';
 
 export const MANIFEST = '.gh-wat-dis.json';
 const SKILLS_SRC = join(PKG_ROOT, 'skills');
@@ -101,15 +101,20 @@ function apply(step: Step): void {
   writeFileSync(join(step.dest, MANIFEST), JSON.stringify(manifest, null, 2) + '\n');
 }
 
-const INSTALL_HELP = `Usage: npx gh-wat-dis install [--project] [--client <names>] [--mcp user|project|skip] [--dry-run] [--force]
+const INSTALL_HELP = `Usage: npx gh-wat-dis install [--project] [--client <names>] [--mcp user|project|skip] [--no-config] [--dry-run] [--force]
 
-Copy the wat skills to where each agent harness looks, then run the doctor checks.
+Set up gh-wat-dis in one step: copy the wat skills to where each agent harness looks, write this
+repository's config when it has none, then run the doctor checks.
 
   --project, -p        install into this repository (default: your user directory)
   --client, -c <names> comma-separated harnesses, or "all" (default all): ${CLIENT_NAMES.join(', ')}
   --mcp <scope>        where to write the GitHub MCP server config when none is found: user, project or skip
+  --no-config          do not write .agents/gh-wat-dis/config.json for this repository
   --dry-run, -n        print what would be written and change nothing
   --force, -f          replace skill directories this package did not write
+
+The config is written only in a git repository that has none. An existing config is never changed:
+"npx gh-wat-dis init --force" writes a fresh one.
 `;
 
 const UNINSTALL_HELP = `Usage: npx gh-wat-dis uninstall [--project] [--client <names>] [--dry-run]
@@ -123,14 +128,18 @@ Remove the skill directories this package installed. Other directories are left 
 
 export async function install(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['project', 'dry-run', 'force', 'help'], strings: ['client', 'mcp'],
+    booleans: ['project', 'dry-run', 'force', 'help', 'no-config'], strings: ['client', 'mcp'],
     aliases: { '-n': '--dry-run', '-f': '--force', '-c': '--client', '-p': '--project', '-h': '--help' },
   });
   if (args.help) { process.stdout.write(INSTALL_HELP); return 0; }
   if (args.mcp && !['user', 'project', 'skip'].includes(args.mcp)) throw new UsageError('--mcp must be user, project or skip');
   const steps = plan({ project: args.project, clients: parseClients(args.client), force: args.force });
   for (const s of steps) console.log(`${s.action.padEnd(8)} ${s.dest}${s.note ? `  (${s.note})` : ''}`);
+  // The skills are for this machine, the config is for this repository. One command sets up both.
+  const root = repoRoot();
+  const needsConfig = !args['no-config'] && existsSync(join(root, '.git')) && !existsSync(join(root, CONFIG_REL));
   if (args['dry-run']) {
+    if (needsConfig) console.log(`write    ${join(root, CONFIG_REL)}`);
     console.log('\nDry run. Nothing changed.');
     return 0;
   }
@@ -140,18 +149,22 @@ export async function install(argv: string[]): Promise<number> {
   console.log(`\n${changed} skill directories written, ${count('current')} current, ${count('skip')} skipped.`);
   if (count('skip')) console.log('Skipped directories were not touched. Run again with --force to replace them.');
   if (changed) console.log('Restart your agent harness so it loads the skills.');
+  if (needsConfig) {
+    console.log('\nRepository config');
+    await (await import('./init.ts')).main([]);
+    console.log('Review it with the person, then commit it.');
+  }
 
   console.log('\nChecks');
   const { offerLogin, printChecks, runChecks } = await import('./doctor.ts');
   let checks = await runChecks();
   let fails = printChecks(checks);
-  const noServer = checks.some((c) => c.name === 'github mcp' && c.status === 'warn' && c.detail.startsWith('no GitHub MCP server'));
+  const noServer = checks.some((c) => c.code === 'mcp-none');
   let again = await offerLogin(checks);
   if (noServer) {
     const { offerMcpSetup } = await import('./mcp-apply.ts');
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
-  again = await (await import('./doctor.ts')).offerSandbox(checks) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks();

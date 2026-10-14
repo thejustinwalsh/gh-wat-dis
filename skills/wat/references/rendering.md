@@ -35,6 +35,7 @@ Use the richest element that carries the information in the fewest words. Check 
 
 ## Images
 
+- **Centre a diagram** by wrapping its image line in `<div align="center">` and `</div>`, with a blank line inside each tag. GitHub keeps the `align` attribute and centres the image. The image line stays Markdown, so `gh --attach` still finds the local path.
 - **Attach with `gh`.** `gh issue create --body-file body.md --attach ./diagram.svg`. Reference the local path in the body (`![Title](./diagram.svg)`) and `gh` swaps in the uploaded URL. Without a reference, `gh` appends the image.
 - Formats: PNG, JPEG, GIF, WebP, SVG, MP4, MOV, WebM. 10 MB per image.
 - Needs gh 2.99.0 or later, GitHub.com or Enterprise Cloud, and write access.
@@ -56,15 +57,16 @@ Do not rely on: `C4Context`, `architecture-beta`, `block-beta`, `sankey-beta`, `
 | Fact | Where it goes |
 |---|---|
 | Kind of work: Task, Bug, Feature | The **issue type** in an organization repository. A repository under a user account has no issue types, so there it is a **type label**: `task`, `bug`, `feature`. `issues.typeSource` in the repo config says which. Exactly one type for each issue. |
-| Priority | A person decides it. Propose it in the triage table. Write it only to an issue field the organization defines, never to a label. |
+| Priority | A **priority label**: `critical`, `major`, `minor` or `nit`. A person decides it; triage proposes it and writes it in an approved row. One per issue |
+| Size | A **size label**: `s`, `m`, `l` or `xl`. One per issue |
 | Product surface the work touches | A **surface label**, from `labels.surfaces` in the repo config |
-| Agent memory, an agentic workflow, or work an autonomous agent manages | The **`agents` label** |
+| An agent owns the issue, or the issue holds a prompt an agent runs on a schedule | The **`agents` label** |
 | Release | Milestone |
 | Breakdown | **Sub-issue** of a parent (100 per parent, 8 levels) |
 | Order | **Blocked by / blocking** |
 | What a PR finishes | `Closes #n` in the PR body |
 
-Labels mean those two things, plus the type on a user repository. Do not create a label for priority, status or size, and do not create a type label where issue types exist.
+Labels mean those four things (surface, agents, priority, size), plus the type on a user repository. Do not create a label for status, and do not create a type label where issue types exist.
 
 A relation between two issues goes in GitHub's relations, not in prose. "Refs #12" in a body shows in no sidebar and no filter. Use a sub-issue for "part of", and blocked by for "must wait for". Keep `Refs #n` for a link that is neither: related reading, a PR that touches an issue without finishing it.
 

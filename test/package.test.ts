@@ -98,30 +98,6 @@ test('site: each diagram on the page states the size its spec renders at', async
   }
 });
 
-test('sandbox: reads Codex settings and adds the two lines without touching the rest', async () => {
-  const { blocksNpx, readSandbox, withFix } = await import('../src/cli/sandbox.ts');
-  const home = '/home/u';
-  const cache = '/home/u/.npm';
-  const plain = 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\nmodel = "x"\n\n[projects."/p"]\ntrust_level = "trusted"\n';
-  const before = readSandbox(plain, cache, home);
-  assert.deepEqual([before.mode, before.cacheWritable, before.network, blocksNpx(before)], ['workspace-write', false, false, true]);
-
-  const fixed = withFix(plain, cache, 'both', home)!;
-  assert.ok(fixed.startsWith(plain.trimEnd()), 'what was there is kept');
-  assert.match(fixed, /\[sandbox_workspace_write\]\nwritable_roots = \["\/home\/u\/\.npm"\]\nnetwork_access = true\n$/);
-  const after = readSandbox(fixed, cache, home);
-  assert.deepEqual([after.cacheWritable, after.network, blocksNpx(after)], [true, true, false]);
-  assert.equal(withFix(fixed, cache, 'both', home), fixed, 'a second run changes nothing');
-
-  const existing = 'sandbox_mode = "workspace-write"\n[sandbox_workspace_write]\nwritable_roots = ["/data"]\nnetwork_access = false\n[other]\nk = 1\n';
-  const merged = withFix(existing, cache, 'both', home)!;
-  assert.match(merged, /writable_roots = \["\/data", "\/home\/u\/\.npm"\]\nnetwork_access = true\n\[other\]\nk = 1\n/);
-  assert.equal(withFix('[sandbox_workspace_write]\nwritable_roots = [\n  "/data",\n]\n', cache, 'both', home), null, 'a multi-line array is left for a person');
-
-  assert.equal(blocksNpx(readSandbox('sandbox_mode = "danger-full-access"\n', cache, home)), false);
-  assert.equal(readSandbox('[sandbox_workspace_write]\nwritable_roots = ["~"]\n', cache, home).cacheWritable, true, '~ covers ~/.npm');
-  assert.equal(readSandbox('[sandbox_workspace_write]\nwritable_roots = ["/home/u/.npmx"]\n', cache, home).cacheWritable, false);
-});
 
 test('site: the "See all commands" list matches the CLI, and help lists the skills', async () => {
   const { allCommandsHtml, withAllCommands } = await import('../scripts/site-commands.ts');

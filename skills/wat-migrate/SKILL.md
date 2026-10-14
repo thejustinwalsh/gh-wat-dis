@@ -40,7 +40,7 @@ Keep the files of this run in `.wat-tmp/migrate/`. The folder is git-ignored and
 npx gh-wat-dis doctor
 ```
 
-Go on only when no line says `FAIL` and the `repo config` line says `ok`. Otherwise stop the migration here and use the `wat-setup` skill: it installs the skills, fixes what fails, writes the config with `npx gh-wat-dis init` and runs the setup interview, which settles the policy, the surface labels and every other value a person decides. Come back to this step when it ends, and run `doctor` again.
+Go on only when no line says `FIX` and the `repository config` line says `ok`. Otherwise stop the migration here and use the `wat-setup` skill: it installs the skills, fixes what fails, writes the config with `npx gh-wat-dis init` and runs the setup interview, which settles the policy, the surface labels and every other value a person decides. Come back to this step when it ends, and run `doctor` again.
 
 A config that exists with no surface labels is not finished: when the survey in step 2 shows `labels.surfaces` as 0, go back to the `labels.surfaces` row of the setup interview before step 4.
 
@@ -150,6 +150,6 @@ Post the rows, add each issue to `done.txt`, report the batch with links, and ru
 
 - Close an issue outside a triage row the user approved
 - Delete a label, or run `labels apply --prune`, unless the user asks for that label by name
-- Set a priority or a due date
+- Set a priority label outside a triage row the user approved, or set a due date
 - Post a rewrite before the user has agreed to the first before and after
 - Go on to the next milestone or the backlog without asking

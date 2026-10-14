@@ -6,14 +6,19 @@ license: MIT
 
 # wat-setup
 
-Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each prints one `ok`, `warn` or `FAIL` line for each part. Fix only what fails.
+Four parts. `install` runs every check when it ends, and `doctor` runs the same checks on their own. Each check prints one line, and the line is one of three things:
 
-**A harness that sandboxes commands.** Codex runs commands where they cannot reach the network or write outside the project. `npx` needs both to fetch a package, and with them blocked it does not fail cleanly: it hangs and then dies with "heap out of memory", before any gh-wat-dis code runs. So when you are in such a harness, or `doctor` prints `warn codex sandbox`, set this up first:
+| Line | Means | Do |
+|---|---|---|
+| `ok` | Nothing to do | Move on |
+| `FIX` | Something is wrong, and gh-wat-dis will not work properly until it is fixed | The next line starts with `→` and names the one action. Do it, or hand it to the user when it says a person runs it |
+| `off` | An optional feature that is not set up | Nothing, unless the user wants it. The `→` line says how to turn it on |
 
-1. In a project with a `package.json`: ask the user, then run `npm install --save-dev gh-wat-dis` with their approval to use the network once. From then on `npx gh-wat-dis` finds the copy in `node_modules` and needs nothing the sandbox blocks.
-2. In a project with no `package.json`, or when the user does not want the dependency: ask them to run `npx gh-wat-dis doctor --fix` in their own terminal. It lets Codex's sandbox write npm's cache folder and prints the line it added. `npx` then runs a package that is installed or already cached. To let it also fetch a package inside Codex, they choose `npx gh-wat-dis doctor --sandbox network`. Both change the user's own Codex settings, so the user runs them. You do not edit that file.
+Fix only the `FIX` lines.
 
-`doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. It is a warning when missing, never a failure. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
+**A harness that sandboxes commands.** Some harnesses run commands in a sandbox that blocks the network or npm's cache (Codex does by default). `npx` then hangs and dies with "heap out of memory" before gh-wat-dis starts. We cannot fix every harness from here, so give advice: read the harness's own sandbox documentation (Codex: https://developers.openai.com/codex/security), tell the user what it says the command needs, and let them decide. One thing that helps: the package installed in the project as a dev dependency, so `npx` has nothing to fetch. Do not change a sandbox setting yourself.
+
+`doctor` also reports one optional tool, cccc, which gives `impact` its complexity facts. When it is missing its line says `off`, never `FIX`. Ask the user before you install it: `npx gh-wat-dis doctor --tools install` downloads the pinned release from github.com/moznion/cccc into the user's cache, refuses it unless the sha256 matches the pinned value and GitHub's build attestation names the release workflow, and writes a receipt beside the binary. Nothing is added to the project.
 
 A project needs three things and no more: the `gh` CLI, `gh-wat-dis` (as a dev dependency where there is a `package.json`, through `npx` alone where there is not), and (optional) the GitHub MCP server. Never tell a project to install another tool.
 
@@ -45,8 +50,8 @@ gh-wat-dis writes through `gh`. Attachments need **gh 2.99.0 or later**.
 | Check | Fix |
 |---|---|
 | `gh --version` is below 2.99.0 | `brew upgrade gh`, or the method at https://cli.github.com |
-| `gh auth` fails: not signed in, or the saved token is no longer valid | Sign-in opens a browser and needs a person. Ask the user to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in and checks again. Or they run `gh auth login --hostname github.com --web` themselves. Do not run the sign-in for them. |
-| `gh auth` fails: token lacks the `repo` scope | The user runs `gh auth refresh --scopes repo`. |
+| `FIX GitHub sign-in`: not signed in, or the saved sign-in has expired | Sign-in opens a browser and needs a person. Ask the user to run `npx gh-wat-dis doctor` in their own terminal: it offers to sign in and checks again. Or they run `gh auth login --hostname github.com --web` themselves. Do not run the sign-in for them. |
+| `FIX GitHub sign-in`: without permission to write to repositories | The user runs `gh auth refresh --scopes repo`. |
 | `gh issue create --help` has no `--attach` | The version is too old, or the host is GitHub Enterprise Server. Use the branch fallback in `../wat/references/rendering.md`. |
 
 ## 3. GitHub MCP server
@@ -78,21 +83,19 @@ Details, file paths and the local Docker variant: [references/mcp-clients.md](re
 
 ## 4. Repo config
 
-```bash
-npx gh-wat-dis init
-```
+`npx gh-wat-dis install` writes the config for a repository that has none, in the same run that installs the skills. There is no second command to run. To throw a config away and write a fresh one: `npx gh-wat-dis init --force`.
 
-`init` reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: owner, name, default branch, the labels and milestones that exist, and `policy.use`. It adds `.wat-tmp/` to `.gitignore`. It never overwrites an existing config.
+It reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: owner, name, default branch, the labels and milestones that exist, and `policy.use`. It adds `.wat-tmp/` to `.gitignore`. It never overwrites an existing config.
 
 ### Setup interview
 
-`init` writes defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
+The config starts as defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
 
-Run the interview after `init` writes a new config. For a config that already exists, ask only the rows the user wants to change.
+Run the interview after `install` writes a new config. For a config that already exists, ask only the rows the user wants to change.
 
 **Ask each of these.**
 
-| Key | Question | `init` wrote |
+| Key | Question | Starts as |
 |---|---|---|
 | `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo, ask once per session, or never? | `always` |
 | `policy.confirmBeforeWrite` | Show each draft and wait for a yes before posting? | `true` |
@@ -103,7 +106,7 @@ Run the interview after `init` writes a new config. For a config that already ex
 
 **Then confirm the rest in one question.** Show these values as a table and ask: keep them all, or change one?
 
-| Key | Meaning | `init` wrote |
+| Key | Meaning | Starts as |
 |---|---|---|
 | `milestones.naming` | How milestone titles are written | A guess from one existing title, or empty |
 | `milestones.capacity` | How many issues fit one milestone | Unset |

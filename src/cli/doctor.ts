@@ -8,13 +8,19 @@ import type { Config } from './config.ts';
 import { MANIFEST, hashDir, skillNames, targets } from './install.ts';
 import type { Manifest } from './install.ts';
 import { CCCC, install as installCccc, locate as locateCccc, platformKey } from '../tools/cccc.ts';
-import { applyFix, blocksNpx, codexSandbox, fixLines } from './sandbox.ts';
 import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, readJson, repoRoot, run } from './util.ts';
 
 const MIN_GH = '2.99.0';
 const MIN_NODE = '24.0.0';
 
-export interface Check { status: 'ok' | 'warn' | 'FAIL'; name: string; detail: string }
+/**
+ * One line of the report. A reader needs to know one thing from it: is this fine, or is there something to do.
+ *   ok   nothing to do
+ *   fix  something is wrong and gh-wat-dis will not work properly until it is fixed. `action` says how
+ *   off  an optional feature that is not set up. `action` says how to turn it on
+ * `code` names the case for the code that offers a fix, so nothing has to match on wording.
+ */
+export interface Check { status: 'ok' | 'fix' | 'off'; name: string; detail: string; action?: string; code?: string }
 
 const LOGIN = ['auth', 'login', '--hostname', 'github.com', '--web'];
 const LOGIN_CMD = `gh ${LOGIN.join(' ')}`;
@@ -26,16 +32,16 @@ function checkRuntime(): Check {
   const v = process.versions.node;
   return compareVersions(v, MIN_NODE) >= 0
     ? { status: 'ok', name: 'runtime', detail: `node ${v}` }
-    : { status: 'FAIL', name: 'runtime', detail: `node ${v}. Needs ${MIN_NODE} or later.` };
+    : { status: 'fix', name: 'runtime', detail: `node ${v} is too old`, action: `install Node ${MIN_NODE} or later: https://nodejs.org` };
 }
 
 function checkGh(offline: boolean): Check[] {
   const out = run('gh', ['--version']);
-  if (!out) return [{ status: 'FAIL', name: 'gh', detail: 'GitHub CLI not found. Install it: https://cli.github.com' }];
+  if (!out) return [{ status: 'fix', name: 'GitHub CLI', detail: 'gh is not installed', action: 'install it: https://cli.github.com' }];
   const v = out.match(/gh version (\d+\.\d+\.\d+)/)?.[1] ?? '0.0.0';
   const res: Check[] = [compareVersions(v, MIN_GH) >= 0
-    ? { status: 'ok', name: 'gh', detail: `${v}, --attach available` }
-    : { status: 'FAIL', name: 'gh', detail: `${v}. Attachments need ${MIN_GH} or later. Upgrade: brew upgrade gh, or https://cli.github.com` }];
+    ? { status: 'ok', name: 'GitHub CLI', detail: `gh ${v}` }
+    : { status: 'fix', name: 'GitHub CLI', detail: `gh ${v} is too old to upload diagrams`, action: `upgrade to ${MIN_GH} or later: brew upgrade gh, or https://cli.github.com` }];
   if (!offline) res.push(checkAuth());
   return res;
 }
@@ -45,16 +51,17 @@ function checkAuth(): Check {
   if (!login) {
     const hasToken = Boolean(run('gh', ['auth', 'token']));
     return {
-      status: 'FAIL', name: 'gh auth',
-      detail: `${hasToken ? 'the saved token is no longer valid' : 'not signed in'}. Sign in: ${LOGIN_CMD}`,
+      status: 'fix', name: 'GitHub sign-in', code: 'auth-none',
+      detail: hasToken ? 'the saved sign-in has expired' : 'gh is not signed in',
+      action: `a person runs this in their own terminal: ${LOGIN_CMD}`,
     };
   }
   const status = spawnSync('gh', ['auth', 'status', '--hostname', 'github.com'], { encoding: 'utf8' });
   const scopes = `${status.stdout}${status.stderr}`.match(/Token scopes: (.*)/)?.[1]?.replace(/'/g, '').split(/,\s*/) ?? [];
   if (scopes.length && !scopes.includes('repo')) {
-    return { status: 'FAIL', name: 'gh auth', detail: `signed in as ${login}, but the token lacks the "repo" scope. Run: gh auth refresh --scopes repo` };
+    return { status: 'fix', name: 'GitHub sign-in', code: 'auth-scope', detail: `signed in as ${login}, without permission to write to repositories`, action: 'run: gh auth refresh --scopes repo' };
   }
-  return { status: 'ok', name: 'gh auth', detail: `signed in as ${login}` };
+  return { status: 'ok', name: 'GitHub sign-in', detail: `signed in as ${login}` };
 }
 
 /**
@@ -62,13 +69,13 @@ function checkAuth(): Check {
  * an agent gets the command to hand to the human instead.
  */
 export async function offerLogin(checks: Check[]): Promise<boolean> {
-  const auth = checks.find((c) => c.name === 'gh auth' && c.status === 'FAIL');
+  const auth = checks.find((c) => c.code === 'auth-none' || c.code === 'auth-scope');
   if (!auth) return false;
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     console.log(`\nGitHub sign-in needs a person. Ask them to run this in their own terminal, then run doctor again:\n  ${LOGIN_CMD}`);
     return false;
   }
-  if (auth.detail.includes('scope')) return false;
+  if (auth.code === 'auth-scope') return false;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = (await rl.question('\nGitHub CLI is not signed in. Sign in now through your browser? [Y/n] ')).trim().toLowerCase();
   rl.close();
@@ -91,22 +98,28 @@ function checkSkills(cwd: string): Check[] {
       });
       const count = (s: string): number => states.filter((x) => x === s).length;
       if (count('missing') === names.length) continue;
-      const name = `skills ${scope.label} ${t.client}`;
+      const name = `skills (${scope.project ? 'this project' : 'your user folder'})`;
       if (count('current') === names.length) {
-        res.push({ status: 'ok', name, detail: `${names.length} skills, ${PKG.version}, ${t.root}` });
+        res.push({ status: 'ok', name, detail: `${names.length} skills installed in ${t.root}` });
       } else {
-        res.push({
-          status: count('missing') || count('foreign') ? 'FAIL' : 'warn', name,
-          detail: `${count('current')} current, ${count('old')} old, ${count('edited')} edited, ${count('missing')} missing, ${count('foreign')} not ours in ${t.root}. Run: npx gh-wat-dis install${scope.project ? ' --project' : ''}`,
-        });
+        const said = [
+          count('old') ? `${count('old')} from an older version` : '',
+          count('missing') ? `${count('missing')} missing` : '',
+          count('edited') ? `${count('edited')} edited by hand` : '',
+          count('foreign') ? `${count('foreign')} not installed by gh-wat-dis` : '',
+        ].filter(Boolean).join(', ');
+        // install will not overwrite a directory someone edited or one it does not own: that takes --force.
+        const force = count('edited') || count('foreign') ? ' --force (it replaces the edited ones)' : '';
+        res.push({ status: 'fix', name, detail: `${said}, in ${t.root}`, action: `run: npx gh-wat-dis install${scope.project ? ' --project' : ''}${force}` });
       }
     }
   }
-  if (!res.length) res.push({ status: 'FAIL', name: 'skills', detail: 'not installed. Run: npx gh-wat-dis install' });
+  if (!res.length) res.push({ status: 'fix', name: 'skills', detail: 'no skills are installed', action: 'run: npx gh-wat-dis install' });
   return res;
 }
 
 type Servers = Record<string, unknown> | undefined;
+const MCP = 'GitHub MCP server (optional)';
 
 const TOKEN_VARS = ['GITHUB_PERSONAL_ACCESS_TOKEN', 'GITHUB_MCP_PAT', 'GITHUB_PAT_TOKEN', 'GITHUB_PAT', 'GITHUB_TOKEN', 'GH_TOKEN'];
 
@@ -158,34 +171,32 @@ async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
   const present = TOKEN_VARS.filter((n) => process.env[n]);
   if (!found.length) {
     const have = present.length ? ` ${present[0]} is already set in this environment, so no new token is needed.` : '';
-    return { status: 'warn', name: 'github mcp', detail: `no GitHub MCP server found in a known config. Optional: skills read through gh without it.${have} Set up: npx gh-wat-dis mcp <client>` };
+    return { status: 'off', name: MCP, code: 'mcp-none', detail: `not set up. The skills read GitHub through gh without it.${have}`, action: 'to turn it on: npx gh-wat-dis mcp --apply' };
   }
-  const where = `configured for ${found.join(', ')}`;
+  const where = `set up for ${found.join(', ')}`;
   if (!wanted.size) {
-    return { status: 'ok', name: 'github mcp', detail: helper
-      ? `${where}. No token is stored: a headers helper reads it from the gh login at each connect.`
-      : `${where}. The config names no token variable (the harness signs in itself).` };
+    return { status: 'ok', name: MCP, detail: `${where}${helper ? ', signed in through gh' : ''}` };
   }
   const inFile = envFileVars(cwd);
   const missing = [...wanted].filter((n) => !process.env[n]);
   const fromFile = missing.filter((n) => inFile.includes(n));
   if (missing.length && fromFile.length === missing.length) {
-    return { status: 'warn', name: 'github mcp', detail: `${where}. ${missing.join(', ')} is in ${ENV_FILE_REL} but not in this environment. Start the harness with that file loaded (direnv, mise, or: set -a; . ${ENV_FILE_REL}; set +a).` };
+    return { status: 'fix', name: MCP, detail: `${where}, but it cannot sign in: ${missing.join(', ')} is in ${ENV_FILE_REL} and that file is not loaded here`, action: `start the harness with the file loaded, with direnv or mise, or: set -a; . ${ENV_FILE_REL}; set +a` };
   }
   if (missing.length) {
     const reuse = present.length
-      ? `${present[0]} is set: point the config at it, or run: export ${missing[0]}="$${present[0]}"`
-      : `put ${missing[0]}=<token> in ${ENV_FILE_REL} and load it for this project, or for Claude Code use the headers helper from: npx gh-wat-dis mcp claude`;
-    return { status: 'warn', name: 'github mcp', detail: `${where}, but ${missing.join(', ')} is not set in this environment. ${reuse}. Then restart the harness.` };
+      ? `run: export ${missing[0]}="$${present[0]}" (${present[0]} is already set), then restart the harness`
+      : `put ${missing[0]}=<token> in ${ENV_FILE_REL} and load that file for this project, then restart the harness. For Claude Code, no token is needed: npx gh-wat-dis mcp claude`;
+    return { status: 'fix', name: MCP, detail: `${where}, but it cannot sign in: ${missing.join(', ')} is not set`, action: reuse };
   }
   if (!offline) {
     for (const n of wanted) {
       if ((await tokenWorks(n)) === false) {
-        return { status: 'FAIL', name: 'github mcp', detail: `${where}. ${n} is set, but GitHub rejects it (expired or revoked). Refresh it: export ${n}="$(gh auth token)"` };
+        return { status: 'fix', name: MCP, detail: `${where}, but GitHub rejects the token in ${n}: it has expired or was revoked`, action: `run: export ${n}="$(gh auth token)", then restart the harness` };
       }
     }
   }
-  return { status: 'ok', name: 'github mcp', detail: `${where}. ${[...wanted].join(', ')} is set${offline ? '' : ' and GitHub accepts it'}.` };
+  return { status: 'ok', name: MCP, detail: `${where}${offline ? '' : ', and GitHub accepts its token'}` };
 }
 
 const ENV_FILE_REL = '.agents/gh-wat-dis/.env';
@@ -203,33 +214,34 @@ function checkEnvFile(cwd: string): Check[] {
   if (!existsSync(join(root, ENV_FILE_REL))) return [];
   const ignored = spawnSync('git', ['check-ignore', '-q', ENV_FILE_REL], { cwd: root }).status === 0;
   const tracked = spawnSync('git', ['ls-files', '--error-unmatch', ENV_FILE_REL], { cwd: root, stdio: 'ignore' }).status === 0;
-  if (tracked) return [{ status: 'FAIL', name: 'token file', detail: `${ENV_FILE_REL} is tracked by git. Remove it from the repository (git rm --cached ${ENV_FILE_REL}), then revoke the token and make a new one.` }];
-  if (!ignored) return [{ status: 'FAIL', name: 'token file', detail: `${ENV_FILE_REL} is not git-ignored. Add ".env" to .agents/gh-wat-dis/.gitignore before you commit.` }];
-  return [{ status: 'ok', name: 'token file', detail: `${ENV_FILE_REL} is git-ignored` }];
+  if (tracked) return [{ status: 'fix', name: 'token file', detail: `${ENV_FILE_REL} holds a token and git is tracking it`, action: `run: git rm --cached ${ENV_FILE_REL}. Then revoke that token on GitHub and make a new one` }];
+  if (!ignored) return [{ status: 'fix', name: 'token file', detail: `${ENV_FILE_REL} holds a token and git would commit it`, action: 'add a line ".env" to .agents/gh-wat-dis/.gitignore' }];
+  return [{ status: 'ok', name: 'token file', detail: `git ignores ${ENV_FILE_REL}` }];
 }
 
 function checkConfig(cwd: string): Check {
   const root = repoRoot(cwd);
   const path = join(root, CONFIG_REL);
   if (!existsSync(path)) {
-    return { status: 'warn', name: 'repo config', detail: `no ${CONFIG_REL} in ${root}. Skills will ask before use. Create it: npx gh-wat-dis init` };
+    return { status: 'off', name: 'repository config (optional)', detail: 'this repository has none, so the skills ask before each use', action: 'to set it up: npx gh-wat-dis install' };
   }
   const cfg = readJson<Config>(path);
-  if (!cfg) return { status: 'FAIL', name: 'repo config', detail: `${CONFIG_REL} is not valid JSON` };
+  if (!cfg) return { status: 'fix', name: 'repository config', detail: `${CONFIG_REL} is not valid JSON`, action: `correct the file, or write a new one: npx gh-wat-dis init --force` };
   const errors = validateConfig(cfg);
-  if (errors.length) return { status: 'FAIL', name: 'repo config', detail: `${CONFIG_REL}: ${errors.join('; ')}` };
-  return { status: 'ok', name: 'repo config', detail: `policy.use=${cfg.policy.use}, ${cfg.architecture?.elements?.length ?? 0} architecture elements` };
+  if (errors.length) return { status: 'fix', name: 'repository config', detail: `${CONFIG_REL} has ${errors.length === 1 ? 'a value' : `${errors.length} values`} gh-wat-dis cannot use: ${errors.join('; ')}`, action: `correct ${errors.length === 1 ? 'it' : 'them'} in ${CONFIG_REL}` };
+  const use = { always: 'agents use gh-wat-dis here without asking', ask: 'agents ask once per session before they use gh-wat-dis here', never: 'agents do not use gh-wat-dis here' }[cfg.policy.use] ?? `policy.use is ${cfg.policy.use}`;
+  return { status: 'ok', name: 'repository config', detail: `${use}; ${cfg.architecture?.elements?.length ?? 0} architecture elements mapped` };
 }
 
 async function checkTools(): Promise<Check[]> {
   const probes: [name: string, load: () => Promise<void>][] = [
-    ['diagram layout', async () => { await import('elkjs/lib/elk.bundled.js'); }],
-    ['diagram png', async () => { (await import('../tools/raster.ts')).toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'); }],
-    ['facts typescript', async () => {
+    ['diagrams', async () => { await import('elkjs/lib/elk.bundled.js'); }],
+    ['diagram previews', async () => { (await import('../tools/raster.ts')).toPng('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'); }],
+    ['TypeScript analysis', async () => {
       const { parse, Lang } = await import('@ast-grep/napi');
       parse(Lang.TypeScript, 'export const a = 1');
     }],
-    ['facts rust', async () => {
+    ['Rust analysis', async () => {
       const { parse, registerDynamicLanguage } = await import('@ast-grep/napi');
       const rust = (await import('@ast-grep/lang-rust')).default;
       registerDynamicLanguage({ rust });
@@ -238,99 +250,22 @@ async function checkTools(): Promise<Check[]> {
   ];
   const res: Check[] = [];
   for (const [name, load] of probes) {
-    try { await load(); res.push({ status: 'ok', name, detail: 'ready' }); }
-    catch (e) { res.push({ status: 'FAIL', name, detail: `cannot load: ${errorMessage(e).split('\n')[0]}` }); }
+    try { await load(); res.push({ status: 'ok', name, detail: 'working' }); }
+    catch (e) { res.push({ status: 'fix', name, detail: `a part of ${PKG.name} did not load: ${errorMessage(e).split('\n')[0]}`, action: `install ${PKG.name} again. If it still fails, report it: ${PKG.bugs}` }); }
   }
   return res;
 }
 
-const SANDBOX = 'codex sandbox';
-const DEP_CMD = `npm install --save-dev ${PKG.name}@${PKG.version}`;
-const FIX_CMD = `npx ${PKG.name} doctor --fix`;
-
-/** The project's own copy of the CLI, when the package is installed in it. npx runs this one with no fetch and no cache. */
-function localBin(root: string): boolean {
-  return !isOwnRepo(root) && existsSync(join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${PKG.name}.cmd` : PKG.name));
-}
-
-/** The gh-wat-dis repository itself. npx resolves a command named after the root package through npm's cache, so a local copy does not help there. */
-const isOwnRepo = (root: string): boolean => readJson<{ name?: string }>(join(root, 'package.json'))?.name === PKG.name;
-
-/**
- * Only when Codex is set up here. Its default sandbox blocks npm's cache and the network. With those
- * blocked, an npx that has to fetch the package hangs and runs out of memory, so no gh-wat-dis tool
- * starts inside Codex. An npx that finds the package in the project's node_modules needs neither.
- */
-function checkSandbox(cwd: string): Check[] {
-  const found = codexSandbox();
-  if (!found) return [];
-  const { state } = found;
-  if (localBin(repoRoot(cwd))) return [{ status: 'ok', name: SANDBOX, detail: `npx runs this project's own copy of ${PKG.name}, which needs nothing the sandbox blocks` }];
-  if (state.mode === 'danger-full-access') return [{ status: 'ok', name: SANDBOX, detail: 'the sandbox is off' }];
-  if (!blocksNpx(state)) {
-    return [{ status: 'ok', name: SANDBOX, detail: `npm's cache is writable inside the sandbox${state.network ? ' and the network is on' : '. The network is off there: npx runs a package that is installed or cached, and cannot fetch a new one'}` }];
-  }
-  return [{ status: 'warn', name: SANDBOX, detail: `Codex's sandbox blocks npm's cache, so npx hangs there and then runs out of memory, and no ${PKG.name} tool starts inside Codex. Fix, from your own terminal: ${FIX_CMD}` }];
-}
-
-/**
- * Offer a way for npx to run inside Codex's sandbox. `mode` is the --sandbox flag, or `cache` under --fix.
- *   cache    let Codex commands write npm's cache folder: the smallest change, and what --fix applies
- *   network  the same, plus network access, so npx can also fetch a package inside Codex
- *   dep      add gh-wat-dis to this project as a dev dependency: npx then runs the local copy
- * It never changes Codex's config or the project without a flag or a yes.
- */
-export async function offerSandbox(checks: Check[], mode?: string, cwd: string = process.cwd()): Promise<boolean> {
-  if (mode === 'skip' || !checks.some((c) => c.name === SANDBOX && c.status === 'warn')) return false;
-  const found = codexSandbox();
-  if (!found) return false;
-  const root = repoRoot(cwd);
-  const own = isOwnRepo(root);
-  let choice = mode;
-  if (!choice) {
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      console.log(`\nCodex's sandbox stops npx. This is fixed outside the sandbox, so ask the person to run one of these in their own terminal:\n  ${FIX_CMD}${' '.repeat(Math.max(1, 34 - FIX_CMD.length))}lets Codex's sandbox write npm's cache folder (${found.cache})${own ? '' : `\n  ${DEP_CMD}   adds ${PKG.name} to this project, so npx needs no cache and no network`}`);
-      return false;
-    }
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question(`\nCodex's sandbox stops npx, so ${PKG.name} cannot run inside Codex.\n  [c] let the sandbox write npm's cache folder, ${found.cache} (recommended)\n  [n] the same, and let sandboxed commands reach the network, so npx can fetch a package\n${own ? '' : `  [d] add ${PKG.name} to this project as a dev dependency instead: no Codex setting changes\n`}  [s] skip\n> `)).trim().toLowerCase();
-    rl.close();
-    choice = answer.startsWith('c') ? 'cache' : answer.startsWith('n') ? 'network' : answer.startsWith('d') ? 'dep' : 'skip';
-  }
-  if (choice === 'dep') {
-    if (own) {
-      console.log(`\nThis is the ${PKG.name} repository, and a package cannot depend on itself. Use: ${FIX_CMD}`);
-      return false;
-    }
-    console.log(`\n${DEP_CMD}`);
-    const [cmd, ...rest] = DEP_CMD.split(' ');
-    return spawnSync(cmd!, rest, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0;
-  }
-  if (choice !== 'cache' && choice !== 'network') return false;
-  const fix = choice === 'network' ? 'both' : 'cache';
-  const res = applyFix(fix);
-  if (!res) return false;
-  if (res.action === 'manual') {
-    console.log(`\n${res.file} already has a [sandbox_workspace_write] section in a form this tool does not edit. Add these to it by hand:\n${fixLines(found.cache, fix)}`);
-    return false;
-  }
-  console.log(`\n${res.action === 'written' ? 'updated' : 'unchanged'}  ${res.file}\n${fixLines(found.cache, fix).split('\n').map((l) => `  ${l}`).join('\n')}\nRestart Codex so it reads the new settings.`);
-  return res.action === 'written';
-}
-
 const TOOLS_CMD = 'npx gh-wat-dis doctor --tools install';
 
-/** Optional: complexity scores for the facts. A missing tool is a warning, never a failure. */
+/** Optional: complexity scores for the facts. Missing, it is a feature that is off, never a fault. */
 function checkComplexity(): Check {
-  const name = 'complexity (optional)';
+  const name = 'complexity facts (optional)';
   const found = locateCccc();
-  if (found?.receipt) {
-    const how = found.receipt.attested ? 'sha256 pinned, build attested' : 'sha256 pinned, not attested';
-    return { status: 'ok', name, detail: `cccc ${found.version} from ${CCCC.repo} (${how})` };
-  }
-  if (found) return { status: 'ok', name, detail: `cccc ${found.version} on PATH. You installed it; gh-wat-dis did not check it.` };
-  if (!CCCC.assets[platformKey()]) return { status: 'ok', name, detail: `cccc has no build for ${platformKey()}. impact reports no complexity.` };
-  return { status: 'warn', name, detail: `cccc is not installed, so impact reports no complexity. Install: ${TOOLS_CMD}` };
+  if (found?.receipt) return { status: 'ok', name, detail: `cccc ${found.version}, ${found.receipt.attested ? 'download verified' : 'download checked against its pinned hash'}` };
+  if (found) return { status: 'ok', name, detail: `cccc ${found.version}, the copy on your PATH` };
+  if (!CCCC.assets[platformKey()]) return { status: 'ok', name, detail: `not available for ${platformKey()}. Everything else works without it` };
+  return { status: 'off', name, code: 'cccc-missing', detail: 'cccc is not installed, so impact reports no complexity', action: `to turn it on: ${TOOLS_CMD}` };
 }
 
 /**
@@ -338,7 +273,7 @@ function checkComplexity(): Check {
  * With no terminal attached and no flag it changes nothing: the warning already names the command.
  */
 export async function offerTools(checks: Check[], mode?: string): Promise<boolean> {
-  if (mode === 'skip' || !checks.some((c) => c.name === 'complexity (optional)' && c.status === 'warn')) return false;
+  if (mode === 'skip' || !checks.some((c) => c.code === 'cccc-missing')) return false;
   if (mode !== 'install') {
     if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
     const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -354,54 +289,68 @@ export async function offerTools(checks: Check[], mode?: string): Promise<boolea
 }
 
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity(), ...checkSandbox(cwd)];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity()];
 }
 
+const LABEL = { ok: 'ok', fix: 'FIX', off: 'off' } as const;
+
+/**
+ * Prints one line for each check, and under every line that is not `ok` the one thing to do about it.
+ * Returns how many need fixing.
+ */
 export function printChecks(checks: Check[]): number {
-  for (const c of checks) console.log(`${c.status.padEnd(4)} ${c.name.padEnd(22)} ${c.detail}`);
-  const fails = checks.filter((c) => c.status === 'FAIL').length;
-  const warns = checks.filter((c) => c.status === 'warn').length;
-  console.log(`\n${fails} failed, ${warns} warnings, ${checks.length - fails - warns} ok.`);
-  return fails;
+  const width = Math.max(...checks.map((c) => c.name.length)) + 2;
+  for (const c of checks) {
+    console.log(`${LABEL[c.status].padEnd(4)} ${c.name.padEnd(width)}${c.detail}`);
+    if (c.action) console.log(`${' '.repeat(5 + width)}→ ${c.action}`);
+  }
+  const count = (s: Check['status']): number => checks.filter((c) => c.status === s).length;
+  const fixes = count('fix');
+  const off = count('off');
+  const parts = [fixes ? `${fixes} to fix` : 'Nothing to fix', ...(off ? [`${off} optional ${off === 1 ? 'feature is' : 'features are'} off`] : []), `${count('ok')} ok`];
+  console.log(`\n${parts.join(', ')}.`);
+  return fixes;
 }
 
-const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip] [--fix] [--sandbox cache|network|dep|skip]
+const HELP = `Usage: npx gh-wat-dis doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]
 
-Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config. Offers a fix where it has one.
-Exits non-zero when a check fails.
+Check the runtime, gh, the installed skills, the GitHub MCP server and the repository config.
+
+Each line is one of three things:
+  ok   nothing to do
+  FIX  something is wrong. The next line, after "→", is what to do
+  off  an optional feature that is not set up. The next line says how to turn it on
+
+In a terminal, doctor offers to do three of these for you: sign gh in, set up the GitHub MCP server,
+and install the optional cccc tool. Everything else it prints as a command for you to run.
+Exits non-zero when there is something to fix.
 
   --offline        skip the checks that call GitHub
-  --json           print the checks as JSON and offer no fixes
+  --json           print the checks as JSON (status, name, detail, action) and offer nothing
   --no-login       do not offer to run gh auth login
   --mcp <scope>    where to write the GitHub MCP server config when none is found: user, project or skip
   --tools <mode>   optional analysis tools (cccc, for complexity facts): install without asking, or skip
-  --fix            apply the fixes that need no choice from you. Today that is one: let Codex's sandbox write
-                   npm's cache folder, so npx can run inside Codex. It prints what it changed.
-  --sandbox <mode> choose the sandbox fix yourself: cache (what --fix does), network (the cache and network
-                   access), dep (add gh-wat-dis to this project as a dev dependency), or skip
 
 Optional tools are fetched from their own releases into your user cache, checked against a pinned sha256
-and the release's build attestation. A missing optional tool is a warning, never a failure.
+and the release's build attestation. A missing optional tool is \"off\", never something to fix.
 `;
 
 export async function main(argv: string[]): Promise<number> {
-  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help', 'fix'], strings: ['mcp', 'tools', 'sandbox'], aliases: { '-h': '--help' } });
-  if (args.sandbox && !['cache', 'network', 'dep', 'skip'].includes(args.sandbox)) throw new UsageError('--sandbox must be cache, network, dep or skip');
+  const args = parseArgs(argv, { booleans: ['offline', 'json', 'no-login', 'help'], strings: ['mcp', 'tools'], aliases: { '-h': '--help' } });
   if (args.tools && !['install', 'skip'].includes(args.tools)) throw new UsageError('--tools must be install or skip');
   if (args.help) { process.stdout.write(HELP); return 0; }
   let checks = await runChecks({ offline: args.offline });
   if (args.json) {
     console.log(JSON.stringify(checks, null, 2));
-    return checks.some((c) => c.status === 'FAIL') ? 1 : 0;
+    return checks.some((c) => c.status === 'fix') ? 1 : 0;
   }
   let fails = printChecks(checks);
   let again = !args['no-login'] && await offerLogin(checks);
-  if (checks.some((c) => c.name === 'github mcp' && c.status === 'warn' && c.detail.startsWith('no GitHub MCP server'))) {
+  if (checks.some((c) => c.code === 'mcp-none')) {
     const { offerMcpSetup } = await import('./mcp-apply.ts');
     again = (await offerMcpSetup({ scope: args.mcp as 'user' | 'project' | 'skip' | undefined })).some((r) => r.action === 'added') || again;
   }
   again = await offerTools(checks, args.tools) || again;
-  again = await offerSandbox(checks, args.sandbox ?? (args.fix ? 'cache' : undefined)) || again;
   if (again) {
     console.log('\nChecking again');
     checks = await runChecks({ offline: args.offline });

@@ -26,7 +26,7 @@ export interface SurfaceLabel {
   color?: string;
 }
 
-export const AGENTS_LABEL = { name: 'agents', description: 'Agent memory, an agentic workflow, or work managed by autonomous agents' };
+export const AGENTS_LABEL = { name: 'agents', description: 'Owned by an agent, or holds a prompt an agent runs on a schedule: orchestration, maintenance' };
 export const DEFAULT_TYPES = ['Task', 'Bug', 'Feature'] as const;
 /** Wording for a type label on a user repository. It follows GitHub's own issue types. */
 export const TYPE_LABELS: Record<string, { description: string }> = {
@@ -34,6 +34,20 @@ export const TYPE_LABELS: Record<string, { description: string }> = {
   bug: { description: 'An unexpected problem or behavior' },
   feature: { description: 'A request, idea, or new functionality' },
 };
+/** Priority labels, most urgent first. A person decides the priority; the label records the decision. */
+export const PRIORITY_LABELS: { name: string; description: string }[] = [
+  { name: 'critical', description: 'Data loss, a security hole, or the main path is down. Other work stops for it' },
+  { name: 'major', description: 'A main path is broken or wrong, or the current milestone needs it' },
+  { name: 'minor', description: 'A real problem off the main path, or wanted with nothing waiting on it' },
+  { name: 'nit', description: 'Cosmetic, small or speculative' },
+];
+/** Size labels, smallest first. */
+export const SIZE_LABELS: { name: string; description: string }[] = [
+  { name: 's', description: 'Under a day' },
+  { name: 'm', description: 'One to three days' },
+  { name: 'l', description: 'Three days to a week' },
+  { name: 'xl', description: 'More than a week. Split it' },
+];
 export const typeLabel = (type: string): string => type.trim().toLowerCase().replace(/\s+/g, '-');
 
 export interface Config {
@@ -46,8 +60,8 @@ export interface Config {
    * A repository under a user account has none, so there each type is a label (`label`).
    */
   issues: { types: string[]; typeSource: 'issue-type' | 'label' };
-  /** Besides type labels on a user repository, labels mean two things: the agents label, and the product surface an issue touches. */
-  labels: { agents: string; surfaces: SurfaceLabel[] };
+  /** Besides type labels on a user repository, labels mean four things: the agents label, the product surface an issue touches, its priority and its size. */
+  labels: { agents: string; surfaces: SurfaceLabel[]; /** Priority label names, most urgent first. */ priorities?: string[]; /** Size label names, smallest first. */ sizes?: string[] };
   pulls: { draft: boolean; closingKeyword: string };
   milestones: { naming: string; capacity: number | null };
   triage: { staleIssueDays: number; stalePrDays: number };
@@ -70,7 +84,7 @@ export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', u
     policy: { use, confirmBeforeWrite: true },
     repo: { owner, name, defaultBranch },
     issues: issueTypes.length ? { types: issueTypes, typeSource: 'issue-type' } : { types: [...DEFAULT_TYPES], typeSource: 'label' },
-    labels: { agents: AGENTS_LABEL.name, surfaces: [] },
+    labels: { agents: AGENTS_LABEL.name, surfaces: [], priorities: PRIORITY_LABELS.map((l) => l.name), sizes: SIZE_LABELS.map((l) => l.name) },
     pulls: { draft: false, closingKeyword: 'Closes' },
     milestones: { naming: milestones[0] ? `like "${milestones[0]}"` : '', capacity: null },
     triage: { staleIssueDays: 60, stalePrDays: 14 },
@@ -111,3 +125,8 @@ export function proposeSurfaces(cfg: Config): SurfaceLabel[] {
     .filter((e) => !e.external && e.type !== 'person' && e.type !== 'boundary' && e.type !== 'node' && (e.paths?.length ?? 0) > 0)
     .map((e) => ({ name: e.id, description: `${e.name}${e.description ? `: ${e.description}` : ''}`.slice(0, 100), elements: [e.id] }));
 }
+
+/** The priority label names a repository uses, most urgent first. */
+export const priorityNames = (cfg: Config): string[] => cfg.labels?.priorities ?? PRIORITY_LABELS.map((l) => l.name);
+/** The size label names a repository uses, smallest first. */
+export const sizeNames = (cfg: Config): string[] => cfg.labels?.sizes ?? SIZE_LABELS.map((l) => l.name);
