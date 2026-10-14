@@ -43,11 +43,18 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
    ```
    Fix every lint error. Fix warnings unless the fact is not known; then say so in the body under `Unknowns`. When the fact is known and the architecture map lacks it (a relationship with no `technology`), set it in the spec, tell the user, and offer to save it in `.agents/gh-wat-dis/config.json`.
    The title names the change ("Checkout: payment retries move to a worker"). For a view of the system with no change in it, name the system and the view: "Storefront: containers".
-5. **Read what the renderer reports.** It lays the spec out several ways (top-down and left-to-right, words or numbers on the lines, one row or two) and judges each one: size, and also how far the lines run, how many corners and crossings they have, and whether a line or a label lies on a box. It keeps the one that reads best. Stderr has these lines:
+5. **Compose, then read what the renderer reports.** You state the structure, and the renderer keeps to it:
+   - **Order the relationships as you would tell them.** The drawing starts at the source of the first relationship and reads on from there. In a cycle, the relationship that returns to an element already drawn is the one drawn backwards. A flow reads in `order`.
+   - **Group with `parent`.** A group is as wide as its name, and no line is routed through the name. Keep a group name under 40 characters.
+   - **Name a `direction` only when it matters.** A direction in the spec or on the command line is never overridden. Leave it out and each type takes its own form: a code diagram runs left to right so that a line ends on a symbol row, and the other types run top down or left to right, whichever reads better.
+   - **Stay inside the budget of the type**, in elements that are not groups and in relationships: context 8 and 10, container and component 12 and 16, code 8 files and 14 lines, flow 8 steps, deployment and landscape 12 and 14. Lint warns past it and names the filter that brings the spec back in, with what the filter leaves. `graph from-facts` stays inside it and says in the scope line what it left out.
+
+   A layout must pass every gate: each relationship is drawn from end to end on its own element or row, no line runs through text, nothing lies on top of anything else, and the whole image is at most 860px wide and 1376px tall. The renderer starts from the form of the type and loosens it one rung at a time: numbers on the lines or a long chain wrapped, then both, then compact cards. A code diagram tries its files in a column before it wraps. It draws the first rung that passes. Stderr has these lines:
    - The size of the whole image, title and key included: `681 x 766px, top down`. Every size the tool prints is this measure.
    - `numbered lines`: add the legend table under the image: `npx gh-wat-dis legend .wat-tmp/<name>.json`. Row n of the table is the line that carries the number n.
-   - `layout:` what it kept and what each other choice cost. "left to right is 1449px wide" means the direction in the spec did not fit, so the drawing was turned. Leave it turned, or pass `--direction` to force yours.
-   - `warning:` one for each fault that is left: an image wider than 860px or taller than 900px, a line that runs far out of its way, lines through a box or through the name of a group, three or more crossings, a label or a line on top of another. A drawing with no warning needs no filter. Look at it all the same (step 6): the judge does not see everything a reader does.
+   - `layout:` what was kept, the rung, and why each rung above it failed: `kept top down, numbers on the lines: rung 2 of 3. rung 1 (as written) is 968px wide`.
+   - `layout: no layout passes every check on any of the 3 rungs. Drew the nearest: …` means the spec is past what one picture holds. The image is still written. Apply a `fix:` or cut the spec before you attach it.
+   - `warning:` one for each fault that is left: an image wider than 860px or taller than 900px, a line that runs far out of its way, three or more crossings, and each gate the drawing fails. A drawing with no warning needs no filter. Look at it all the same (step 6): the checks do not see everything a reader does.
    - `fix:` a filter or an option that the tool applied to your spec, drew and judged again, with the size of the image it gives, the warnings it leaves, and what it takes out. Only a fix that leaves fewer warnings is printed. No fix removes an element or a line that the change added, changed or removed. Run the first one whose removals your text can do without, then render again:
      ```text
      warning: 902px is wider than GitHub's 860px body, so text will shrink
@@ -57,12 +64,11 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
      ```bash
      npx gh-wat-dis graph collapse .wat-tmp/<name>.json --to-type container > .wat-tmp/<name>-2.json
      ```
-     A fix that starts with "no" names an option to leave off: `no --direction right`.
-   - A fix that reads "graph split gives 3 diagrams, the largest …" means the split views all read better than the one picture: run `graph split` (below). A fix that reads "shorten the group name …" is an edit to the spec: a line runs through a long group name.
+     A fix that starts with "no" names an option to leave off: `no --direction right`. `graph set --direction ""` takes a direction out of the spec.
+   - A fix that reads "graph split gives 3 diagrams, the largest …" means the split views all read better than the one picture: run `graph split` (below). A fix that reads "shorten the group name …" is an edit to the spec.
    - `fix: none found` lists what was tried and judged no better. Then no filter mends the picture. Cut it by hand: keep the elements the text names and delete the rest from the JSON. To remove one relationship, delete its entry from `relationships`: no filter does that.
 
-   The renderer never keeps a layout that cannot draw every relationship from end to end. When the report says a relationship could not be drawn in any layout, cut the diagram down.
-   To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `warnings`, `fixes`, and `candidates`, the metrics of every layout tried (`detour`, `bends`, `crossings`, `through`, `overlaps`, `titles`, `broken`, `score`, and `chosen`).
+   To read the same judgement as data, add `--report`: stdout is then one JSON object with the size, `why`, `rung`, `rungs`, `passed`, `warnings`, `fixes`, and `candidates`: every layout tried, with its `rung`, the gates it `fails`, and its metrics (`crossings`, `detour`, `bends`, `broken`, `through`, `titles`, `struck`, `overlaps`, `clipped`, and `chosen`).
 6. **Look at it.** Draw a PNG beside the SVG and open it with your image tool:
    ```bash
    npx gh-wat-dis diagram .wat-tmp/<name>.json -o .wat-tmp/<name>.svg --png .wat-tmp/<name>.png
@@ -112,7 +118,7 @@ A diagram earns its place when it shows structure that a sentence cannot. Small 
 | Field | Values |
 |---|---|
 | `type` | `context`, `container`, `component`, `code`, `dynamic`, `deployment`, `landscape` |
-| `direction` | `DOWN` or `RIGHT`. A wish: the renderer turns the drawing when the other way reads much better. Omit it to let the renderer choose. |
+| `direction` | `DOWN` or `RIGHT`. The renderer never overrides it. Omit it and the diagram takes the form of its type. |
 | element `type` | `person`, `system`, `container`, `component`, `datastore`, `queue`, `boundary`, `node`, and `file` in a code diagram |
 | `kind` | Free text that replaces the type label: `Web Worker`, `WASM module`, `Thread`, `npm package`, `Rust crate`, `Shared memory` |
 | `parent` | id of a `boundary`, `node`, `system`, `container` or `component`: nests the element inside it. The key calls these "Group" when one is not a boundary. A person, a store, a queue or a file holds nothing. |
@@ -184,7 +190,9 @@ What the facts cannot prove is not drawn: a call through a re-exporting module i
 
 The scope line under the title says how many changed source files are drawn, names the two largest left out, and counts moved files, source in a language the tools do not read, and other changed files. Stderr lists the first six of each kind left out. When the largest file left out matters to the change, raise `--max-files` or say so in the body. When no source file changed, the command exits 1 and there is no code diagram to draw.
 
-Left to right, lines end on rows. Top down, lines end on the card, lines between one pair of files with one status are drawn as one line, and the rows carry no lines. The spec asks for left to right, and the renderer turns it top down when left to right is too wide. To keep the rows whatever the width, pass `--direction right`, and expect the width warning.
+A code diagram runs left to right, and every line ends on the row or the header it concerns. When the files are too many deep for the page, they stand in a column and the lines run down the right side of the cards, still ending on their rows. Leave `direction` out of a code spec so the renderer can do this.
+
+When the lines would pass the budget of 14, the lines between one pair of files are drawn as fewer, down to one line to the file, and the scope line says so. A line is never left out: no line between two cards still means no import.
 
 Then open the JSON and fix what the facts cannot know. Set the `title` to name the change. Drop a card that adds nothing with `graph drop --ids <path>`: the scope line then says a card was removed. Add a line the import graph does not see, such as a script that writes a page: give it a `label`, and it is drawn with its words. To end a line on a symbol that did not change, add that symbol to the file's `symbols` with no `status`.
 
@@ -192,7 +200,6 @@ Then open the JSON and fix what the facts cannot know. Set the `title` to name t
 {
   "title": "Payment retries move to idempotency keys",
   "type": "code",
-  "direction": "RIGHT",
   "elements": [
     { "id": "payments", "type": "boundary", "name": "Payment service" },
     { "id": "retry", "type": "file", "name": "services/payments/src/retry.rs", "parent": "payments", "status": "changed",
@@ -210,10 +217,10 @@ Then open the JSON and fix what the facts cannot know. Set the `title` to name t
 ```
 
 - A line between two files may have an empty `label`: it means an import, and the key says so.
-- A card draws 8 rows at most: six changed symbols and up to two unmarked ones.
-- When a band round each group does not fit, the group name is printed above each of its cards.
+- A card draws 8 rows at most: six changed symbols and up to two unmarked ones. Name a symbol among the first 8 when a line must end on it.
+- The name of a group is drawn once, at the top of its band.
 - Do not pass `--labels numbered` for a code diagram: its lines have no words to look up.
-- About five files fit in 700 by 350 pixels. Past eight, make two diagrams: `graph split` writes one per group.
+- About four files side by side fit the page. Past eight files, make two diagrams: `graph split` writes one per group.
 
 ## Overview plus scoped views
 
@@ -229,7 +236,7 @@ Place the overview after the opening and each scoped view beside the text about 
 
 ## Flows
 
-A `dynamic` diagram draws as a left-to-right flow with numbered steps, and wraps onto a second row to fit the width. Give each relationship an `order`. The words go in the legend table:
+A `dynamic` diagram starts at the top left with step 1 and reads on in step order. Give each relationship an `order`. The steps keep their words when they fit. When the report says `numbered lines`, the words go in the legend table:
 
 ```bash
 npx gh-wat-dis diagram .wat-tmp/flow.json -o .wat-tmp/flow.svg
@@ -242,7 +249,8 @@ Use a flow for behaviour over time: a request path, a retry, a migration sequenc
 
 - Above 5 elements the renderer drops descriptions. The body's `Change` table carries them.
 - A chain of more than 5 steps top to bottom reads as a scroll. Cut it with `graph focus`, or fold a side with `graph collapse`.
-- `direction: RIGHT` suits a pipeline of 4 or fewer stages. It gets wide fast, and the renderer turns it top down when it does.
+- Name `direction: RIGHT` only for a pipeline of 4 or fewer stages. It is kept as named, however wide it gets.
+- Keep a label under 80 characters and a group name under 40. The rest belongs in the text.
 - Remove an edge that the reader does not need for this change.
 
 ## Options
