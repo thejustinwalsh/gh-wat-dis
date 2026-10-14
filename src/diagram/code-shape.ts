@@ -32,8 +32,7 @@ const changed = (status: string | undefined): boolean => status === 'added' || s
  * left to right or stays inside one layer. Files that import one another in a cycle share a layer.
  * A file with nothing to its left moves right until it stands beside what it imports.
  *
- * When the imports are more than three layers deep, the three layers that hold the first file and
- * the most changed files are drawn, and a file from a layer further out stands in the nearest of the three.
+ * When the imports are more than three layers deep, the three layers that hold the most change are drawn, and a file from a layer further out stands in the nearest of the three.
  * `graph from-facts` cuts those files instead, and lint names them in a hand-written spec.
  * A file with no line at all stands in the shortest layer.
  */
@@ -70,12 +69,12 @@ export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number
   for (let k = 0; k < knots.length; k++) { const to = imports(k); if (to.length) depthOf[k] = Math.max(depthOf[k]!, Math.min(...to.map((j) => depthOf[j]!)) - 1); }
   const depth = joined.size ? Math.max(...files.filter((f) => joined.has(f.id)).map((f) => depthOf[knot.get(f.id)!]!)) + 1 : 0;
 
-  // More than three deep: keep the three layers in a row that hold the first file of the spec, which is the one the
-  // diagram is about, and then the changed files listed soonest: a spec lists the files with the most change first.
+  // More than three deep: keep the three layers in a row that hold the most change. A spec lists the files with the
+  // most change first, so a changed file counts more the sooner it is listed.
   let first = 0;
   if (depth > limit) {
     const weight = (start: number): number => files.filter((f) => depthOf[knot.get(f.id)!]! >= start && depthOf[knot.get(f.id)!]! < start + limit)
-      .reduce((sum, f) => sum + (f === files[0] ? files.length ** 2 : 0) + (changed(f.status) ? files.length - files.indexOf(f) : 0), 0);
+      .reduce((sum, f) => sum + (changed(f.status) ? files.length - files.indexOf(f) : 0), 0);
     for (let start = 1; start + limit <= depth; start++) if (weight(start) > weight(first)) first = start;
   }
   const layers = Math.max(1, Math.min(depth, limit));

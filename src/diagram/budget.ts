@@ -76,7 +76,8 @@ const isChanged = (status: string | undefined): boolean => status === 'added' ||
 
 /**
  * The files to take out of a code diagram that is too deep or has a layer too tall, a step at a time.
- * Too deep: the files that stand past the three layers, those outside the diff first. A layer too tall:
+ * Too deep: the files that stand past the three layers, those outside the diff first, then changed ones one at a
+ * time, the least changed first. A layer too tall:
  * the last file of that layer that is outside the diff, and when there is none, its last changed file.
  * Too many lines: the last file outside the diff, then the last changed file.
  * The first file of the spec, the one the diagram is about, is never the one to go. Empty when nothing is to cut.
@@ -89,7 +90,9 @@ export function codeCut(spec: DiagramSpec): string[] {
   if (shape.depth > CODE_LAYERS) {
     const far = shape.beyond.filter((id) => !isChanged(byId.get(id)!.status));
     if (far.length) return far;
-    if (shape.beyond.some((id) => id !== first)) return shape.beyond.filter((id) => id !== first);
+    // Changed files go one at a time, the one with the least change first: a spec lists the most changed first.
+    const last = spec.elements.filter((e) => shape.beyond.includes(e.id) && e.id !== first).at(-1);
+    if (last) return [last.id];
   }
   const tall = shape.heights.findIndex((h) => h > CODE_LAYER_HEIGHT);
   if (tall < 0) {
