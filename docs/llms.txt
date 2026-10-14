@@ -1,6 +1,6 @@
 # gh-wat-dis
 
-> Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on: the problem and the solution first, the system design next, long data for agents folded away at the end. One npm package: ten skills, plus small composable tools the skills call through `npx`. A project installs nothing.
+> Agent skills that write GitHub issues, pull requests and milestones a busy engineer can act on: the problem and the solution first, the system design next, long data for agents folded away at the end. One npm package: ten skills, plus small composable tools the skills call through `npx`. A project adds it as one dev dependency.
 
 ## Install it
 
@@ -15,8 +15,8 @@ Needs: Node 24 or later (or Bun, or Deno), and the GitHub CLI 2.99 or later, sig
 
 ## Rules an agent must follow
 
-- Never ask a human for a GitHub token in chat, and never write a token to a file. `npx gh-wat-dis mcp <client>` prints config that reads the token from an environment variable.
-- If the `GitHub sign-in` check says `FIX`, the human runs `gh auth login` in their own terminal.
+- Never ask a human for a GitHub token in chat, and never write a token to a file. `npx gh-wat-dis mcp <client>` prints config that stores no token: Claude Code reads it from the `gh` login at each connect, other harnesses from an environment variable.
+- If the `GitHub sign-in` check says `FIX`, ask the human to run `npx gh-wat-dis doctor` in their own terminal: it offers the sign-in, then checks again. Do not run the sign-in for them.
 - Check `.agents/gh-wat-dis/config.json` in a repository before you use the skills there. `policy.use` is `always`, `ask` or `never`. No file: ask the human first.
 - Show the human each draft before you post it.
 - The tools collect facts. They do not review code, score it or give verdicts.

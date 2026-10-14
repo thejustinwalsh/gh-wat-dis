@@ -77,7 +77,7 @@ The agent shows you the draft before it posts.
 | `never` | Do not use them |
 | no config file | Ask before the first use, and offer `install` |
 
-The file also holds the issue types, the surface labels, milestone naming and capacity, and the architecture map that gives every issue and PR the same names for the same parts of the system.
+The file also holds the issue types, the labels (surfaces, priorities, sizes), milestone naming and capacity, when triage calls an issue or PR stale, and the architecture map that gives every issue and PR the same names for the same parts of the system.
 
 ## Tools
 
