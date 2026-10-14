@@ -163,7 +163,7 @@ tr + tr td { border-top: 1px solid var(--card-line); }
 .fold summary:focus-visible, .fold pre:focus-visible { outline: 2px solid var(--keyword); outline-offset: -2px; }
 .fold b { font-weight: 700; }
 .fold .mono { margin-left: auto; font-size: 12px; color: var(--storage); }
-.fold pre { margin: 0; max-height: 320px; overflow: auto; padding: 14px; background: var(--card-panel); font: 400 12.5px/1.6 var(--mono); tab-size: 2; }
+.fold pre { margin: 0; max-height: 320px; overflow: auto; padding: 50px 14px 14px; background: var(--card-panel); font: 400 12.5px/1.6 var(--mono); tab-size: 2; }
 /* GitHub puts a copy button in the corner of a code block. This one copies the whole context. */
 .fold .code { position: relative; }
 .fold .code button.copy { position: absolute; top: 10px; right: 22px; z-index: 1; padding: 7px 10px; font-size: 12px; border-radius: 6px; }
@@ -303,7 +303,7 @@ footer span { color: var(--muted); }
             <tr><td>Orders database</td><td>No record of webhook events</td><td>Stores payment keys</td></tr>
           </tbody>
         </table>
-        <p class="prov">charge.ts imports retryCharge · 3 direct dependents · resolved by ast-grep</p>
+        <p class="prov">3 files import retryCharge from charge.ts · resolved by ast-grep</p>
       </div>
       <div class="block">
         <span class="tag">4 · What can go wrong, what is not known</span>
@@ -341,7 +341,7 @@ facts.json (trimmed)
   "elements": [
     { "id": "payments-worker", "status": "changed", "filesChanged": 2, "provenance": "exact", "source": "config" },
     { "id": "orders-db", "status": "changed", "filesChanged": 1, "provenance": "exact", "source": "config" },
-    { "id": "orders-api", "status": "affected", "dependentsAffected": 2, "provenance": "resolved", "source": "ast-grep" }
+    { "id": "orders-api", "status": "affected", "dependentsAffected": 2, "provenance": "exact", "source": "config" }
   ],
   "symbols": [
     { "name": "retryCharge", "file": "services/payments/src/charge.ts", "exported": true, "signatureChanged": true,
@@ -357,7 +357,7 @@ facts.json (trimmed)
     { "from": "payments-worker", "to": "orders-db", "status": "added", "provenance": "exact", "source": "config" }
   ],
   "contracts": [
-    { "path": "services/orders/migrations/0042_payment_keys.sql", "kind": "migration", "note": "adds table payment_keys", "provenance": "heuristic" }
+    { "path": "services/orders/migrations/0042_payment_keys.sql", "kind": "migration", "note": "added, +14 −0", "provenance": "heuristic" }
   ],
   "tests": { "changed": [], "importingChanged": ["services/payments/test/charge.test.ts"] },
   "coChange": [
@@ -393,7 +393,7 @@ Links read
       <div><dt>links</dt><dd>Shows what a PR closes on merge and what it only mentions.</dd></div>
       <div><dt>graph split</dt><dd>Writes an overview and one small diagram for each part that changes.</dd></div>
       <div><dt>legend</dt><dd>Prints a diagram's relationships as a Markdown table.</dd></div>
-      <div><dt>doctor</dt><dd>Checks gh, the login, the skills and the repo config.</dd></div>
+      <div><dt>doctor</dt><dd>Checks gh, the sign-in, the skills, the MCP server, the repo config and the optional tools. Each line says ok, FIX or off.</dd></div>
     </dl>
     <details class="all">
       <summary>See all commands</summary>
@@ -474,7 +474,7 @@ Links read
     <div>
       <p class="eyebrow">The skills</p>
       <h2 id="skills">Ask in plain words.</h2>
-      <p class="lead">Nine skills trigger on the task, and one entry skill checks the repo policy first. The agent shows you the draft before it posts.</p>
+      <p class="lead">Ten skills. Nine trigger on the task, and the entry skill, <code>wat</code>, checks the repo policy first. The agent shows you the draft before it posts.</p>
     </div>
     <dl>
       <div><dt>wat-issue</dt><dd>“File an issue for the duplicate charge bug.”</dd></div>
