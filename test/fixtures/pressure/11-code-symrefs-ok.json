@@ -1,0 +1,124 @@
+{
+  "title": "Symbol references",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "file",
+      "name": "src/a.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "a_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "a_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "a_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "b",
+      "type": "file",
+      "name": "src/b.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "b_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "b_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "b_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "d",
+      "type": "file",
+      "name": "src/gone.ts",
+      "status": "removed",
+      "symbols": [
+        {
+          "name": "old_fn",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "OldType",
+          "kind": "struct",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "e",
+      "type": "file",
+      "name": "src/e.ts",
+      "status": "affected"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "fromSymbol": "a_0",
+      "label": ""
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "toSymbol": "b_1",
+      "label": ""
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "fromSymbol": "a_2",
+      "toSymbol": "b_2",
+      "label": ""
+    },
+    {
+      "from": "e",
+      "to": "d",
+      "toSymbol": "old_fn",
+      "label": "",
+      "status": "removed"
+    },
+    {
+      "from": "b",
+      "to": "b",
+      "fromSymbol": "b_0",
+      "toSymbol": "b_2",
+      "label": ""
+    },
+    {
+      "from": "e",
+      "to": "a",
+      "label": ""
+    },
+    {
+      "from": "b",
+      "to": "d",
+      "toSymbol": "OldType",
+      "label": "Used to read config from",
+      "status": "removed"
+    }
+  ]
+}

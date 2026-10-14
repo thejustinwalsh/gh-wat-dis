@@ -3,6 +3,5 @@ node_modules
 *.tgz
 .wat-tmp/
 dist/
-.wat-tmp/
 .agents/skills/
 .claude/skills/

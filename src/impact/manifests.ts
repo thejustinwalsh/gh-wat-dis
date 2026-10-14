@@ -69,3 +69,11 @@ export function diffManifest(manifest: string, before: string | undefined, after
   }
   return out.sort((p, q) => p.name.localeCompare(q.name));
 }
+
+/** The name a manifest gives its package, when it gives one. */
+export function packageName(manifest: string, text: string | undefined): string | undefined {
+  if (text === undefined) return undefined;
+  if (manifest.endsWith('.json')) { try { const name = (JSON.parse(text) as { name?: unknown }).name; return typeof name === 'string' ? name : undefined; } catch { return undefined; } }
+  const section = /^\s*\[package\]([\s\S]*?)(^\s*\[|$(?![\s\S]))/m.exec(text);
+  return /^\s*name\s*=\s*"([^"]+)"/m.exec(section?.[1] ?? '')?.[1];
+}

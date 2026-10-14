@@ -1,0 +1,103 @@
+{
+  "title": "Back edge across groups",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Front office"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Back office"
+    },
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "cc",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "f",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust",
+      "parent": "g2"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Routes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "cc",
+      "label": "Charges through",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "d",
+      "label": "Writes entries to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "e",
+      "label": "Triggers",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "f",
+      "label": "Indexes into",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "f",
+      "to": "a",
+      "label": "Feeds results back to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "b",
+      "label": "Confirms to",
+      "technology": "HTTPS"
+    }
+  ]
+}

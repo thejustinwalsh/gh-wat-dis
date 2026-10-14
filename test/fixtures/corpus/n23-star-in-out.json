@@ -1,0 +1,207 @@
+{
+  "title": "Eight in, eight out",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "hub",
+      "type": "container",
+      "name": "Broker",
+      "technology": "Rust"
+    },
+    {
+      "id": "i0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "i1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "i2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "i3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "i4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "i5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "i6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    },
+    {
+      "id": "i7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust"
+    },
+    {
+      "id": "o0",
+      "type": "container",
+      "name": "Pricing",
+      "technology": "Rust"
+    },
+    {
+      "id": "o1",
+      "type": "container",
+      "name": "Inventory",
+      "technology": "Rust"
+    },
+    {
+      "id": "o2",
+      "type": "container",
+      "name": "Shipping",
+      "technology": "Rust"
+    },
+    {
+      "id": "o3",
+      "type": "container",
+      "name": "Returns",
+      "technology": "Rust"
+    },
+    {
+      "id": "o4",
+      "type": "container",
+      "name": "Fraud",
+      "technology": "Rust"
+    },
+    {
+      "id": "o5",
+      "type": "container",
+      "name": "Identity",
+      "technology": "Rust"
+    },
+    {
+      "id": "o6",
+      "type": "container",
+      "name": "Sessions",
+      "technology": "Rust"
+    },
+    {
+      "id": "o7",
+      "type": "container",
+      "name": "Profiles",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "i0",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i1",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i2",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i3",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i4",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i5",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i6",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "i7",
+      "to": "hub",
+      "label": "Publishes to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o0",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o1",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o2",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o3",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o4",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o5",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o6",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "o7",
+      "label": "Delivers to",
+      "technology": "HTTPS"
+    }
+  ]
+}

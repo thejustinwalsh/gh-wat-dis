@@ -168,19 +168,33 @@ export class RustWorkspace {
       const local = u.glob ? '*' : `${prefix}${u.alias ?? u.path[u.path.length - 1]}`;
       if (t.to === file && (u.glob || t.name === local)) continue;
       const spec = u.path.join('::') + (u.glob ? '::*' : '');
-      out.push({ name: local, kind: 'reexport', exported: true, start: u.line, end: u.line, header: `pub use ${spec}`, text: u.text, reexport: { spec, name: t.name ?? '*', to: t.to } });
+      // The text is this one name, so a change to another name of the same `use` list leaves it alone.
+      out.push({ name: local, kind: 'reexport', exported: true, start: u.line, end: u.line, header: `pub use ${spec}`, text: u.text ? `pub use ${spec}${u.alias ? ` as ${u.alias}` : ''}` : '', reexport: { spec, name: t.name ?? '*', to: t.to } });
     }
     return out;
   }
 
+  /**
+   * The imports of a file. A `pub use` of a module the file declares is structure, not an import: `mod foo;` and
+   * `pub use foo::Bar` in lib.rs make the crate's front door, and an import line from lib.rs to each of its modules
+   * would make it a hub that everything appears to import. The re-export stays a symbol, so a name used through it
+   * is traced to the file that defines it.
+   */
   edges(file: string, parsed: ParsedRust): Edge[] {
     const edges = new Map<string, Edge>();
     for (const u of parsed.uses) {
       const t = this.target(file, u);
       if (!t || t.to === file) continue;
+      if (u.pub && this.inside(t.mod, this.modAt(file, u.modPath))) continue;
       mergeEdge(edges, { to: t.to, names: t.name ? [t.name] : [], whole: t.name === null, via: [u.path.join('::') + (u.glob ? '::*' : '')], testOnly: u.test });
     }
     return [...edges.values()];
+  }
+
+  /** True when `mod` is `owner` or a module declared under it. */
+  private inside(mod: Mod, owner: Mod | null): boolean {
+    for (let m: Mod | null = mod; m; m = m.parent) if (m === owner) return true;
+    return false;
   }
 
   isTestFile(file: string): boolean {

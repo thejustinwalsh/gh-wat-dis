@@ -1,0 +1,120 @@
+{
+  "title": "Every status",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Changed group",
+      "status": "changed"
+    },
+    {
+      "id": "gr",
+      "type": "boundary",
+      "name": "Removed group",
+      "status": "removed"
+    },
+    {
+      "id": "t0",
+      "type": "person",
+      "name": "person added",
+      "technology": "Tech",
+      "status": "added",
+      "parent": "g"
+    },
+    {
+      "id": "t1",
+      "type": "system",
+      "name": "system changed",
+      "technology": "Tech",
+      "status": "changed",
+      "parent": "g"
+    },
+    {
+      "id": "t2",
+      "type": "container",
+      "name": "container removed",
+      "technology": "Tech",
+      "status": "removed",
+      "parent": "gr"
+    },
+    {
+      "id": "t3",
+      "type": "component",
+      "name": "component affected",
+      "technology": "Tech",
+      "status": "affected"
+    },
+    {
+      "id": "t4",
+      "type": "datastore",
+      "name": "datastore plain",
+      "technology": "Tech"
+    },
+    {
+      "id": "t5",
+      "type": "queue",
+      "name": "queue added",
+      "technology": "Tech",
+      "status": "added"
+    },
+    {
+      "id": "ext",
+      "type": "system",
+      "name": "External removed",
+      "external": true,
+      "status": "removed"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "t0",
+      "to": "t1",
+      "label": "Added line to",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "t1",
+      "to": "t2",
+      "label": "Changed line to",
+      "technology": "HTTPS",
+      "status": "changed"
+    },
+    {
+      "from": "t2",
+      "to": "t3",
+      "label": "Removed line to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "t3",
+      "to": "t4",
+      "label": "Affected line to",
+      "technology": "HTTPS",
+      "status": "affected"
+    },
+    {
+      "from": "t4",
+      "to": "t5",
+      "label": "Plain line to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "t5",
+      "to": "ext",
+      "label": "Removed line to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "t0",
+      "to": "ext",
+      "label": "Added line to",
+      "technology": "HTTPS",
+      "status": "added"
+    }
+  ]
+}

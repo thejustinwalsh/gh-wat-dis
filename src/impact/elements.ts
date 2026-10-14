@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArchElement, ArchRelationship, Config } from '../cli/config.ts';
 import { CONFIG_REL } from '../cli/util.ts';
-import { ELEMENT_TYPES } from '../spec.ts';
+import { MAP_ELEMENT_TYPES } from '../spec.ts';
+
+const ELEMENT_TYPES: readonly string[] = MAP_ELEMENT_TYPES;
 import type { ElementType } from '../spec.ts';
 import { isSkipped, isTestPath, languageOf } from './classify.ts';
 import { globToRegExp } from './glob.ts';
@@ -20,7 +22,7 @@ export interface ElementMap {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'root';
-const validType = (t: unknown, fallback: ElementType): ElementType => (ELEMENT_TYPES.includes(t as ElementType) ? (t as ElementType) : fallback);
+const validType = (t: unknown, fallback: ElementType): ElementType => (ELEMENT_TYPES.includes(t as string) ? (t as ElementType) : fallback);
 
 export function loadArchitecture(root: string): Config['architecture'] | null {
   try {

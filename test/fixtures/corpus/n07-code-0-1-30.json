@@ -1,0 +1,317 @@
+{
+  "title": "Files of 0, 1 and 30 symbols",
+  "type": "code",
+  "scope": "S",
+  "direction": "RIGHT",
+  "elements": [
+    {
+      "id": "ga",
+      "type": "boundary",
+      "name": "API"
+    },
+    {
+      "id": "gb",
+      "type": "boundary",
+      "name": "Core"
+    },
+    {
+      "id": "gc",
+      "type": "boundary",
+      "name": "Storage"
+    },
+    {
+      "id": "zero",
+      "type": "file",
+      "name": "services/api/src/routes.ts",
+      "parent": "ga",
+      "status": "affected"
+    },
+    {
+      "id": "one",
+      "type": "file",
+      "name": "services/api/src/auth.ts",
+      "parent": "ga",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "auth_0",
+          "kind": "fn",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "id": "thirty",
+      "type": "file",
+      "name": "packages/core/src/engine.ts",
+      "parent": "gb",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "engine_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "engine_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "engine_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "engine_3",
+          "kind": "trait"
+        },
+        {
+          "name": "engine_4",
+          "kind": "const",
+          "status": "added"
+        },
+        {
+          "name": "engine_5",
+          "kind": "type",
+          "status": "changed"
+        },
+        {
+          "name": "engine_6",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "engine_7",
+          "kind": "struct"
+        },
+        {
+          "name": "engine_8",
+          "kind": "enum",
+          "status": "added"
+        },
+        {
+          "name": "engine_9",
+          "kind": "trait",
+          "status": "changed"
+        },
+        {
+          "name": "engine_10",
+          "kind": "const",
+          "status": "removed"
+        },
+        {
+          "name": "engine_11",
+          "kind": "type"
+        },
+        {
+          "name": "engine_12",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "engine_13",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "engine_14",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "engine_15",
+          "kind": "trait"
+        },
+        {
+          "name": "engine_16",
+          "kind": "const",
+          "status": "added"
+        },
+        {
+          "name": "engine_17",
+          "kind": "type",
+          "status": "changed"
+        },
+        {
+          "name": "engine_18",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "engine_19",
+          "kind": "struct"
+        },
+        {
+          "name": "engine_20",
+          "kind": "enum",
+          "status": "added"
+        },
+        {
+          "name": "engine_21",
+          "kind": "trait",
+          "status": "changed"
+        },
+        {
+          "name": "engine_22",
+          "kind": "const",
+          "status": "removed"
+        },
+        {
+          "name": "engine_23",
+          "kind": "type"
+        },
+        {
+          "name": "engine_24",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "engine_25",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "engine_26",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "engine_27",
+          "kind": "trait"
+        },
+        {
+          "name": "engine_28",
+          "kind": "const",
+          "status": "added"
+        },
+        {
+          "name": "engine_29",
+          "kind": "type",
+          "status": "changed"
+        }
+      ]
+    },
+    {
+      "id": "mid",
+      "type": "file",
+      "name": "packages/core/src/plan.ts",
+      "parent": "gb",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "plan_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "plan_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "plan_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "plan_3",
+          "kind": "trait"
+        }
+      ]
+    },
+    {
+      "id": "st",
+      "type": "file",
+      "name": "packages/storage/src/pg.ts",
+      "parent": "gc",
+      "status": "removed",
+      "symbols": [
+        {
+          "name": "pg_0",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "pg_1",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "pg_2",
+          "kind": "fn",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "lone",
+      "type": "file",
+      "name": "scripts/migrate.ts",
+      "status": "changed",
+      "symbols": []
+    }
+  ],
+  "relationships": [
+    {
+      "from": "zero",
+      "to": "one",
+      "toSymbol": "auth_0",
+      "label": ""
+    },
+    {
+      "from": "zero",
+      "to": "thirty",
+      "toSymbol": "engine_2",
+      "label": ""
+    },
+    {
+      "from": "one",
+      "to": "thirty",
+      "fromSymbol": "auth_0",
+      "toSymbol": "engine_7",
+      "label": ""
+    },
+    {
+      "from": "thirty",
+      "to": "mid",
+      "fromSymbol": "engine_1",
+      "toSymbol": "plan_3",
+      "label": "",
+      "status": "added"
+    },
+    {
+      "from": "mid",
+      "to": "st",
+      "fromSymbol": "plan_0",
+      "toSymbol": "pg_2",
+      "label": "",
+      "status": "removed"
+    },
+    {
+      "from": "st",
+      "to": "one",
+      "toSymbol": "auth_0",
+      "label": "Used to check tokens with",
+      "status": "removed"
+    },
+    {
+      "from": "lone",
+      "to": "thirty",
+      "toSymbol": "engine_0",
+      "label": ""
+    },
+    {
+      "from": "lone",
+      "to": "zero",
+      "label": ""
+    },
+    {
+      "from": "thirty",
+      "to": "thirty",
+      "fromSymbol": "engine_3",
+      "toSymbol": "engine_5",
+      "label": ""
+    }
+  ]
+}

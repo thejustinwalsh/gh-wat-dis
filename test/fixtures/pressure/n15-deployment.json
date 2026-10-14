@@ -1,0 +1,134 @@
+{
+  "title": "Production deployment",
+  "type": "deployment",
+  "scope": "eu-west-1",
+  "elements": [
+    {
+      "id": "aws",
+      "type": "node",
+      "name": "AWS eu-west-1",
+      "kind": "Region"
+    },
+    {
+      "id": "vpc",
+      "type": "node",
+      "name": "Production VPC",
+      "parent": "aws"
+    },
+    {
+      "id": "eks",
+      "type": "node",
+      "name": "EKS cluster",
+      "technology": "Kubernetes 1.30",
+      "parent": "vpc"
+    },
+    {
+      "id": "ns",
+      "type": "node",
+      "name": "orders namespace",
+      "parent": "eks"
+    },
+    {
+      "id": "api",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "ns"
+    },
+    {
+      "id": "wk",
+      "type": "container",
+      "name": "Worker",
+      "technology": "Rust",
+      "parent": "ns",
+      "status": "added"
+    },
+    {
+      "id": "rds",
+      "type": "node",
+      "name": "RDS",
+      "technology": "Multi-AZ",
+      "parent": "vpc"
+    },
+    {
+      "id": "db",
+      "type": "datastore",
+      "name": "Orders DB",
+      "technology": "Postgres 16",
+      "parent": "rds"
+    },
+    {
+      "id": "cf",
+      "type": "node",
+      "name": "Cloudflare",
+      "external": true
+    },
+    {
+      "id": "cdn",
+      "type": "container",
+      "name": "Edge cache",
+      "technology": "Workers",
+      "parent": "cf"
+    },
+    {
+      "id": "user",
+      "type": "person",
+      "name": "Shopper"
+    },
+    {
+      "id": "sqs",
+      "type": "queue",
+      "name": "Jobs",
+      "technology": "SQS",
+      "parent": "aws",
+      "status": "added"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "user",
+      "to": "cdn",
+      "label": "Browses through",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cdn",
+      "to": "api",
+      "label": "Forwards requests to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "label": "Reads and writes",
+      "technology": "SQL"
+    },
+    {
+      "from": "api",
+      "to": "sqs",
+      "label": "Enqueues jobs on",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "wk",
+      "to": "sqs",
+      "label": "Takes jobs from",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "wk",
+      "to": "db",
+      "label": "Updates",
+      "technology": "SQL",
+      "status": "added"
+    },
+    {
+      "from": "eks",
+      "to": "rds",
+      "label": "Peers with",
+      "technology": "VPC routing"
+    }
+  ]
+}

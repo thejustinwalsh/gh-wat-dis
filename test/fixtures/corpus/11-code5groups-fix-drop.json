@@ -1,0 +1,224 @@
+{
+  "title": "Files in five groups",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "web",
+      "type": "boundary",
+      "name": "Web package"
+    },
+    {
+      "id": "api",
+      "type": "boundary",
+      "name": "Api package"
+    },
+    {
+      "id": "worker",
+      "type": "boundary",
+      "name": "Worker package"
+    },
+    {
+      "id": "shared",
+      "type": "boundary",
+      "name": "Shared package"
+    },
+    {
+      "id": "infra",
+      "type": "boundary",
+      "name": "Infra package"
+    },
+    {
+      "id": "web0",
+      "type": "file",
+      "name": "packages/web/src/file0.ts",
+      "parent": "web",
+      "status": "affected",
+      "symbols": []
+    },
+    {
+      "id": "web1",
+      "type": "file",
+      "name": "packages/web/src/file1.ts",
+      "parent": "web",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "web1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "web1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "web1_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "api0",
+      "type": "file",
+      "name": "packages/api/src/file0.ts",
+      "parent": "api",
+      "status": "affected",
+      "symbols": []
+    },
+    {
+      "id": "api1",
+      "type": "file",
+      "name": "packages/api/src/file1.ts",
+      "parent": "api",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "api1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "api1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "api1_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "worker1",
+      "type": "file",
+      "name": "packages/worker/src/file1.ts",
+      "parent": "worker",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "worker1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "worker1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "worker1_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "shared1",
+      "type": "file",
+      "name": "packages/shared/src/file1.ts",
+      "parent": "shared",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "shared1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "shared1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "shared1_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "infra1",
+      "type": "file",
+      "name": "packages/infra/src/file1.ts",
+      "parent": "infra",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "infra1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "infra1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "infra1_2",
+          "kind": "enum",
+          "status": "removed"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "web0",
+      "to": "api1",
+      "toSymbol": "api1_0",
+      "label": ""
+    },
+    {
+      "from": "web0",
+      "to": "web1",
+      "toSymbol": "web1_1",
+      "label": ""
+    },
+    {
+      "from": "web1",
+      "to": "worker1",
+      "toSymbol": "worker1_2",
+      "label": ""
+    },
+    {
+      "from": "api0",
+      "to": "worker1",
+      "toSymbol": "worker1_0",
+      "label": ""
+    },
+    {
+      "from": "api0",
+      "to": "api1",
+      "toSymbol": "api1_1",
+      "label": ""
+    },
+    {
+      "from": "api1",
+      "to": "shared1",
+      "toSymbol": "shared1_2",
+      "label": ""
+    },
+    {
+      "from": "worker1",
+      "to": "infra1",
+      "toSymbol": "infra1_2",
+      "label": ""
+    },
+    {
+      "from": "shared1",
+      "to": "web1",
+      "toSymbol": "web1_2",
+      "label": ""
+    },
+    {
+      "from": "infra1",
+      "to": "api1",
+      "toSymbol": "api1_2",
+      "label": ""
+    }
+  ]
+}

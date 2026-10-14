@@ -1,0 +1,105 @@
+{
+  "title": "A long label on every line",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "cc",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "f",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "g",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "1: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "b",
+      "to": "cc",
+      "label": "2: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "cc",
+      "to": "d",
+      "label": "3: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "a",
+      "to": "d",
+      "label": "4: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "d",
+      "to": "e",
+      "label": "5: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "e",
+      "to": "f",
+      "label": "6: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "f",
+      "to": "g",
+      "label": "7: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "b",
+      "to": "g",
+      "label": "8: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    },
+    {
+      "from": "g",
+      "to": "a",
+      "label": "9: Synchronously forwards every validated purchase order and its attachments for settlement to",
+      "technology": "JSON over HTTPS with mutual TLS and request signing"
+    }
+  ]
+}

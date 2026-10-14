@@ -1,0 +1,109 @@
+{
+  "title": "Storefront: context",
+  "type": "context",
+  "scope": "Storefront",
+  "elements": [
+    {
+      "id": "sh",
+      "type": "person",
+      "name": "Shopper",
+      "description": "Buys goods"
+    },
+    {
+      "id": "ad",
+      "type": "person",
+      "name": "Support agent",
+      "description": "Handles refunds"
+    },
+    {
+      "id": "sf",
+      "type": "system",
+      "name": "Storefront",
+      "description": "Sells goods online"
+    },
+    {
+      "id": "st",
+      "type": "system",
+      "name": "Stripe",
+      "external": true,
+      "description": "Takes card payments"
+    },
+    {
+      "id": "ml",
+      "type": "system",
+      "name": "Mailgun",
+      "external": true,
+      "description": "Sends email"
+    },
+    {
+      "id": "wh",
+      "type": "system",
+      "name": "Warehouse system",
+      "external": true,
+      "description": "Ships parcels"
+    },
+    {
+      "id": "ex",
+      "type": "person",
+      "name": "Courier",
+      "external": true,
+      "description": "Delivers parcels"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "sh",
+      "to": "sf",
+      "label": "Places orders in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "ad",
+      "to": "sf",
+      "label": "Issues refunds in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "sf",
+      "to": "st",
+      "label": "Charges cards through",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "sf",
+      "to": "ml",
+      "label": "Sends receipts through",
+      "technology": "SMTP"
+    },
+    {
+      "from": "ml",
+      "to": "sh",
+      "label": "Delivers email to",
+      "technology": "email"
+    },
+    {
+      "from": "sf",
+      "to": "wh",
+      "label": "Books shipments in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "wh",
+      "to": "ex",
+      "label": "Hands parcels to",
+      "technology": "in person"
+    },
+    {
+      "from": "ex",
+      "to": "sh",
+      "label": "Delivers to",
+      "technology": "in person"
+    },
+    {
+      "from": "st",
+      "to": "sf",
+      "label": "Calls webhooks on",
+      "technology": "HTTPS"
+    }
+  ]
+}

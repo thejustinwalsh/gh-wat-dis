@@ -1,8 +1,9 @@
 import type { DiagramSpec } from '../spec.ts';
 import { relNumber } from './layout.ts';
-import { STATUS_MARK, active } from './vocab.ts';
+import { STATUS_MARK, active, relText } from './vocab.ts';
 
-const cell = (s: string): string => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+/** Text from a spec goes into Markdown as text: a pipe would end the cell, and a tag would be HTML on GitHub. */
+const cell = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 /** The relationships of a spec as a Markdown table. With numbered lines, this carries the words. */
 export function toLegend(spec: DiagramSpec): string {
@@ -16,7 +17,7 @@ export function toLegend(spec: DiagramSpec): string {
         String(relNumber(spec, r)),
         cell(name.get(r.from) ?? r.from),
         cell(name.get(r.to) ?? r.to),
-        cell(r.label),
+        cell(relText(r)),
         r.technology ? `\`${cell(r.technology)}\`` : '',
         ...(anyStatus ? [status ? `${STATUS_MARK[status]} ${status}` : ''] : []),
       ];

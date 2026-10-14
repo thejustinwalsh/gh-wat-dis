@@ -242,6 +242,7 @@ GitHub draws a body about 860px wide. A wider image is scaled down and its text 
 | **Overview**: the system with groups folded to boxes | Right after the opening | 6 boxes or fewer |
 | **Scoped view**: one group opened, its neighbours folded | In `System`, or in the section that discusses that part | 8 boxes or fewer |
 | **Flow**: numbered steps, left to right | Where the behaviour is described: `Change`, `Risks` or `Verify` | 8 steps or fewer |
+| **Code**: files as cards, changed symbols as rows | In `Change`, beside the text about the hard part | 5 files, 8 at most |
 
 - The box counts are aims for a diagram in a body. A whole-system view the user asked for keeps every container when the renderer reports that it fits 860px.
 - Use one diagram when it fits. Use an overview plus a scoped view when one diagram would pass 8 boxes. Three is the limit for a visible body.

@@ -1,0 +1,77 @@
+{
+  "title": "Long names on groups and cards",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "The European wholesale order intake and validation bounded context (legacy, to be retired in Q3)"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Shared_Infrastructure_And_Platform_Engineering_Owned_Services_Namespace",
+      "parent": "g1"
+    },
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Intake",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Validation",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "cc",
+      "type": "container",
+      "name": "A",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Outside thing with a moderately long name",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "d",
+      "to": "a",
+      "label": "Sends to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Validates with",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "cc",
+      "label": "Stores in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "cc",
+      "label": "Reads directly from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "d",
+      "label": "Returns results to",
+      "technology": "HTTPS"
+    }
+  ]
+}

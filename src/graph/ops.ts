@@ -102,7 +102,10 @@ export function collapse(spec: DiagramSpec, opts: CollapseOptions): DiagramSpec 
 
 export interface DropOptions { ids?: string[]; status?: string[]; type?: string[]; external?: boolean; orphans?: boolean }
 
-/** Remove elements and their relationships. `orphans` runs last, on what the other filters left. */
+/**
+ * Remove elements and their relationships. `orphans` runs last, on what the other filters left.
+ * An element of a group that goes leaves no empty group behind.
+ */
 export function drop(spec: DiagramSpec, opts: DropOptions): DiagramSpec {
   requireIds(spec, opts.ids ?? []);
   requireOneOf(opts.status ?? [], STATUSES, 'status');
@@ -117,6 +120,31 @@ export function drop(spec: DiagramSpec, opts: DropOptions): DiagramSpec {
     const rest = out.elements.filter((e) => busy.has(e.id));
     if (rest.length === out.elements.length) break;
     out = clean({ ...out, elements: rest });
+  }
+  // A group that held elements and holds none now is an empty frame: it goes with its last element.
+  const held = new Set(spec.elements.map((e) => e.parent));
+  for (;;) {
+    const holds = new Set(out.elements.map((e) => e.parent));
+    const rest = out.elements.filter((e) => !(held.has(e.id) && !holds.has(e.id) && (e.type === 'boundary' || e.type === 'node')));
+    if (rest.length === out.elements.length) break;
+    out = clean({ ...out, elements: rest });
+  }
+  // The scope line counts what is drawn and what is not. After a drop those counts are kept true: a changed file that
+  // was dropped is one fewer drawn, an affected element one more not drawn, and the line says how many were taken out by hand.
+  const ids = new Set(out.elements.map((e) => e.id));
+  const went = spec.elements.filter((e) => !ids.has(e.id) && e.type !== 'boundary' && e.type !== 'node');
+  if (went.length && out.scope) {
+    const isFile = went.some((e) => e.type === 'file');
+    const changedFiles = went.filter((e) => e.type === 'file' && ['added', 'changed', 'removed'].includes(e.status ?? '')).length;
+    const affected = went.filter((e) => e.type !== 'file' && e.status === 'affected').length;
+    let scope = out.scope
+      .replace(/\b(\d+) of (\d+ changed source files? drawn)/, (_, n: string, rest: string) => `${Number(n) - changedFiles} of ${rest}`)
+      .replace(/\b(\d+) more affected (?:elements are|element is) not drawn/, (_, n: string) => { const k = Number(n) + affected; return `${k} more affected ${k === 1 ? 'element is' : 'elements are'} not drawn`; });
+    const word = isFile ? 'card' : 'element';
+    const said = new RegExp(`\\. (\\d+) ${word}s? removed by hand$`).exec(scope);
+    const total = went.length + (said ? Number(said[1]) : 0);
+    scope = `${said ? scope.slice(0, said.index) : scope}. ${total} ${total === 1 ? word : `${word}s`} removed by hand`;
+    out = { ...out, scope };
   }
   return out;
 }

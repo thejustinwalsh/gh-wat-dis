@@ -274,6 +274,12 @@
         "to": "cccc",
         "label": "Scores changed files on base and head with",
         "technology": "child process, JSON"
+      },
+      {
+        "from": "facts",
+        "to": "diagram",
+        "label": "Holds code specs to the budget and three layers of",
+        "technology": "TypeScript import"
       }
     ]
   },

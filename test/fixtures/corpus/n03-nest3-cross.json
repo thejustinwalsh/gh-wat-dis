@@ -1,0 +1,167 @@
+{
+  "title": "Three levels, lines across levels",
+  "type": "container",
+  "scope": "Platform",
+  "elements": [
+    {
+      "id": "u",
+      "type": "person",
+      "name": "Operator"
+    },
+    {
+      "id": "L1",
+      "type": "boundary",
+      "name": "Platform",
+      "status": "changed"
+    },
+    {
+      "id": "L2",
+      "type": "boundary",
+      "name": "Data plane",
+      "parent": "L1",
+      "status": "added"
+    },
+    {
+      "id": "L3",
+      "type": "boundary",
+      "name": "Hot path",
+      "parent": "L2"
+    },
+    {
+      "id": "M2",
+      "type": "boundary",
+      "name": "Control plane",
+      "parent": "L1",
+      "status": "removed"
+    },
+    {
+      "id": "api",
+      "type": "container",
+      "name": "Admin API",
+      "technology": "Rust",
+      "parent": "L1"
+    },
+    {
+      "id": "ing",
+      "type": "container",
+      "name": "Ingest",
+      "technology": "Rust",
+      "parent": "L2",
+      "status": "added"
+    },
+    {
+      "id": "rt",
+      "type": "container",
+      "name": "Router",
+      "technology": "Rust",
+      "parent": "L3"
+    },
+    {
+      "id": "ca",
+      "type": "container",
+      "name": "Cache",
+      "technology": "Rust",
+      "parent": "L3",
+      "status": "changed"
+    },
+    {
+      "id": "cfg",
+      "type": "container",
+      "name": "Config service",
+      "technology": "Rust",
+      "parent": "M2",
+      "status": "removed"
+    },
+    {
+      "id": "db",
+      "type": "datastore",
+      "name": "Store",
+      "technology": "Postgres",
+      "parent": "L2"
+    },
+    {
+      "id": "ext",
+      "type": "system",
+      "name": "Upstream",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "u",
+      "to": "api",
+      "label": "Administers through",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "u",
+      "to": "rt",
+      "label": "Debugs directly",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "api",
+      "to": "cfg",
+      "label": "Writes settings to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "cfg",
+      "to": "rt",
+      "label": "Pushes routes to",
+      "technology": "HTTPS",
+      "status": "removed"
+    },
+    {
+      "from": "api",
+      "to": "ing",
+      "label": "Configures",
+      "technology": "HTTPS",
+      "status": "added"
+    },
+    {
+      "from": "ing",
+      "to": "rt",
+      "label": "Hands batches to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "rt",
+      "to": "ca",
+      "label": "Looks up in",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "ca",
+      "to": "db",
+      "label": "Fills from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "rt",
+      "to": "ext",
+      "label": "Proxies to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "ext",
+      "to": "ing",
+      "label": "Sends events to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "ca",
+      "to": "api",
+      "label": "Reports hit rate to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "db",
+      "to": "cfg",
+      "label": "Was backed up by",
+      "technology": "HTTPS",
+      "status": "removed"
+    }
+  ]
+}

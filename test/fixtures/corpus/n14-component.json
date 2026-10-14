@@ -1,0 +1,134 @@
+{
+  "title": "Orders API: components",
+  "type": "component",
+  "scope": "Orders API",
+  "elements": [
+    {
+      "id": "api",
+      "type": "boundary",
+      "name": "Orders API",
+      "kind": "Container"
+    },
+    {
+      "id": "ctl",
+      "type": "component",
+      "name": "HTTP controllers",
+      "kind": "Axum router",
+      "parent": "api"
+    },
+    {
+      "id": "svc",
+      "type": "component",
+      "name": "Order service",
+      "kind": "Rust module",
+      "parent": "api"
+    },
+    {
+      "id": "val",
+      "type": "component",
+      "name": "Validator",
+      "kind": "Rust module",
+      "parent": "api",
+      "status": "removed"
+    },
+    {
+      "id": "repo",
+      "type": "component",
+      "name": "Order repository",
+      "kind": "sqlx",
+      "parent": "api"
+    },
+    {
+      "id": "pub",
+      "type": "component",
+      "name": "Event publisher",
+      "kind": "Rust module",
+      "parent": "api"
+    },
+    {
+      "id": "wasm",
+      "type": "component",
+      "name": "Pricing rules",
+      "kind": "WASM module",
+      "parent": "api",
+      "status": "added"
+    },
+    {
+      "id": "db",
+      "type": "datastore",
+      "name": "Orders DB",
+      "technology": "Postgres"
+    },
+    {
+      "id": "q",
+      "type": "queue",
+      "name": "Order events",
+      "technology": "NATS"
+    },
+    {
+      "id": "web",
+      "type": "container",
+      "name": "Storefront",
+      "technology": "Next.js"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "web",
+      "to": "ctl",
+      "label": "Posts orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "ctl",
+      "to": "svc",
+      "label": "Passes commands to",
+      "technology": "function call"
+    },
+    {
+      "from": "svc",
+      "to": "val",
+      "label": "Checked orders with",
+      "technology": "function call",
+      "status": "removed"
+    },
+    {
+      "from": "svc",
+      "to": "wasm",
+      "label": "Prices baskets with",
+      "technology": "wasm-bindgen ABI",
+      "status": "added"
+    },
+    {
+      "from": "svc",
+      "to": "repo",
+      "label": "Saves orders through",
+      "technology": "function call"
+    },
+    {
+      "from": "repo",
+      "to": "db",
+      "label": "Reads and writes",
+      "technology": "SQL"
+    },
+    {
+      "from": "svc",
+      "to": "pub",
+      "label": "Announces changes through",
+      "technology": "function call"
+    },
+    {
+      "from": "pub",
+      "to": "q",
+      "label": "Publishes OrderPlaced on",
+      "technology": "NATS"
+    },
+    {
+      "from": "wasm",
+      "to": "repo",
+      "label": "Reads price lists through",
+      "technology": "host import",
+      "status": "added"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "title": "Three levels of nesting",
+  "type": "container",
+  "scope": "Platform",
+  "elements": [
+    {
+      "id": "L1",
+      "type": "boundary",
+      "name": "Platform"
+    },
+    {
+      "id": "L2",
+      "type": "boundary",
+      "name": "Payments domain",
+      "parent": "L1",
+      "meta": {
+        "collapsed": 4
+      }
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust",
+      "parent": "L1"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Web shop",
+      "technology": "Rust"
+    },
+    {
+      "id": "x",
+      "type": "system",
+      "name": "Card network",
+      "external": true
+    }
+  ],
+  "relationships": [
+    {
+      "from": "e",
+      "to": "d",
+      "label": "Sends checkout to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "L2",
+      "label": "Forwards charge to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "L2",
+      "to": "x",
+      "label": "Sends token to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "L2",
+      "label": "Requests refund from",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "L2",
+      "label": "Routes all payment traffic to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "L2",
+      "to": "e",
+      "label": "Returns receipt to",
+      "technology": "HTTPS"
+    }
+  ]
+}

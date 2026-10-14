@@ -1,0 +1,188 @@
+{
+  "title": "Hub with twelve spokes in a group",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "u",
+      "type": "person",
+      "name": "Shopper"
+    },
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Core services"
+    },
+    {
+      "id": "hub",
+      "type": "container",
+      "name": "Event hub",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s8",
+      "type": "container",
+      "name": "Pricing",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s9",
+      "type": "container",
+      "name": "Inventory",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s10",
+      "type": "container",
+      "name": "Shipping",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "s11",
+      "type": "container",
+      "name": "Returns",
+      "technology": "Rust",
+      "parent": "g"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "u",
+      "to": "hub",
+      "label": "Triggers",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s0",
+      "to": "hub",
+      "label": "Subscribes for topic 0 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s1",
+      "label": "Publishes topic 1 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s2",
+      "to": "hub",
+      "label": "Subscribes for topic 2 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s3",
+      "label": "Publishes topic 3 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "hub",
+      "label": "Subscribes for topic 4 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s5",
+      "label": "Publishes topic 5 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s6",
+      "to": "hub",
+      "label": "Subscribes for topic 6 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s7",
+      "label": "Publishes topic 7 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s8",
+      "to": "hub",
+      "label": "Subscribes for topic 8 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s9",
+      "label": "Publishes topic 9 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s10",
+      "to": "hub",
+      "label": "Subscribes for topic 10 on",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "hub",
+      "to": "s11",
+      "label": "Publishes topic 11 to",
+      "technology": "HTTPS"
+    }
+  ]
+}

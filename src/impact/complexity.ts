@@ -43,14 +43,19 @@ export function units(functions: readonly CcccFunction[] | undefined): Unit[] {
   return out;
 }
 
-/** Pair by name and kind. Where a name repeats, the nearest first lines pair first. */
-export function pair(base: readonly Unit[], head: readonly Unit[]): { base?: Unit; head?: Unit }[] {
-  const key = (u: Unit): string => `${u.name}\0${u.kind}`;
+/**
+ * Pair by name and kind. Where a name repeats, the nearest first lines pair first. A function renamed on head is
+ * paired with its base name, so a rename is a change of name and not a new function with all its complexity.
+ */
+export function pair(base: readonly Unit[], head: readonly Unit[], renamed: ReadonlyMap<string, string> = new Map()): { base?: Unit; head?: Unit }[] {
+  // A function inside a renamed one is renamed with it: `new > inner` pairs with `old > inner`.
+  const baseName = (name: string): string => { const [outer, ...rest] = name.split(' > '); return [renamed.get(outer!) ?? outer!, ...rest].join(' > '); };
+  const key = (u: Unit, side: 'base' | 'head' = 'base'): string => `${side === 'head' ? baseName(u.name) : u.name}\0${u.kind}`;
   const byKey = new Map<string, Unit[]>();
   for (const b of base) byKey.set(key(b), [...(byKey.get(key(b)) ?? []), b]);
   const used = new Set<Unit>();
   const out: { base?: Unit; head?: Unit }[] = [];
-  const candidates = head.flatMap((h) => (byKey.get(key(h)) ?? []).map((b) => ({ h, b, d: Math.abs(h.line - b.line) })))
+  const candidates = head.flatMap((h) => (byKey.get(key(h, 'head')) ?? []).map((b) => ({ h, b, d: Math.abs(h.line - b.line) })))
     .sort((x, y) => x.d - y.d || x.h.line - y.h.line);
   for (const { h, b } of candidates) {
     if (used.has(h) || used.has(b)) continue;
@@ -62,7 +67,8 @@ export function pair(base: readonly Unit[], head: readonly Unit[]): { base?: Uni
   return out;
 }
 
-export interface Side { path: string; basePath: string; base?: string; head?: string }
+/** One file on both sides. `renamed` maps a function's head name to its base name, for those the change renamed. */
+export interface Side { path: string; basePath: string; base?: string; head?: string; renamed?: ReadonlyMap<string, string> }
 
 const score = (u: Unit): Score => ({ cognitive: u.cognitive, cyclomatic: u.cyclomatic });
 const trivial = (u: Unit): boolean => u.cognitive === 0 && u.cyclomatic <= 1;
@@ -81,7 +87,7 @@ export function complexityFacts(bin: string, sides: readonly Side[]): Complexity
     const head = run('head', sides.filter((s) => s.head !== undefined).map((s) => [s.path, s.head!]));
     const facts: ComplexityFact[] = [];
     for (const s of sides) {
-      for (const p of pair(base.get(s.basePath) ?? [], head.get(s.path) ?? [])) {
+      for (const p of pair(base.get(s.basePath) ?? [], head.get(s.path) ?? [], s.renamed)) {
         const u = (p.head ?? p.base)!;
         if (p.base && p.head) {
           if (p.base.cognitive === p.head.cognitive && p.base.cyclomatic === p.head.cyclomatic) continue;

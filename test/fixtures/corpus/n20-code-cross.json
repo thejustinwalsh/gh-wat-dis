@@ -1,0 +1,233 @@
+{
+  "title": "Symbols across three groups",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Web"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Domain"
+    },
+    {
+      "id": "g3",
+      "type": "boundary",
+      "name": "Infra"
+    },
+    {
+      "id": "f1",
+      "type": "file",
+      "name": "apps/web/src/pages/checkout/[id]/confirmation.page.tsx",
+      "parent": "g1",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "ConfirmationPageWithAVeryLongComponentNameIndeed",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "loader",
+          "kind": "fn",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "id": "f2",
+      "type": "file",
+      "name": "apps/web/src/hooks/useOrder.ts",
+      "parent": "g1",
+      "status": "affected",
+      "symbols": [
+        {
+          "name": "useOrder",
+          "kind": "fn"
+        }
+      ]
+    },
+    {
+      "id": "f3",
+      "type": "file",
+      "name": "packages/domain/src/order.ts",
+      "parent": "g2",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "Order_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "Order_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "Order_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "Order_3",
+          "kind": "trait"
+        },
+        {
+          "name": "Order_4",
+          "kind": "const",
+          "status": "added"
+        },
+        {
+          "name": "Order_5",
+          "kind": "type",
+          "status": "changed"
+        },
+        {
+          "name": "Order_6",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "Order_7",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "id": "f4",
+      "type": "file",
+      "name": "packages/domain/src/money.ts",
+      "parent": "g2",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "Money_0",
+          "kind": "struct",
+          "status": "added"
+        },
+        {
+          "name": "Money_1",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "Money_2",
+          "kind": "fn",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "id": "f5",
+      "type": "file",
+      "name": "packages/infra/src/db.ts",
+      "parent": "g3",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "db_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "db_1",
+          "kind": "struct",
+          "status": "changed"
+        }
+      ]
+    },
+    {
+      "id": "f6",
+      "type": "file",
+      "name": "packages/infra/src/legacy_orm.ts",
+      "parent": "g3",
+      "status": "removed",
+      "symbols": [
+        {
+          "name": "orm_0",
+          "kind": "fn",
+          "status": "removed"
+        },
+        {
+          "name": "orm_1",
+          "kind": "fn",
+          "status": "removed"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "f1",
+      "to": "f3",
+      "fromSymbol": "loader",
+      "toSymbol": "Order_0",
+      "label": "",
+      "status": "added"
+    },
+    {
+      "from": "f1",
+      "to": "f2",
+      "toSymbol": "useOrder",
+      "label": ""
+    },
+    {
+      "from": "f2",
+      "to": "f3",
+      "fromSymbol": "useOrder",
+      "toSymbol": "Order_7",
+      "label": ""
+    },
+    {
+      "from": "f3",
+      "to": "f4",
+      "fromSymbol": "Order_1",
+      "toSymbol": "Money_0",
+      "label": "",
+      "status": "added"
+    },
+    {
+      "from": "f3",
+      "to": "f5",
+      "toSymbol": "db_0",
+      "label": ""
+    },
+    {
+      "from": "f3",
+      "to": "f6",
+      "fromSymbol": "Order_2",
+      "toSymbol": "orm_1",
+      "label": "",
+      "status": "removed"
+    },
+    {
+      "from": "f5",
+      "to": "f4",
+      "toSymbol": "Money_2",
+      "label": ""
+    },
+    {
+      "from": "f5",
+      "to": "f1",
+      "label": "Generates types for"
+    },
+    {
+      "from": "f4",
+      "to": "f4",
+      "fromSymbol": "Money_1",
+      "toSymbol": "Money_0",
+      "label": ""
+    },
+    {
+      "from": "f6",
+      "to": "f5",
+      "toSymbol": "db_1",
+      "label": "",
+      "status": "removed"
+    }
+  ]
+}

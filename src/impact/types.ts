@@ -64,6 +64,8 @@ export interface FileFact {
   churn90d: number;
   /** Enclosing function text git printed in the hunk headers. */
   hunkFunctions: string[];
+  /** Set when the file is source in a known language and was not parsed, with the reason. It then has no symbol and no import facts. */
+  skipped?: string;
   provenance: Provenance;
   source: FactSource;
 }
@@ -79,11 +81,36 @@ export interface SymbolFact {
   exported: boolean;
   change: SymbolChangeKind;
   signatureChanged: boolean;
+  /** Lines of the declaration the change added or took away, comments and blank lines aside. */
+  lines: number;
   before?: string;
   after?: string;
+  /** Set when the declaration is one the base had under another name, with the same body: that name. */
+  renamedFrom?: string;
   dependents: SymbolDependent[];
   provenance: Provenance;
   source: FactSource;
+}
+
+/**
+ * An import of a changed file: one it gained, one it lost, or one it kept.
+ * `names` are the names it now imports (`added`), no longer imports (`removed`), or imports as before (`unchanged`) from `to`.
+ */
+export interface ImportFact {
+  from: string;
+  to: string;
+  toElement: string;
+  /** True when `to` is itself in the diff. */
+  toInDiff: boolean;
+  names: string[];
+  /** Namespace, glob, require or dynamic import: the module as a whole. */
+  whole: boolean;
+  /** The import sits in test-only code, such as a Rust `mod tests`. */
+  testOnly?: boolean;
+  change: 'added' | 'removed' | 'unchanged';
+  /** Set when the names reach `to` through a module that re-exports them: that module. */
+  through?: string;
+  provenance: 'resolved';
 }
 
 export interface DirectDependent {
@@ -110,6 +137,8 @@ export interface ElementFact {
   parent?: string;
   external?: boolean;
   status: ElementStatus;
+  /** Set on a package the change renamed or moved: its old name, or its old folder when the name stayed. */
+  renamedFrom?: string;
   files: number;
   filesChanged: number;
   dependentsAffected: number;
@@ -156,6 +185,8 @@ export interface Facts {
   files: FileFact[];
   symbols: SymbolFact[];
   dependents: { direct: DirectDependent[]; transitive: TransitiveRollup[] };
+  /** The imports of the changed files, by file: gained, lost and kept. Empty when no changed file was parsed. */
+  imports: ImportFact[];
   elements: ElementFact[];
   edges: EdgeFact[];
   contracts: ContractFact[];

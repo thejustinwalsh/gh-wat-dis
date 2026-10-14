@@ -103,14 +103,18 @@ class Collector {
     const spec = unquote(st.field('source'));
     const clause = st.children().find((c) => c.kind() === 'export_clause');
     const specifiers = (clause?.children() ?? []).filter((c) => c.kind() === 'export_specifier')
-      .map((s) => ({ name: s.field('name')?.text() ?? '', alias: s.field('alias')?.text() }));
+      .map((s) => ({ name: s.field('name')?.text() ?? '', alias: s.field('alias')?.text(), node: s }));
     if (spec) {
       const ns = st.children().find((c) => c.kind() === 'namespace_export');
       const imp: RawImport = { spec, names: specifiers.map((s) => s.name), whole: !clause };
       this.imports.push(imp);
       if (ns) this.sym(ns.children().find((c) => c.isNamed())?.text() ?? '*', 'reexport', true, st, squash(st.text()), { reexport: { spec, name: '*' } });
       else if (!clause) this.sym('*', 'reexport', true, st, squash(st.text()), { reexport: { spec, name: '*' } });
-      for (const s of specifiers) this.sym(s.alias ?? s.name, 'reexport', true, st, `export { ${s.alias ? `${s.name} as ${s.alias}` : s.name} } from '${spec}'`, { reexport: { spec, name: s.name } });
+      // Each name is its own declaration: adding one name to the list changes that name alone.
+      for (const s of specifiers) {
+        const header = `export { ${s.alias ? `${s.name} as ${s.alias}` : s.name} } from '${spec}'`;
+        this.sym(s.alias ?? s.name, 'reexport', true, s.node, header, { reexport: { spec, name: s.name }, ...(this.detail ? { text: header } : {}) });
+      }
       return;
     }
     if (clause) {
@@ -131,7 +135,22 @@ class Collector {
       const fn = call.field('function');
       if (!fn || !((fn.kind() === 'identifier' && fn.text() === 'require') || fn.kind() === 'import')) continue;
       const spec = unquote(call.field('arguments')?.children().find((c) => c.isNamed()) ?? null);
-      if (spec) this.imports.push({ spec, names: [], whole: true });
+      if (!spec) continue;
+      // `const { a, b: c } = await import('./x')` and `(await import('./x')).a` name what they take, as a static import does.
+      let at = call.parent();
+      while (at && (at.kind() === 'await_expression' || at.kind() === 'parenthesized_expression')) at = at.parent();
+      const names: string[] = [];
+      const pattern = at?.kind() === 'variable_declarator' ? at.field('name') : null;
+      if (pattern?.kind() === 'object_pattern') {
+        for (const c of pattern.children()) {
+          if (c.kind() === 'shorthand_property_identifier_pattern') names.push(c.text());
+          else if (c.kind() === 'pair_pattern') { const key = c.field('key'); if (key) names.push(key.text()); }
+        }
+      } else if (at?.kind() === 'member_expression') {
+        const prop = at.field('property');
+        if (prop) names.push(prop.text());
+      }
+      this.imports.push({ spec, names, whole: names.length === 0 });
     }
   }
 

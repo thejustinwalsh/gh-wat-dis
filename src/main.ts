@@ -72,7 +72,7 @@ export const TOOLS: Tool[] = [
   { name: 'relate', group: WRITE, effect: 'github', usage: 'relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]', description: 'Set or remove a native relation between issues: parent, blocked by, blocks. A new parent replaces the old one.' },
   { name: 'labels apply', group: WRITE, effect: 'github', usage: 'labels apply [--prune] [--dry-run]', description: 'Create and update the labels the config wants. --prune also deletes the others.' },
 
-  { name: 'graph from-facts', group: GRAPH, effect: 'reads', usage: 'graph from-facts [facts.json|-] [--all] [--title t]', description: 'A diagram spec from impact facts: the changed and reached elements with their status.' },
+  { name: 'graph from-facts', group: GRAPH, effect: 'reads', usage: 'graph from-facts [facts.json|-] [--all] [--level file [--max-files n]] [--title t]', description: 'A diagram spec from impact facts: the changed and reached elements with their status. --level file gives a code diagram: files as cards, changed symbols as rows.' },
   { name: 'graph from-config', group: GRAPH, effect: 'reads', usage: 'graph from-config [--title t] [--type container|component|context]', description: "A diagram spec of the whole architecture map in the repository's config." },
   { name: 'graph focus', group: GRAPH, effect: 'reads', usage: 'graph focus [spec.json|-] --on <id,id|status:changed,added> [--hops 1] [--direction both|in|out]', description: 'Keep some elements, their neighbours within N hops, and every ancestor.' },
   { name: 'graph collapse', group: GRAPH, effect: 'reads', usage: 'graph collapse [spec.json|-] (--into <id,id> | --to-type container|system|boundary)', description: 'Fold everything inside an element into it and merge the relationships.' },
@@ -85,7 +85,7 @@ export const TOOLS: Tool[] = [
   { name: 'graph stats', group: GRAPH, effect: 'reads', usage: 'graph stats [spec.json|-]', description: 'Counts for a spec: elements, relationships, by type, by status, depth.' },
   { name: 'graph ids', group: GRAPH, effect: 'reads', usage: 'graph ids [spec.json|-]', description: 'One line for each element: id, type, status, name.' },
 
-  { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG fitted to GitHub's width. --png adds a PNG to look at." },
+  { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--report] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON." },
   { name: 'legend', group: RENDER, effect: 'reads', usage: 'legend [spec.json|-]', description: "A spec's relationships as a Markdown table, to sit under a diagram with numbered lines." },
   { name: 'blast', group: RENDER, effect: 'reads', usage: 'blast [facts.json|-] [--max-items 5] [--no-heading] [--no-links]', description: 'Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.' },
 
@@ -114,7 +114,7 @@ ${groups.join('\n\n')}
 ${skillLines}
 Example
   npx gh-wat-dis impact | npx gh-wat-dis graph from-facts \\
-    | npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 \\
+    | npx gh-wat-dis graph collapse --to-type container \\
     | npx gh-wat-dis diagram -o change.svg
 
 npx gh-wat-dis <tool> --help    options of one tool

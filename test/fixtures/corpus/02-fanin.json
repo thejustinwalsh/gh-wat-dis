@@ -1,0 +1,135 @@
+{
+  "title": "Fan-in from ten",
+  "type": "container",
+  "scope": "Hub",
+  "elements": [
+    {
+      "id": "hub",
+      "type": "container",
+      "name": "Hub service",
+      "technology": "Rust"
+    },
+    {
+      "id": "s0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "s1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "s2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "s3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "s4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "s5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "s6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    },
+    {
+      "id": "s7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust"
+    },
+    {
+      "id": "s8",
+      "type": "container",
+      "name": "Pricing",
+      "technology": "Rust"
+    },
+    {
+      "id": "s9",
+      "type": "container",
+      "name": "Inventory",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "s0",
+      "to": "hub",
+      "label": "Reports metric 0 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s1",
+      "to": "hub",
+      "label": "Reports metric 1 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s2",
+      "to": "hub",
+      "label": "Reports metric 2 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s3",
+      "to": "hub",
+      "label": "Reports metric 3 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s4",
+      "to": "hub",
+      "label": "Reports metric 4 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s5",
+      "to": "hub",
+      "label": "Reports metric 5 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s6",
+      "to": "hub",
+      "label": "Reports metric 6 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s7",
+      "to": "hub",
+      "label": "Reports metric 7 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s8",
+      "to": "hub",
+      "label": "Reports metric 8 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "s9",
+      "to": "hub",
+      "label": "Reports metric 9 to",
+      "technology": "HTTPS"
+    }
+  ]
+}

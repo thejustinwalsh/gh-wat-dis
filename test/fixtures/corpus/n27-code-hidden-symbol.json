@@ -1,0 +1,112 @@
+{
+ "title": "Line to the twelfth symbol",
+ "type": "code",
+ "scope": "S",
+ "direction": "RIGHT",
+ "elements": [
+  {
+   "id": "a",
+   "type": "file",
+   "name": "src/a.ts",
+   "status": "changed"
+  },
+  {
+   "id": "b",
+   "type": "file",
+   "name": "src/b.ts",
+   "status": "changed",
+   "symbols": [
+    {
+     "name": "sym_0",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_1",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_2",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_3",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_4",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_5",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_6",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_7",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_8",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_9",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_10",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_11",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_12",
+     "kind": "fn",
+     "status": "changed"
+    },
+    {
+     "name": "sym_13",
+     "kind": "fn",
+     "status": "changed"
+    }
+   ]
+  }
+ ],
+ "relationships": [
+  {
+   "from": "a",
+   "to": "b",
+   "toSymbol": "sym_11",
+   "label": ""
+  },
+  {
+   "from": "a",
+   "to": "b",
+   "toSymbol": "sym_2",
+   "label": ""
+  },
+  {
+   "from": "b",
+   "to": "a",
+   "fromSymbol": "sym_13",
+   "label": ""
+  }
+ ]
+}

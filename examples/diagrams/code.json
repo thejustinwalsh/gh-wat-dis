@@ -1,0 +1,124 @@
+{
+  "title": "Payment retries move to idempotency keys",
+  "type": "code",
+  "scope": "the payment retry change, at file level",
+  "elements": [
+    {
+      "id": "orders",
+      "type": "boundary",
+      "name": "Order service"
+    },
+    {
+      "id": "payments",
+      "type": "boundary",
+      "name": "Payment service"
+    },
+    {
+      "id": "checkout",
+      "type": "file",
+      "name": "services/orders/src/checkout.rs",
+      "parent": "orders",
+      "status": "affected"
+    },
+    {
+      "id": "authorise",
+      "type": "file",
+      "name": "services/payments/src/authorise.rs",
+      "parent": "payments",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "authorise",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "AuthoriseRequest",
+          "kind": "struct",
+          "status": "changed"
+        }
+      ]
+    },
+    {
+      "id": "retry",
+      "type": "file",
+      "name": "services/payments/src/retry.rs",
+      "parent": "payments",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "retry_authorisation",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "backoff_schedule",
+          "kind": "fn",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "keys",
+      "type": "file",
+      "name": "services/payments/src/idempotency.rs",
+      "parent": "payments",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "IdempotencyKey",
+          "kind": "struct",
+          "status": "added"
+        },
+        {
+          "name": "reserve",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "release",
+          "kind": "fn",
+          "status": "added"
+        }
+      ]
+    },
+    {
+      "id": "lib",
+      "type": "file",
+      "name": "services/payments/src/lib.rs",
+      "parent": "payments",
+      "status": "changed"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "checkout",
+      "to": "authorise",
+      "toSymbol": "authorise",
+      "label": ""
+    },
+    {
+      "from": "authorise",
+      "to": "keys",
+      "toSymbol": "reserve",
+      "label": ""
+    },
+    {
+      "from": "retry",
+      "to": "authorise",
+      "toSymbol": "authorise",
+      "label": ""
+    },
+    {
+      "from": "retry",
+      "to": "keys",
+      "toSymbol": "release",
+      "label": ""
+    },
+    {
+      "from": "lib",
+      "to": "keys",
+      "label": ""
+    }
+  ]
+}

@@ -111,7 +111,7 @@
       "from": "client",
       "to": "host",
       "label": "Posts LayoutRequest, gets glyph runs back",
-      "technology": "postMessage: structured clone out, transferred ArrayBuffer back",
+      "technology": "postMessage, ArrayBuffer transferred back",
       "status": "added"
     },
     {
@@ -137,7 +137,7 @@
     {
       "from": "renderer",
       "to": "atlas",
-      "label": "Reads glyph bitmaps from",
+      "label": "Reads glyphs from",
       "technology": "Uint8Array view"
     },
     {

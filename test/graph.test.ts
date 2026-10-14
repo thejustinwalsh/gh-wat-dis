@@ -277,7 +277,7 @@ test('cli: exit codes, stdout and stderr', () => {
   assert.equal(run(`${graph} explode "${file}"`).status, 2);
   assert.equal(run(`${graph} focus "${file}"`).status, 2);
   assert.equal(run(`${graph} ids -`, 'not json').status, 2);
-  assert.match(run(`${graph} --help`).stdout, /from-facts \[facts\.json\] {2}spec from impact facts/);
+  assert.match(run(`${graph} --help`).stdout, /from-facts \[facts\.json\] \[--all\] \[--level file\]/);
   assert.match(run(`${diagram} --help`).stdout, /npx gh-wat-dis diagram/);
 
   assert.equal(run(`${graph} ids "${file}" | grep -c component`).stdout.trim(), '3');
@@ -295,7 +295,7 @@ test('cli: exit codes, stdout and stderr', () => {
   assert.match(lintFail.stderr, /error: .*says nothing/);
   const warned = run(`${diagram} -`, JSON.stringify(big()));
   assert.equal(warned.status, 0);
-  assert.match(warned.stderr, /warning: element "user" has no description/);
+  assert.match(warned.stderr, /warning: container "web" has no technology/);
   assert.match(warned.stdout, /^<svg /);
   assert.match(run(`${diagram} --mermaid --no-lint "${file}"`).stdout, /^flowchart TB/);
   assert.equal(run(`${diagram} "${file}"`).stdout.trim(), join(dir, 'big.svg'));

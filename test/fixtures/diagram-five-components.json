@@ -1,0 +1,85 @@
+{
+  "title": "PR #35: CLI metadata feeds help and the site command list",
+  "type": "component",
+  "scope": "gh-wat-dis repository tooling",
+  "direction": "DOWN",
+  "elements": [
+    {
+      "id": "catalog",
+      "type": "component",
+      "name": "Skill catalog",
+      "technology": "TypeScript",
+      "description": "Reads descriptions from shipped SKILL.md files",
+      "status": "changed"
+    },
+    {
+      "id": "cli",
+      "type": "component",
+      "name": "CLI help and tool list",
+      "technology": "TypeScript",
+      "description": "Lists commands and now includes skill descriptions",
+      "status": "changed"
+    },
+    {
+      "id": "generator",
+      "type": "component",
+      "name": "Site command generator",
+      "technology": "TypeScript, Node",
+      "description": "Renders command metadata as HTML",
+      "status": "added"
+    },
+    {
+      "id": "page",
+      "type": "component",
+      "name": "Site page",
+      "technology": "HTML",
+      "description": "Shows the generated, collapsed command list",
+      "status": "changed"
+    },
+    {
+      "id": "test",
+      "type": "component",
+      "name": "Package test",
+      "technology": "TypeScript, Node test runner",
+      "description": "Checks page and help output against sources",
+      "status": "changed"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "cli",
+      "to": "catalog",
+      "label": "Loads shipped skill descriptions from",
+      "technology": "TypeScript function call",
+      "status": "added"
+    },
+    {
+      "from": "generator",
+      "to": "cli",
+      "label": "Imports command metadata from",
+      "technology": "TypeScript import",
+      "status": "added"
+    },
+    {
+      "from": "generator",
+      "to": "page",
+      "label": "Writes the command list into",
+      "technology": "Node file write",
+      "status": "added"
+    },
+    {
+      "from": "test",
+      "to": "generator",
+      "label": "Invokes HTML generation in",
+      "technology": "TypeScript import",
+      "status": "added"
+    },
+    {
+      "from": "test",
+      "to": "page",
+      "label": "Reads the published command list from",
+      "technology": "Node file read",
+      "status": "added"
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "title": "Chain of 8",
+  "type": "container",
+  "scope": "Pipeline",
+  "elements": [
+    {
+      "id": "e0",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "e1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "e2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "e3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "e4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    },
+    {
+      "id": "e5",
+      "type": "container",
+      "name": "Search",
+      "technology": "Rust"
+    },
+    {
+      "id": "e6",
+      "type": "container",
+      "name": "Indexer",
+      "technology": "Rust"
+    },
+    {
+      "id": "e7",
+      "type": "container",
+      "name": "Catalogue",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "e0",
+      "to": "e1",
+      "label": "Sends batch 1 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e1",
+      "to": "e2",
+      "label": "Sends batch 2 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e2",
+      "to": "e3",
+      "label": "Sends batch 3 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e3",
+      "to": "e4",
+      "label": "Sends batch 4 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e4",
+      "to": "e5",
+      "label": "Sends batch 5 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e5",
+      "to": "e6",
+      "label": "Sends batch 6 to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e6",
+      "to": "e7",
+      "label": "Sends batch 7 to",
+      "technology": "HTTPS"
+    }
+  ]
+}

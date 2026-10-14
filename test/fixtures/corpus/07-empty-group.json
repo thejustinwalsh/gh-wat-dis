@@ -1,0 +1,19 @@
+{
+  "title": "Empty group",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Hollow"
+    },
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Alpha",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": []
+}

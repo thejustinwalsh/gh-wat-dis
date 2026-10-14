@@ -1,0 +1,381 @@
+{
+  "title": "Eight files, six symbols each",
+  "type": "code",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "f0",
+      "type": "file",
+      "name": "packages/core/src/module_0/handler.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "m0_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m0_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m0_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m0_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m0_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m0_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f1",
+      "type": "file",
+      "name": "packages/core/src/module_1/handler.ts",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "m1_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m1_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m1_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m1_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m1_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m1_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f2",
+      "type": "file",
+      "name": "packages/core/src/module_2/handler.ts",
+      "status": "affected",
+      "symbols": [
+        {
+          "name": "m2_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m2_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m2_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m2_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m2_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m2_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f3",
+      "type": "file",
+      "name": "packages/core/src/module_3/handler.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "m3_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m3_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m3_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m3_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m3_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m3_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f4",
+      "type": "file",
+      "name": "packages/core/src/module_4/handler.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "m4_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m4_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m4_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m4_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m4_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m4_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f5",
+      "type": "file",
+      "name": "packages/core/src/module_5/handler.ts",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "m5_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m5_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m5_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m5_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m5_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m5_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f6",
+      "type": "file",
+      "name": "packages/core/src/module_6/handler.ts",
+      "status": "affected",
+      "symbols": [
+        {
+          "name": "m6_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m6_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m6_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m6_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m6_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m6_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    },
+    {
+      "id": "f7",
+      "type": "file",
+      "name": "packages/core/src/module_7/handler.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "m7_0",
+          "kind": "fn",
+          "status": "added"
+        },
+        {
+          "name": "m7_1",
+          "kind": "struct",
+          "status": "changed"
+        },
+        {
+          "name": "m7_2",
+          "kind": "enum",
+          "status": "removed"
+        },
+        {
+          "name": "m7_3",
+          "kind": "trait"
+        },
+        {
+          "name": "m7_4",
+          "kind": "const",
+          "status": "changed"
+        },
+        {
+          "name": "m7_5",
+          "kind": "type",
+          "status": "removed"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "f0",
+      "to": "f1",
+      "toSymbol": "m1_0",
+      "label": ""
+    },
+    {
+      "from": "f0",
+      "to": "f3",
+      "fromSymbol": "m0_1",
+      "toSymbol": "m3_4",
+      "label": ""
+    },
+    {
+      "from": "f1",
+      "to": "f2",
+      "toSymbol": "m2_1",
+      "label": ""
+    },
+    {
+      "from": "f2",
+      "to": "f3",
+      "toSymbol": "m3_2",
+      "label": ""
+    },
+    {
+      "from": "f2",
+      "to": "f5",
+      "fromSymbol": "m2_1",
+      "toSymbol": "m5_4",
+      "label": ""
+    },
+    {
+      "from": "f3",
+      "to": "f4",
+      "toSymbol": "m4_3",
+      "label": ""
+    },
+    {
+      "from": "f4",
+      "to": "f5",
+      "toSymbol": "m5_4",
+      "label": ""
+    },
+    {
+      "from": "f4",
+      "to": "f7",
+      "fromSymbol": "m4_1",
+      "toSymbol": "m7_4",
+      "label": ""
+    },
+    {
+      "from": "f5",
+      "to": "f6",
+      "toSymbol": "m6_5",
+      "label": ""
+    },
+    {
+      "from": "f6",
+      "to": "f7",
+      "toSymbol": "m7_0",
+      "label": ""
+    },
+    {
+      "from": "f6",
+      "to": "f1",
+      "fromSymbol": "m6_1",
+      "toSymbol": "m1_4",
+      "label": ""
+    },
+    {
+      "from": "f7",
+      "to": "f0",
+      "toSymbol": "m0_1",
+      "label": ""
+    }
+  ]
+}

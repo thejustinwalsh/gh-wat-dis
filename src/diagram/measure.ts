@@ -27,14 +27,24 @@ export function textWidth(text: string, px: number, bold = false): number {
 }
 
 function breakWord(word: string, px: number, max: number, bold: boolean): string[] {
+  // A long name breaks after a hyphen, a slash, a dot or an underscore, where a reader sees a seam. Only a piece
+  // with no seam that is still too wide is cut between letters.
+  const pieces = word.match(/[^-/._:]+[-/._:]*|[-/._:]+/g) ?? [word];
   const parts: string[] = [];
   let part = '';
-  for (const ch of word) {
-    if (part && textWidth(part + ch, px, bold) > max) { parts.push(part); part = ch; } else part += ch;
+  for (const piece of pieces) {
+    if (part && textWidth(part + piece, px, bold) > max) { parts.push(part); part = ''; }
+    if (textWidth(piece, px, bold) <= max) { part += piece; continue; }
+    for (const ch of piece) {
+      if (part && textWidth(part + ch, px, bold) > max) { parts.push(part); part = ch; } else part += ch;
+    }
   }
   if (part) parts.push(part);
   return parts;
 }
+
+/** Width in a monospace font: every character advances 0.6 em. */
+export const monoWidth = (text: string, px: number): number => [...text].length * 0.602 * px * PAD;
 
 /** Greedy word wrap. A word wider than `max` is split by character. */
 export function wrap(text: string, px: number, max: number, bold = false): string[] {
@@ -49,6 +59,17 @@ export function wrap(text: string, px: number, max: number, bold = false): strin
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/**
+ * Wrap onto as few lines as `wrap` needs, with the lines as even as they can be, so the last line is not one word left alone.
+ */
+export function wrapEven(text: string, px: number, max: number, bold = false): string[] {
+  const lines = wrap(text, px, max, bold);
+  if (lines.length < 2) return lines;
+  let lo = 0, hi = max;
+  while (hi - lo > 2) { const mid = (lo + hi) / 2; if (wrap(text, px, mid, bold).length === lines.length) hi = mid; else lo = mid; }
+  return wrap(text, px, hi, bold);
 }
 
 /** Cut `text` to `max` pixels, ending in an ellipsis when it does not fit. */

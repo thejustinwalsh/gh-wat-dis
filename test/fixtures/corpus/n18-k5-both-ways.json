@@ -1,0 +1,159 @@
+{
+  "title": "Every pair, both ways",
+  "type": "container",
+  "scope": "S",
+  "elements": [
+    {
+      "id": "a",
+      "type": "container",
+      "name": "Gateway",
+      "technology": "Rust"
+    },
+    {
+      "id": "b",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust"
+    },
+    {
+      "id": "cc",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust"
+    },
+    {
+      "id": "d",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust"
+    },
+    {
+      "id": "e",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "a",
+      "to": "b",
+      "label": "Gossips ab to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "cc",
+      "label": "Gossips acc to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "d",
+      "label": "Gossips ad to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "a",
+      "to": "e",
+      "label": "Gossips ae to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "a",
+      "label": "Gossips ba to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "cc",
+      "label": "Gossips bcc to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "d",
+      "label": "Gossips bd to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "b",
+      "to": "e",
+      "label": "Gossips be to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "a",
+      "label": "Gossips cca to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "b",
+      "label": "Gossips ccb to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "d",
+      "label": "Gossips ccd to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "cc",
+      "to": "e",
+      "label": "Gossips cce to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "a",
+      "label": "Gossips da to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "b",
+      "label": "Gossips db to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "cc",
+      "label": "Gossips dcc to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "d",
+      "to": "e",
+      "label": "Gossips de to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "a",
+      "label": "Gossips ea to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "b",
+      "label": "Gossips eb to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "cc",
+      "label": "Gossips ecc to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "e",
+      "to": "d",
+      "label": "Gossips ed to",
+      "technology": "HTTPS"
+    }
+  ]
+}

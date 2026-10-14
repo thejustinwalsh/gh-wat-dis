@@ -10,7 +10,8 @@ so ops chain with pipes and end in "npx gh-wat-dis diagram".
 
 Usage: npx gh-wat-dis graph <op> [spec.json|-] [options]
 
-  from-facts [facts.json]  spec from impact facts
+  from-facts [facts.json] [--all] [--level file]
+                           spec from impact facts, scoped to the change. --level file: a code diagram
   focus --on <id,id|status:changed,added> [--hops 1] [--direction both|in|out]
                            keep those elements, their neighbours within N hops, and every ancestor
   collapse --into <id,id> | --to-type <container|system|boundary>
@@ -33,7 +34,7 @@ Usage: npx gh-wat-dis graph <op> [spec.json|-] [options]
 Exit 0 ok, 2 usage error (an unknown id is a usage error).
 
 Example
-  npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 < big.json \\
+  npx gh-wat-dis graph focus --on status:changed,added,removed --hops 1 < whole-map.json \\
     | npx gh-wat-dis graph collapse --to-type container \\
     | npx gh-wat-dis diagram -o change.svg
 `;

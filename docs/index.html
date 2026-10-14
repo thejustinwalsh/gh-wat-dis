@@ -144,7 +144,7 @@ button.copy { flex: none; font: 700 14px/1 var(--mono); color: #fff; padding: 12
 .tag { display: inline-block; margin-bottom: 10px; padding: 4px 9px; border-radius: 5px; font: 500 12px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--keyword); background: var(--keyword-bg); box-shadow: inset 0 0 0 1px var(--keyword-line); }
 .issue code { font: 400 0.92em var(--mono); }
-.issue figure { margin: 0; border: 1px solid var(--card-line); border-radius: 10px; overflow: hidden; }
+.issue figure { width: fit-content; max-width: 100%; margin: 0 auto; border: 1px solid var(--card-line); border-radius: 10px; overflow: hidden; }
 table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; border: 1px solid var(--card-line); }
 th, td { text-align: left; padding: 8px 12px; vertical-align: top; }
 th { background: var(--card-panel); font-weight: 700; }
@@ -197,9 +197,12 @@ details.all dd { margin: 0; font-size: 16px; line-height: 1.5; }
 details.all dd i { font: 400 12px/1.5 var(--mono); font-style: normal; color: var(--keyword); white-space: nowrap; margin-left: 6px; }
 
 .gallery-band { background: var(--panel); background-image: linear-gradient(180deg, color-mix(in oklab, var(--line) 35%, var(--panel)) 0, var(--panel) 160px); }
-.gallery { display: grid; grid-template-columns: 1.25fr 1fr 0.85fr; gap: 24px; align-items: start; margin-top: 40px; }
-.gallery figure { margin: 0; }
-.gallery img { width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-sm); }
+.gallery { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 56px 32px; margin-top: 40px; }
+/* Each drawing at its own width, up to GitHub's 860px column. Two stand side by side only when both fit at full size. */
+.gallery figure { margin: 0; width: fit-content; max-width: min(100%, 860px); }
+.gallery a { display: block; border-radius: 10px; }
+.gallery img { width: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-sm); }
+.gallery figcaption { width: 0; min-width: 100%; }
 .gallery figcaption b { display: block; margin: 14px 0 8px; font: 700 14px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--strong); }
 .gallery figcaption { font-size: 16px; line-height: 1.5; }
 
@@ -224,7 +227,7 @@ footer span { color: var(--muted); }
   .pipe { grid-template-columns: minmax(0, 1fr); }
   .step { border-right: 0; border-bottom: 1px solid var(--line); min-height: 0; }
   .step:last-child { border-bottom: 0; }
-  .more, .gallery { grid-template-columns: minmax(0, 1fr); }
+  .more { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   header.top nav a:nth-child(2) { display: none; }
@@ -292,7 +295,7 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">2 · What changes in the system</span>
-        <figure><img src="assets/focused.svg" width="868" height="499" alt="Container diagram: the Order service and the Payment service change, and the Payment service gains a relationship to the Orders database for payment keys."></figure>
+        <figure><img src="assets/focused.svg" width="492" height="1019" alt="Container diagram: the Payments worker changes to charge once for each event, it gains a line to the Orders database, which stores payment keys, and the Orders API, which imports retryCharge, is affected."></figure>
       </div>
       <div class="block">
         <span class="tag">3 · Facts from tools, labeled</span>
@@ -428,7 +431,7 @@ Links read
       </dl>
       <h3>Shape a graph (diagram spec in, diagram spec out)</h3>
       <dl>
-        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status.</dd></div>
+        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status. --level file gives a code diagram: files as cards, changed symbols as rows.</dd></div>
         <div><dt>graph from-config</dt><dd>A diagram spec of the whole architecture map in the repository's config.</dd></div>
         <div><dt>graph focus</dt><dd>Keep some elements, their neighbours within N hops, and every ancestor.</dd></div>
         <div><dt>graph collapse</dt><dd>Fold everything inside an element into it and merge the relationships.</dd></div>
@@ -443,7 +446,7 @@ Links read
       </dl>
       <h3>Render</h3>
       <dl>
-        <div><dt>diagram</dt><dd>Lint a diagram spec and draw it as an SVG fitted to GitHub's width. --png adds a PNG to look at. <i>writes local files</i></dd></div>
+        <div><dt>diagram</dt><dd>Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON. <i>writes local files</i></dd></div>
         <div><dt>legend</dt><dd>A spec's relationships as a Markdown table, to sit under a diagram with numbered lines.</dd></div>
         <div><dt>blast</dt><dd>Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.</dd></div>
       </dl>
@@ -462,9 +465,9 @@ Links read
     <h2 id="diagrams" style="margin:16px 0;max-width:880px">A system diagram in the issue, drawn to fit GitHub’s 860-pixel column.</h2>
     <p class="lead">A JSON spec goes in and an SVG comes out. A diagram can show services, or the inside of one browser tab: threads, workers, WASM modules and the protocols between them. Each status has its own border and badge, so colour is never the only signal.</p>
     <div class="gallery">
-      <figure><img src="assets/dynamic.svg" width="776" height="540" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."><figcaption><b>Flow</b>Numbered steps run left to right and wrap to fit. A table under the image holds the words.</figcaption></figure>
-      <figure><img src="assets/change-impact.svg" width="750" height="1022" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
-      <figure><img src="assets/in-process.svg" width="707" height="1283" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
+      <figure><a href="assets/dynamic.svg" title="Open the full-size SVG"><img src="assets/dynamic.svg" width="712" height="884" loading="lazy" alt="Flow diagram of placing an order: seven numbered steps from the shopper through the storefront, API gateway and order service to inventory, payments and the event queue."></a><figcaption><b>Flow</b>Numbered steps read in order from the top left, each with its words.</figcaption></figure>
+      <figure><a href="assets/change-impact.svg" title="Open the full-size SVG"><img src="assets/change-impact.svg" width="702" height="1104" loading="lazy" alt="Change impact diagram: a fraud screening service is added, the payment service changes, a nightly fraud job is removed and the order service is affected."></a><figcaption><b>Change impact</b>One diagram shows what the change adds, changes, removes and reaches.</figcaption></figure>
+      <figure><a href="assets/in-process.svg" title="Open the full-size SVG"><img src="assets/in-process.svg" width="827" height="1340" loading="lazy" alt="Component diagram inside one browser tab: text layout moves from the main thread to a web worker that calls a WASM module, with the message protocol and ABI on each edge."></a><figcaption><b>Inside one process</b>A thread, a Web Worker and a WASM module are boundaries. Each edge names its ABI or protocol.</figcaption></figure>
     </div>
   </div>
 </section>

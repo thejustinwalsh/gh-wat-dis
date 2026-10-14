@@ -1,23 +1,71 @@
 import type { DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
+import { BUDGET } from '../diagram/budget.ts';
 import type { EdgeFact, Facts, SpecOptions } from './types.ts';
 
-function label(e: EdgeFact): string {
+/**
+ * A generated line says what moves across it as far as the tools saw it: the names one element imports from the
+ * other, read from the imports of the files around the change. Where no file near the change imports across it, the
+ * tools know only that code is imported. The author relabels the line with what it does.
+ */
+function label(e: EdgeFact, names: string[]): string {
   if (e.label) return e.label;
-  if (e.weight > 0) return `imports (${e.weight})`;
-  return e.source === 'manifest' ? 'declares dependency' : 'imported on base (0 on head)';
+  if (e.source === 'manifest' && !e.weight) return 'Declares a dependency on';
+  const verb = e.weight > 0 ? 'Imports' : 'Imported';
+  if (!names.length) return `${verb} code from`;
+  const shown = names.slice(0, 2).join(names.length === 2 ? ' and ' : ', ');
+  return `${verb} ${shown}${names.length > 2 ? ` and ${names.length - 2} more` : ''} from`;
 }
+/** How many files import across the relationship, where the map names no technology. */
+const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : e.source === 'manifest' ? 'package manifest' : undefined);
 
-/** Facts as a diagram spec. It does not prune or cap: the `graph` tool reshapes specs. */
+/** Past its budget an element diagram is a hairball: the affected elements are cut to the most reached, and the unchanged lines to the heaviest. */
+const MAX_ELEMENTS = BUDGET.container.boxes;
+const MAX_LINES = BUDGET.container.lines;
+
+/**
+ * Facts as a diagram spec: the elements the change touched, the ones it reaches, and both ends of
+ * every relationship it added or removed, with their ancestors. An unchanged neighbour that the
+ * change does not reach is left out: next to a changed hub, that is most of the map.
+ * A top-level folder that only stands in for an element is not drawn.
+ * `all` keeps the whole map, for the `graph` tool to reshape.
+ */
 export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec {
   const byId = new Map(facts.elements.map((e) => [e.id, e]));
   const keep = new Set<string>();
+  let cut = 0;
   if (opts.all) for (const e of facts.elements) keep.add(e.id);
   else {
-    const core = new Set(facts.elements.filter((e) => e.status === 'changed' || e.status === 'added' || e.status === 'removed').map((e) => e.id));
-    for (const id of core) keep.add(id);
+    for (const e of facts.elements) if (e.status !== 'unchanged') keep.add(e.id);
     for (const e of facts.edges) {
-      if (core.has(e.from) && byId.has(e.to)) keep.add(e.to);
-      if (core.has(e.to) && byId.has(e.from)) keep.add(e.from);
+      if (e.status === 'unchanged' || !byId.has(e.from) || !byId.has(e.to)) continue;
+      keep.add(e.from);
+      keep.add(e.to);
+    }
+  }
+  // A folder that stands in for an element is not architecture. Next to a map or a workspace it is
+  // left out ((root), test, .agents). With neither, a folder is drawn only when it holds changed
+  // source or has a relationship: a folder of images is not a component.
+  if (!opts.all) {
+    const mapped = facts.elements.some((e) => e.source !== 'git');
+    const linked = new Set(facts.edges.flatMap((e) => [e.from, e.to]));
+    const coded = new Set(facts.files.filter((f) => f.language !== null && (f.kind === 'source' || f.kind === 'test')).map((f) => f.element));
+    // An end of a relationship the change added or removed stays, mapped or not: it is why the picture is drawn.
+    const ends = new Set(facts.edges.filter((e) => e.status !== 'unchanged').flatMap((e) => [e.from, e.to]));
+    const before = new Set(keep);
+    for (const id of [...keep]) {
+      const e = byId.get(id)!;
+      if (e.source === 'git' && !ends.has(id) && (mapped || !(linked.has(id) || coded.has(id)))) keep.delete(id);
+    }
+    // With no map and no workspace, folders are all there is. A change that touches source is never "no changed elements".
+    if (!keep.size && coded.size) for (const id of before) if (coded.has(id)) keep.add(id);
+    // A change to a package that everything imports reaches every package. The picture keeps what changed and the
+    // most reached of the rest, and the scope line counts the others.
+    const reached = [...keep].filter((id) => byId.get(id)!.status === 'affected' && !ends.has(id));
+    const room = Math.max(0, MAX_ELEMENTS - (keep.size - reached.length));
+    if (keep.size > MAX_ELEMENTS && reached.length > room) {
+      reached.sort((a, b) => byId.get(b)!.dependentsAffected - byId.get(a)!.dependentsAffected || a.localeCompare(b));
+      for (const id of reached.slice(room)) keep.delete(id);
+      cut = reached.length - room;
     }
   }
   for (const id of [...keep]) {
@@ -26,23 +74,57 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
 
   const elements: SpecElement[] = facts.elements.filter((e) => keep.has(e.id)).map((e) => ({
     id: e.id, type: e.type, name: e.name,
-    ...(e.technology ? { technology: e.technology } : {}),
-    description: e.description ?? `${e.files} ${e.files === 1 ? 'file' : 'files'} · ${e.filesChanged} changed`,
+    // An element found as a folder, with no map and no manifest, has no technology to name. It says it is a folder.
+    ...(e.technology ? { technology: e.technology } : e.source === 'git' ? { technology: 'folder' } : {}),
+    description: [e.renamedFrom ? `renamed from ${e.renamedFrom}` : '', e.description ?? `${e.files} ${e.files === 1 ? 'file' : 'files'} · ${e.filesChanged} changed`].filter(Boolean).join(' · '),
     ...(e.parent && keep.has(e.parent) ? { parent: e.parent } : {}),
     ...(e.external ? { external: true } : {}),
     status: e.status,
     meta: { files: e.files, filesChanged: e.filesChanged, dependentsAffected: e.dependentsAffected, provenance: e.provenance, source: e.source },
   }));
-  const relationships: SpecRelationship[] = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to)).map((e) => ({
-    from: e.from, to: e.to, label: label(e),
-    ...(e.technology ? { technology: e.technology } : {}),
+  // An element drawn as a group cannot have a line to a part of itself: the line would run from
+  // the border of the group to a box inside it. Imports between a container and its own components stay in the facts.
+  const inside = (id: string, group: string): boolean => {
+    const seen = new Set<string>();
+    for (let p = byId.get(id)?.parent; p && !seen.has(p); p = byId.get(p)?.parent) { if (p === group) return true; seen.add(p); }
+    return false;
+  };
+  let edges = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to) && !inside(e.from, e.to) && !inside(e.to, e.from));
+  // Every relationship the change added, removed or altered is drawn. The unchanged ones fill what room is left:
+  // those that touch a changed element first, then the ones the most files import across.
+  let cutLines = 0;
+  if (!opts.all && edges.length > MAX_LINES) {
+    const touched = (e: EdgeFact): number => Number(['added', 'removed', 'changed'].includes(byId.get(e.from)!.status)) + Number(['added', 'removed', 'changed'].includes(byId.get(e.to)!.status));
+    const calm = edges.filter((e) => e.status === 'unchanged').sort((a, b) => touched(b) - touched(a) || b.weight - a.weight || `${a.from} ${a.to}`.localeCompare(`${b.from} ${b.to}`));
+    const gone = new Set(calm.slice(Math.max(0, MAX_LINES - (edges.length - calm.length))));
+    cutLines = gone.size;
+    edges = edges.filter((e) => !gone.has(e));
+  }
+  // The names each element imports from another, as the facts list them for the files around the change.
+  const elementOf = new Map<string, string>(facts.files.map((f) => [f.path, f.element]));
+  for (const d of facts.dependents.direct) elementOf.set(d.file, d.element);
+  const moved = new Map<string, Set<string>>();
+  for (const i of facts.imports) {
+    const from = elementOf.get(i.from);
+    if (from === undefined || from === i.toElement || i.change === 'removed') continue;
+    const key = `${from}\0${i.toElement}`;
+    for (const n of i.names) (moved.get(key) ?? moved.set(key, new Set()).get(key)!).add(n);
+  }
+  const relationships: SpecRelationship[] = edges.map((e) => ({
+    from: e.from, to: e.to, label: label(e, [...(moved.get(`${e.from}\0${e.to}`) ?? [])].sort()),
+    ...(technology(e) ? { technology: technology(e)! } : {}),
     status: e.status,
     meta: { weight: e.weight, provenance: e.provenance, source: e.source },
   }));
+  const left = [
+    ...(cut ? [`${cut} more affected ${cut === 1 ? 'element is' : 'elements are'} not drawn`] : []),
+    ...(cutLines ? [`${cutLines} unchanged ${cutLines === 1 ? 'relationship is' : 'relationships are'} not drawn`] : []),
+  ];
   const short = (sha: string): string => (/^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 7) : sha.toLowerCase().replace('_', ' '));
   return {
     title: opts.title ?? `Change impact: ${short(facts.base)}..${short(facts.head)}`,
     type: elements.length && elements.every((e) => e.type === 'component') ? 'component' : 'container',
+    ...(left.length ? { scope: `the change and ${cut ? 'the elements it reaches most' : 'what it reaches'}; ${left.join(', ')}` } : {}),
     elements,
     relationships,
   };

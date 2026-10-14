@@ -1,6 +1,6 @@
 import type { DiagramSpec, SpecElement } from '../spec.ts';
 import { LIGHT } from './theme.ts';
-import { STATUS_BADGE, active, kindLine } from './vocab.ts';
+import { STATUS_BADGE, STATUS_MARK, active, kindLine, relText } from './vocab.ts';
 
 const quote = (s: string): string => s.replace(/"/g, '#quot;').replace(/</g, '#lt;').replace(/>/g, '#gt;');
 const SHAPE: Record<string, [string, string]> = { person: ['([', '])'], datastore: ['[(', ')]'], queue: ['[[', ']]'] };
@@ -30,13 +30,17 @@ export function toMermaid(spec: DiagramSpec): string {
     const kids = children.get(el.id);
     if (status) classes.push(`  class ${id} ${status}`);
     if (kids) {
-      out.push(`${indent}subgraph ${id}["${quote(el.name)} ${quote(kindLine(el))}${status ? ` ${STATUS_BADGE[status]}` : ''}"]`);
+      out.push(`${indent}subgraph ${id}["${quote(el.name)}${spec.type === 'code' ? '' : ` ${quote(kindLine(el))}`}${status ? ` ${STATUS_BADGE[status]}` : ''}"]`);
       for (const kid of kids) emit(kid, indent + '  ');
       out.push(`${indent}end`);
       return;
     }
     const [open, close] = SHAPE[el.type] ?? ['[', ']'];
-    const lines = [status ? STATUS_BADGE[status]! : '', el.name, kindLine(el), el.description ?? ''].filter(Boolean);
+    // A file is its path, then one line for each symbol with its mark.
+    const symbols = (el.symbols ?? []).map((s) => `${active(s.status) ? `${STATUS_MARK[active(s.status)!]} ` : ''}${s.name}`);
+    const lines = el.type === 'file'
+      ? [status ? STATUS_BADGE[status]! : '', el.name, ...symbols, el.description ?? ''].filter(Boolean)
+      : [status ? STATUS_BADGE[status]! : '', el.name, kindLine(el), el.description ?? ''].filter(Boolean);
     out.push(`${indent}${id}${open}"${lines.map(quote).join('<br/>')}"${close}`);
   };
   for (const el of children.get(undefined) ?? []) emit(el, '  ');
@@ -47,7 +51,7 @@ export function toMermaid(spec: DiagramSpec): string {
     const label = [
       status ? `${STATUS_BADGE[status]}: ` : '',
       rel.order !== undefined ? `${rel.order}. ` : '',
-      rel.label,
+      relText(rel),
       rel.technology ? ` [${rel.technology}]` : '',
     ].join('');
     out.push(`  ${from} ${ARROW[status ?? ''] ?? '-->'}|"${quote(label)}"| ${to}`);
