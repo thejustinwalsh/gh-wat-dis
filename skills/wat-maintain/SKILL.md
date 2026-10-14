@@ -33,7 +33,7 @@ Run every check unless the user names some. The stale thresholds come from `.age
 | Done but open | Issue whose linked PR merged. Also an open issue in the current milestone that a merged PR names with `Refs`: read each PR the finding names and say whether it finished the work. | `audit` → `done-but-open`, then read the PRs |
 | Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan with the number of open issues on each (status is not a label; type is a label only on a user repository) | `audit` → `labels` |
 | Blocked chains | Issues blocked by a closed or stale issue | `audit` → `blocked-chains` |
-| Milestone description | An open milestone whose description has no `**Tracking:**` line, or a current milestone with no tracking issue. | `audit` → `milestone-description` |
+| Milestone description | An open milestone whose description has no `**Tracking:**` line, or a current milestone with no tracking issue. When the tool can guess the tracking issue, the finding gives the line to add, with the issue as its full URL: propose that line. | `audit` → `milestone-description` |
 
 The tool counts. These checks need reading, and the output names them in `leftToAgent`. Do them yourself, on the open issues of the current milestone:
 

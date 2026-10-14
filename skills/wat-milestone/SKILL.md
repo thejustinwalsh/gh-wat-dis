@@ -14,13 +14,13 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
 1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, capacity). List open milestones to avoid a clash. Milestones run in sequence: the new one is the next version after the highest that exists. Do not set a due date.
 2. **Get the goal** in one sentence. If the user gives a list of features, ask what a user or the system can do when it ships.
-3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
-4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements that break on the milestone page or in the milestones list.
+3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it, written as its full URL (`https://github.com/<owner>/<repo>/issues/<n>`): GitHub links a full URL in a milestone description and does not link `#<n>`. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
+4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements that break on the milestone page or in the milestones list, and each issue written as `#<n>` where the full URL belongs.
 5. **Show the draft**, wait for a yes, then create:
    ```bash
    gh api repos/{owner}/{repo}/milestones -f title="<title>" -F description=@.wat-tmp/milestone.md
    ```
-6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then put its number in the description's `Tracking` line.
+6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then put its full URL in the description's `Tracking` line: `**Tracking:** https://github.com/<owner>/<repo>/issues/<n>`.
 
 ## Plan scope
 
@@ -44,7 +44,7 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
    | Field | Meaning |
    |---|---|
    | `milestone.current` | True for the lowest open version: the one that is due now |
-   | `tracking`, `trackingFrom` | The tracking issue. `description`: the milestone names it on a `Tracking:` line. `sub-issues`: the tool guessed it as the issue with the most sub-issues. |
+   | `tracking`, `trackingFrom` | The tracking issue. `description`: the milestone names it on a `Tracking:` line, as a full URL (`#<n>` is read too). `sub-issues`: the tool guessed it as the issue with the most sub-issues. |
    | `counts.total`, `closed`, `open` | Issues only. Pull requests and the tracking issue are not counted. |
    | `counts.inReview` | Open issues with an open pull request that closes them. This is the format's "In review" row. |
    | `counts.blocked`, `blockedOutside` | Open issues with an open blocker, and how many of those wait on something outside the milestone. `blocked` is the format's "Blocked" row. |
@@ -55,7 +55,7 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
    | `signals[]` | Every number behind the rating: `name`, `value`, `text` (the number as a sentence) and `decides` (true for the signals the rule used). `value` is null when the tool could not measure it. |
    | `doneWhen` | The conditions from the milestone description |
 
-   When `trackingFrom` is `sub-issues`, say so in one line and propose adding `**Tracking:** #<n>` to the milestone description.
+   When `trackingFrom` is `sub-issues`, say so in one line and propose adding `**Tracking:** https://github.com/<owner>/<repo>/issues/<n>` to the milestone description.
 
 2. **Check each done-when condition.** Run the check it names. Mark it met or not met, with the evidence.
    - **You cannot run the check here** (a clean machine, a production system): mark it "not checked", say why, and give the nearest fact you can measure, labeled as indirect. An open issue that delivers the condition is such a fact.
@@ -85,7 +85,7 @@ Milestones here have no due dates, and a date never sets importance. The current
 
 Milestones run in sequence, so an early milestone can take in new work and stay `moving`. Past half closed the milestone is near release, and new scope that outruns the closes makes it `growing`. An issue counts as added when it joined the milestone after the milestone's first close.
 
-The other signals print with every rating and change no word: `oldestReviewDays`, `oldestBlockerDays`, `addedAfterStart`, `reopened`, and `conditionsClosed` (done-when conditions that name an issue and have every named issue closed). `conditionsClosed` is an indirect fact: it never marks a condition met.
+The other signals print with every rating and change no word: `oldestReviewDays`, `oldestBlockerDays`, `addedAfterStart`, `reopened`, and `conditionsClosed` (done-when conditions that name an issue of this repository, by full URL or `#<n>`, and have every named issue closed). `conditionsClosed` is an indirect fact: it never marks a condition met.
 
 Never ask the user for a due date, and never propose one.
 

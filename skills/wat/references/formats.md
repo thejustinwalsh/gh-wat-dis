@@ -165,12 +165,13 @@ A milestone description is read in two places, and they treat it differently. Th
 |---|---|
 | A heading (`## Scope`) | The list shows `## Scope`. Use a bold label on its own line. |
 | A table | The list shows pipes and dashes. |
+| A bare issue number (`#12`) | GitHub does not link it here. Write the full URL. |
 | A task list (`- [ ]`) | The page draws boxes nobody can tick, and they count toward no progress. Progress comes from the issues in the milestone. |
 | An image | `gh` uploads no attachment for a milestone, and the list shows the source. The diagram goes in the tracking issue. |
 | An alert, `<details>`, any HTML | Not seen to render in any milestone, and the list shows the source. |
 | Mermaid, footnotes, math | Not seen to render in any milestone. |
 
-**An issue number is not a link here.** GitHub does not link `#12` in a milestone description: it stays plain text on the page and in the list. Keep `**Tracking:** #<n>` as written, because `npx gh-wat-dis milestone` reads the tracking issue from that line. To give the reader a link they can click, write the full URL (`https://github.com/<owner>/<repo>/issues/12`): GitHub turns that into a reference link. An `@name` does become a link.
+**Write every issue and pull request as its full URL.** `https://github.com/<owner>/<repo>/issues/12`, never `#12`. This holds for the `**Tracking:**` line and for each issue or pull request a done-when condition names. GitHub turns the full URL into a reference link (`owner/repo#12`) that the reader can click. It does not link `#12` in a milestone description: the number stays plain text on the page and in the list. A pull request is `https://github.com/<owner>/<repo>/pull/12`. `lint --kind milestone` warns on each `#12` outside inline code. `npx gh-wat-dis milestone`, `survey` and `audit` read the tracking issue and the issues of a condition from these URLs. They also read `#12`, so a description written before this rule keeps working until it is rewritten. A URL into another repository is a link for the reader only: the tools do not count it as an issue of this milestone. An `@name` does become a link.
 
 **A line break is kept.** A single newline shows as a line break on the page, as in a comment. So the three label lines below stay on three lines.
 
@@ -178,12 +179,12 @@ A milestone description is read in two places, and they treat it differently. Th
 <Goal: one sentence. What users or the system can do when this ships. No date. The milestones list shows this sentence first.>
 
 **Done when**
-- <condition that names its check: a command and its output, a URL and its status, or an issue number>
+- <condition that names its check: a command and its output, a URL and its status, or the full URL of an issue>
 - <3 at most>
 
 **In scope:** <elements or capabilities>
 **Out of scope:** <the thing people will assume is included>
-**Tracking:** #<tracking issue>
+**Tracking:** https://github.com/<owner>/<repo>/issues/<tracking issue>
 ```
 
 What GitHub does with each element, read from the rendered pages on 2026-10-13 (issue #5 of gh-wat-dis). "Page" is `/milestone/<n>`. "List" is `/milestones`.

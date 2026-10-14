@@ -272,7 +272,7 @@ async function milestoneReport(repo: string, found: RawMilestoneRow, openTitles:
   const blockedBy = await blockersOf(repo, items.filter((i) => !i.pull_request && i.state === 'open'));
   // The timeline is one more request. Without it the scope and reopen signals print as not measured.
   const events = await milestoneEvents(repo, found.number, found.title).catch(() => undefined);
-  return milestoneStatus({ milestone: found, openMilestones: openTitles, items, blockedBy, openPrs, events, now: new Date(), stalledAfterDays });
+  return milestoneStatus({ repo, milestone: found, openMilestones: openTitles, items, blockedBy, openPrs, events, now: new Date(), stalledAfterDays });
 }
 
 const MILESTONE_USAGE = `Usage: npx gh-wat-dis milestone [<title>] [--stalled-after 7]
