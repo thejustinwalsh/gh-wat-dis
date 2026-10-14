@@ -1,5 +1,5 @@
 import type { DiagramSpec, SpecElement, SpecRelationship, SpecSymbol, Status } from '../spec.ts';
-import { BUDGET } from '../diagram/budget.ts';
+import { BUDGET, codeCut } from '../diagram/budget.ts';
 import type { Facts, FileFact, SymbolFact } from './types.ts';
 
 export interface CodeSpecOptions { title?: string; maxFiles?: number }
@@ -118,132 +118,148 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     return names.size > 0 && (u.whole || [...u.kept, ...u.added, ...u.removed].some((n) => names.has(n)));
   };
 
-  // Slots: changed files first, with a few kept for the files around them.
-  const reach = (file: string): number => [...(uses.get(file) ?? [])].filter(([to, u]) => changed.has(to) && touches(to, u))
-    .reduce((n, [to, u]) => n + 1 + 2 * [...u.kept, ...u.added].filter((x) => changedNames(to).has(x)).length, 0);
-  const importers = [...uses.keys()].filter((f) => !changed.has(f) && reach(f) > 0)
-    .sort((a, b) => Number(tests.has(a)) - Number(tests.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
-  // A file outside the diff that a changed file starts to import by name.
-  const newlyImported = new Map<string, number>();
-  for (const i of facts.imports) if (i.change === 'added' && !i.toInDiff && i.names.length) newlyImported.set(i.to, (newlyImported.get(i.to) ?? 0) + i.names.length);
-  const context = [...new Set([...importers, ...[...newlyImported.keys()].sort((a, b) => newlyImported.get(b)! - newlyImported.get(a)! || a.localeCompare(b))])];
-  const kept = Math.min(context.length, CONTEXT_SLOTS, max - 1);
-  const drawn: string[] = code.slice(0, Math.max(1, max - kept)).map((f) => f.path);
-  // The file with the most change is the one a reader comes for. A file that imports it by name is kept before any other extra card.
-  const top = drawn[0];
-  const ofTop = top === undefined ? [] : [...uses].filter(([from, targets]) => !drawn.includes(from) && targets.has(top) && touches(top, targets.get(top)!)).map(([from]) => from)
-    .sort((a, b) => Number(!changed.has(a)) - Number(!changed.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
-  const around = context.filter((f) => [...(uses.get(f) ?? [])].some(([to, u]) => drawn.includes(to) && touches(to, u)) || drawn.some((d) => uses.get(d)?.has(f)));
-  for (const f of [...ofTop.slice(0, 1), ...around, ...code.map((c) => c.path)]) if (drawn.length < max && !drawn.includes(f)) drawn.push(f);
+  // The diagram is composed, checked against the shape of a code diagram, and composed again without the files
+  // that do not fit: files outside the diff that stand past the third layer, then the last file of a layer too tall
+  // for one image. What goes is named in the scope line.
+  const compose = (excluded: Set<string>): CodeSpecResult => {
+    // Slots: changed files first, with a few kept for the files around them.
+    const reach = (file: string): number => [...(uses.get(file) ?? [])].filter(([to, u]) => changed.has(to) && touches(to, u))
+      .reduce((n, [to, u]) => n + 1 + 2 * [...u.kept, ...u.added].filter((x) => changedNames(to).has(x)).length, 0);
+    const importers = [...uses.keys()].filter((f) => !changed.has(f) && reach(f) > 0)
+      .sort((a, b) => Number(tests.has(a)) - Number(tests.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
+    // A file outside the diff that a changed file starts to import by name.
+    const newlyImported = new Map<string, number>();
+    for (const i of facts.imports) if (i.change === 'added' && !i.toInDiff && i.names.length) newlyImported.set(i.to, (newlyImported.get(i.to) ?? 0) + i.names.length);
+    const context = [...new Set([...importers, ...[...newlyImported.keys()].sort((a, b) => newlyImported.get(b)! - newlyImported.get(a)! || a.localeCompare(b))])].filter((f) => !excluded.has(f));
+    const pool = code.filter((f) => !excluded.has(f.path));
+    const kept = Math.min(context.length, CONTEXT_SLOTS, max - 1);
+    const drawn: string[] = pool.slice(0, Math.max(1, max - kept)).map((f) => f.path);
+    // The file with the most change is the one a reader comes for. A file that imports it by name is kept before any other extra card.
+    const top = drawn[0];
+    const ofTop = top === undefined ? [] : [...uses].filter(([from, targets]) => !drawn.includes(from) && targets.has(top) && touches(top, targets.get(top)!)).map(([from]) => from)
+      .sort((a, b) => Number(!changed.has(a)) - Number(!changed.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
+    const around = context.filter((f) => [...(uses.get(f) ?? [])].some(([to, u]) => drawn.includes(to) && touches(to, u)) || drawn.some((d) => uses.get(d)?.has(f)));
+    for (const f of [...ofTop.slice(0, 1), ...around, ...pool.map((c) => c.path)]) if (drawn.length < max && !drawn.includes(f) && !excluded.has(f)) drawn.push(f);
 
-  // Groups: the elements of the architecture map, or of the workspace. A top-level folder is not an architecture element.
-  const elementOf = (file: string): string | undefined =>
-    changed.get(file)?.element ?? facts.dependents.direct.find((d) => d.file === file)?.element
-    ?? facts.symbols.flatMap((s) => s.dependents).find((d) => d.file === file)?.element ?? facts.imports.find((i) => i.to === file)?.toElement;
-  const named = new Map(facts.elements.filter((e) => e.source !== 'git').map((e) => [e.id, e.name]));
-  const groups = new Map<string, string>();
-  for (const file of drawn) {
-    const id = elementOf(file);
-    if (id !== undefined && named.has(id)) groups.set(file, id);
-  }
-  // One group for every file says nothing a title does not.
-  const grouped = new Set(groups.values()).size > 1;
-  const taken = new Set(drawn);
-  const groupId = (id: string): string => { let g = `element:${id}`; while (taken.has(g)) g += '_'; return g; };
+    // Groups: the elements of the architecture map, or of the workspace. A top-level folder is not an architecture element.
+    const elementOf = (file: string): string | undefined =>
+      changed.get(file)?.element ?? facts.dependents.direct.find((d) => d.file === file)?.element
+      ?? facts.symbols.flatMap((s) => s.dependents).find((d) => d.file === file)?.element ?? facts.imports.find((i) => i.to === file)?.toElement;
+    const named = new Map(facts.elements.filter((e) => e.source !== 'git').map((e) => [e.id, e.name]));
+    const groups = new Map<string, string>();
+    for (const file of drawn) {
+      const id = elementOf(file);
+      if (id !== undefined && named.has(id)) groups.set(file, id);
+    }
+    // One group for every file says nothing a title does not.
+    const grouped = new Set(groups.values()).size > 1;
+    const taken = new Set(drawn);
+    const groupId = (id: string): string => { let g = `element:${id}`; while (taken.has(g)) g += '_'; return g; };
 
-  const elements: SpecElement[] = [];
-  if (grouped) for (const id of new Set(groups.values())) elements.push({ id: groupId(id), type: 'boundary', name: named.get(id)! });
-  const rows = new Map<string, Set<string>>();
-  for (const file of drawn) {
-    const fact = changed.get(file);
-    // New exports first, then the most changed. A private constant of a script or a test says least, so it goes last.
-    const rank = (s: SymbolFact): number => (s.kind === 'reexport' ? 3 : !s.exported && s.kind === 'const' ? 2 : s.exported && s.change === 'added' ? 0 : 1);
-    const list = [...(symbols.get(file) ?? [])].sort((a, b) => rank(a) - rank(b) || amount(b) - amount(a) || a.name.localeCompare(b.name));
-    const shown: SpecSymbol[] = list.slice(0, ROWS).map((s) => ({ name: s.name, kind: s.kind, status: CHANGE[s.change]! }));
-    // A name that another drawn file starts to import from this one gets a row with no mark, so the line has a row to end on.
-    const wanted = new Set<string>();
-    for (const from of drawn) for (const name of uses.get(from)?.get(file)?.added ?? []) if (!list.some((s) => s.name === name)) wanted.add(name);
-    const extra = [...wanted].sort().slice(0, IMPORT_ROWS);
-    shown.push(...extra.map((name) => ({ name })));
-    rows.set(file, new Set(shown.map((s) => s.name)));
-    // A file outside the diff is affected when a symbol it names changed its signature or went away.
-    const broken = !fact && [...(uses.get(file) ?? [])].some(([to, u]) =>
-      (symbols.get(to) ?? []).some((s) => u.kept.has(s.name) && (s.signatureChanged || s.change === 'removed')));
-    const status: Status | undefined = fact ? (fact.status === 'added' ? 'added' : fact.status === 'deleted' ? 'removed' : 'changed') : broken ? 'affected' : undefined;
-    const mine = facts.imports.filter((i) => i.from === file && i.change !== 'unchanged');
-    const notes = [
-      ...(fact?.oldPath && fact.status === 'renamed' ? [`moved from ${fact.oldPath}`] : []),
-      ...(fact?.skipped ? [`not read: ${fact.skipped} · ${delta(fact)}`] : []),
-      ...(fact && !fact.skipped && !list.length ? [mine.length && mine.every((i) => i.testOnly) ? `${delta(fact)} lines, in test code only` : `${delta(fact)} lines`] : []),
-      ...(list.length > ROWS ? [`and ${count(list.length - ROWS, 'more symbol')}`] : []),
-    ];
-    const group = groups.get(file);
-    elements.push({
-      id: file, type: 'file', name: file,
-      ...(status ? { status } : {}),
-      ...(shown.length ? { symbols: shown } : {}),
-      ...(notes.length ? { description: notes.join(' · ') } : {}),
-      ...(grouped && group !== undefined ? { parent: groupId(group) } : {}),
-      meta: { inDiff: Boolean(fact), test: tests.has(file) },
-    });
-  }
+    const elements: SpecElement[] = [];
+    if (grouped) for (const id of new Set(groups.values())) elements.push({ id: groupId(id), type: 'boundary', name: named.get(id)! });
+    const rows = new Map<string, Set<string>>();
+    for (const file of drawn) {
+      const fact = changed.get(file);
+      // New exports first, then the most changed. A private constant of a script or a test says least, so it goes last.
+      const rank = (s: SymbolFact): number => (s.kind === 'reexport' ? 3 : !s.exported && s.kind === 'const' ? 2 : s.exported && s.change === 'added' ? 0 : 1);
+      const list = [...(symbols.get(file) ?? [])].sort((a, b) => rank(a) - rank(b) || amount(b) - amount(a) || a.name.localeCompare(b.name));
+      const shown: SpecSymbol[] = list.slice(0, ROWS).map((s) => ({ name: s.name, kind: s.kind, status: CHANGE[s.change]! }));
+      // A name that another drawn file starts to import from this one gets a row with no mark, so the line has a row to end on.
+      const wanted = new Set<string>();
+      for (const from of drawn) for (const name of uses.get(from)?.get(file)?.added ?? []) if (!list.some((s) => s.name === name)) wanted.add(name);
+      const extra = [...wanted].sort().slice(0, IMPORT_ROWS);
+      shown.push(...extra.map((name) => ({ name })));
+      rows.set(file, new Set(shown.map((s) => s.name)));
+      // A file outside the diff is affected when a symbol it names changed its signature or went away.
+      const broken = !fact && [...(uses.get(file) ?? [])].some(([to, u]) =>
+        (symbols.get(to) ?? []).some((s) => u.kept.has(s.name) && (s.signatureChanged || s.change === 'removed')));
+      const status: Status | undefined = fact ? (fact.status === 'added' ? 'added' : fact.status === 'deleted' ? 'removed' : 'changed') : broken ? 'affected' : undefined;
+      const mine = facts.imports.filter((i) => i.from === file && i.change !== 'unchanged');
+      const notes = [
+        ...(fact?.oldPath && fact.status === 'renamed' ? [`moved from ${fact.oldPath}`] : []),
+        ...(fact?.skipped ? [`not read: ${fact.skipped} · ${delta(fact)}`] : []),
+        ...(fact && !fact.skipped && !list.length ? [mine.length && mine.every((i) => i.testOnly) ? `${delta(fact)} lines, in test code only` : `${delta(fact)} lines`] : []),
+        ...(list.length > ROWS ? [`and ${count(list.length - ROWS, 'more symbol')}`] : []),
+      ];
+      const group = groups.get(file);
+      elements.push({
+        id: file, type: 'file', name: file,
+        ...(status ? { status } : {}),
+        ...(shown.length ? { symbols: shown } : {}),
+        ...(notes.length ? { description: notes.join(' · ') } : {}),
+        ...(grouped && group !== undefined ? { parent: groupId(group) } : {}),
+        meta: { inDiff: Boolean(fact), test: tests.has(file) },
+      });
+    }
 
-  const lines = (perPair: number): SpecRelationship[] => {
-    const relationships: SpecRelationship[] = [];
-    for (const from of drawn) {
-      for (const [to, u] of uses.get(from) ?? []) {
-        if (!drawn.includes(to)) continue;
-        const row = rows.get(to)!;
-        const live = [...new Set([...u.kept, ...u.added])].sort();
-        const onRows = live.filter((n) => row.has(n)).slice(0, perPair);
-        // One line for each name that has a row. A name the change added to the import carries the added mark.
-        for (const toSymbol of onRows) relationships.push({ from, to, label: '', toSymbol, ...(u.added.has(toSymbol) ? { status: 'added' as const } : {}) });
-        const gone = [...u.removed].filter((n) => row.has(n) && !live.includes(n)).sort();
-        for (const toSymbol of gone.slice(0, perPair)) relationships.push({ from, to, label: '', toSymbol, status: 'removed' });
-        // One line to the file for what has no row: the whole module, or names that are not rows.
-        const rest = live.filter((n) => !onRows.includes(n));
-        if (rest.length || u.whole || u.other) {
-          const allNew = u.fresh || (rest.length > 0 && rest.every((n) => u.added.has(n)) && !u.whole && !u.other);
-          relationships.push({ from, to, label: '', ...(allNew ? { status: 'added' as const } : {}) });
-        } else if (!live.length && !relationships.some((r) => r.from === from && r.to === to) && (u.gone || u.removed.size > 0)) {
-          relationships.push({ from, to, label: '', status: 'removed' });
+    const lines = (perPair: number): SpecRelationship[] => {
+      const relationships: SpecRelationship[] = [];
+      for (const from of drawn) {
+        for (const [to, u] of uses.get(from) ?? []) {
+          if (!drawn.includes(to)) continue;
+          const row = rows.get(to)!;
+          const live = [...new Set([...u.kept, ...u.added])].sort();
+          const onRows = live.filter((n) => row.has(n)).slice(0, perPair);
+          // One line for each name that has a row. A name the change added to the import carries the added mark.
+          for (const toSymbol of onRows) relationships.push({ from, to, label: '', toSymbol, ...(u.added.has(toSymbol) ? { status: 'added' as const } : {}) });
+          const gone = [...u.removed].filter((n) => row.has(n) && !live.includes(n)).sort();
+          for (const toSymbol of gone.slice(0, perPair)) relationships.push({ from, to, label: '', toSymbol, status: 'removed' });
+          // One line to the file for what has no row: the whole module, or names that are not rows.
+          const rest = live.filter((n) => !onRows.includes(n));
+          if (rest.length || u.whole || u.other) {
+            const allNew = u.fresh || (rest.length > 0 && rest.every((n) => u.added.has(n)) && !u.whole && !u.other);
+            relationships.push({ from, to, label: '', ...(allNew ? { status: 'added' as const } : {}) });
+          } else if (!live.length && !relationships.some((r) => r.from === from && r.to === to) && (u.gone || u.removed.size > 0)) {
+            relationships.push({ from, to, label: '', status: 'removed' });
+          }
         }
       }
-    }
-    return relationships;
-  };
-  // A line between two cards always means an import, and no line means none. So lines are never cut:
-  // past the budget, the lines between one pair of files are drawn as fewer, down to one.
-  const perPair = LINES_PER_PAIR.find((n) => lines(n).length <= BUDGET.code.lines) ?? 0;
-  const relationships = lines(perPair);
+      return relationships;
+    };
+    // A line between two cards always means an import, and no line means none. So lines are never cut:
+    // past the budget, the lines between one pair of files are drawn as fewer, down to one.
+    const perPair = LINES_PER_PAIR.find((n) => lines(n).length <= BUDGET.code.lines) ?? 0;
+    const relationships = lines(perPair);
 
-  const leftOut = code.filter((f) => !drawn.includes(f.path));
-  const changedLeftOut = leftOut.map((f) => f.path);
-  const dependentsLeftOut = importers.filter((f) => !drawn.includes(f)).sort();
-  // Source the tools do not parse is still source: it is named as such, with its languages.
-  const unparsed = facts.files.filter((f) => f.language === null && f.kind === 'source' && !MARKUP.test(f.path));
-  const kinds = [...new Set(unparsed.map((f) => `.${f.path.slice(f.path.lastIndexOf('.') + 1)}`))].sort();
-  const other = facts.files.filter((f) => !isCode(f) && !unparsed.includes(f)).length;
-  const moved = facts.files.filter((f) => f.status === 'renamed').length;
-  const biggest = leftOut.slice(0, 2).map((f) => `${base(f.path)} (${delta(changed.get(f.path)!)})`);
-  const parts = [
-    `${drawn.filter((f) => changed.has(f)).length} of ${count(code.length, 'changed source file')} drawn`,
-    ...(leftOut.length ? [`Not drawn: ${biggest.join(', ')}${leftOut.length > 2 ? ` and ${leftOut.length - 2} more` : ''}`] : []),
-    ...(dependentsLeftOut.length ? [`${count(dependentsLeftOut.length, 'more importer')} not drawn`] : []),
-    ...(moved ? [`${count(moved, 'file')} moved`] : []),
-    ...(unparsed.length ? [`${count(unparsed.length, 'changed source file')} in a language the tools do not read (${kinds.join(', ')})`] : []),
-    ...(other > 0 ? [`${count(other, 'other changed file')} (pages, config, assets)`] : []),
-    ...(perPair < LINES_PER_PAIR[0]! ? [perPair === 0 ? 'One line stands for all the imports between two files' : `At most ${count(perPair, 'line')} to the rows of a file from any one file; one more to the file stands for the rest`] : []),
-  ];
-  return {
-    spec: {
-      title: opts.title ?? `Changed code: ${short(facts.base)}..${short(facts.head)}`,
-      type: 'code',
-      scope: `${short(facts.base)}..${short(facts.head)}. ${parts.join('. ')}`,
-      elements,
-      relationships,
-    },
-    drawn: drawn.length, changedLeftOut, dependentsLeftOut,
-    notRead: [...facts.files.filter((f) => f.skipped).map((f) => ({ path: f.path, reason: f.skipped! })), ...unparsed.map((f) => ({ path: f.path, reason: 'a language the tools do not read' }))],
+    const leftOut = code.filter((f) => !drawn.includes(f.path));
+    const changedLeftOut = leftOut.map((f) => f.path);
+    const dependentsLeftOut = importers.filter((f) => !drawn.includes(f)).sort();
+    // Source the tools do not parse is still source: it is named as such, with its languages.
+    const unparsed = facts.files.filter((f) => f.language === null && f.kind === 'source' && !MARKUP.test(f.path));
+    const kinds = [...new Set(unparsed.map((f) => `.${f.path.slice(f.path.lastIndexOf('.') + 1)}`))].sort();
+    const other = facts.files.filter((f) => !isCode(f) && !unparsed.includes(f)).length;
+    const moved = facts.files.filter((f) => f.status === 'renamed').length;
+    const biggest = leftOut.slice(0, 2).map((f) => `${base(f.path)} (${delta(changed.get(f.path)!)})`);
+    const parts = [
+      `${drawn.filter((f) => changed.has(f)).length} of ${count(code.length, 'changed source file')} drawn`,
+      ...(leftOut.length ? [`Not drawn: ${biggest.join(', ')}${leftOut.length > 2 ? ` and ${leftOut.length - 2} more` : ''}`] : []),
+      ...(dependentsLeftOut.length ? [`${count(dependentsLeftOut.length, 'more importer')} not drawn`] : []),
+      ...(moved ? [`${count(moved, 'file')} moved`] : []),
+      ...(unparsed.length ? [`${count(unparsed.length, 'changed source file')} in a language the tools do not read (${kinds.join(', ')})`] : []),
+      ...(other > 0 ? [`${count(other, 'other changed file')} (pages, config, assets)`] : []),
+      ...(excluded.size ? [`Left out to keep three layers of files that fit one image: ${[...excluded].slice(0, 3).map(base).join(', ')}${excluded.size > 3 ? ` and ${excluded.size - 3} more` : ''}`] : []),
+      ...(perPair < LINES_PER_PAIR[0]! ? [perPair === 0 ? 'One line stands for all the imports between two files' : `At most ${count(perPair, 'line')} to the rows of a file from any one file; one more to the file stands for the rest`] : []),
+    ];
+    return {
+      spec: {
+        title: opts.title ?? `Changed code: ${short(facts.base)}..${short(facts.head)}`,
+        type: 'code',
+        scope: `${short(facts.base)}..${short(facts.head)}. ${parts.join('. ')}`,
+        elements,
+        relationships,
+      },
+      drawn: drawn.length, changedLeftOut, dependentsLeftOut,
+      notRead: [...facts.files.filter((f) => f.skipped).map((f) => ({ path: f.path, reason: f.skipped! })), ...unparsed.map((f) => ({ path: f.path, reason: 'a language the tools do not read' }))],
+    };
   };
+  const excluded = new Set<string>();
+  let result = compose(excluded);
+  for (let n = 0; n < 16; n++) {
+    const cut = codeCut(result.spec).filter((id) => !excluded.has(id));
+    if (!cut.length) break;
+    for (const id of cut) excluded.add(id);
+    result = compose(excluded);
+  }
+  return result;
 }

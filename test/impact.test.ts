@@ -1024,3 +1024,22 @@ test('budget: both generators stay inside the budget of their diagram type, and 
   assert.equal(small.relationships.length, 8);
   assert.doesNotMatch(small.scope!, /stands for|to the rows/);
 });
+
+test('budget: a code diagram from facts keeps three layers round the file with the most change, and names what it left out', async () => {
+  const { codeShape } = await import('../src/diagram/code-shape.ts');
+  // Five changed files that import one another in a chain, the middle one with the most change.
+  const paths = ['a', 'b', 'c', 'd', 'e'].map((n) => `src/${n}.ts`);
+  const facts = codeFacts({
+    files: paths.map((p, i) => fileFact(p, i === 2 ? 90 : 20 - i)),
+    symbols: paths.map((p) => symbolFact(p, `fn_${p.slice(4, 5)}`)),
+    imports: paths.slice(0, -1).map((from, i) => ({ from, to: paths[i + 1]!, toElement: 'app', toInDiff: true, names: [`fn_${paths[i + 1]!.slice(4, 5)}`], whole: false, change: 'unchanged' as const, provenance: 'resolved' as const })),
+  });
+  const { spec, changedLeftOut } = toCodeSpec(facts);
+  const shape = codeShape(spec);
+  assert.deepEqual([shape.depth, shape.beyond], [3, []]);
+  assert.equal(spec.elements[0]!.id, 'src/c.ts', 'the file with the most change is listed first');
+  assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  assert.deepEqual(changedLeftOut.sort(), ['src/d.ts', 'src/e.ts']);
+  assert.match(spec.scope!, /Left out to keep three layers of files that fit one image: (d\.ts, e\.ts|e\.ts, d\.ts)$/);
+  assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] }, 'the spec passes the lint of the tool that wrote it');
+});

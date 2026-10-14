@@ -851,6 +851,7 @@ test('round 3: the command refuses --mermaid with --png, says a write failure pl
 
 test('code shape: files stand in layers by import depth, a cycle shares a layer, and three layers are kept round the first file', async () => {
   const { codeShape } = await import('../src/diagram/code-shape.ts');
+  const { over, codeCut, trim } = await import('../src/diagram/budget.ts');
   const { judge } = await import('../src/diagram/fit.ts');
   const file = (id: string, status?: 'changed'): DiagramSpec['elements'][number] => ({ id, type: 'file', name: `src/${id}.ts`, ...(status ? { status } : {}) });
   const line = (from: string, to: string): DiagramSpec['relationships'][number] => ({ from, to, label: '' });
@@ -862,10 +863,14 @@ test('code shape: files stand in layers by import depth, a cycle shares a layer,
   // Two files that import each other are one layer.
   const knot = codeShape(spec(['a', 'b', 'c'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('c', 'b')]));
   assert.deepEqual([knot.layer.get('b'), knot.layer.get('c'), knot.depth], [1, 1, 2]);
-  // Five deep: the three layers that hold the first file are drawn.
+  // Five deep: the three layers that hold the first file are drawn, and lint names the files to drop.
   const deep = spec([file('c', 'changed'), file('a'), file('b'), file('d'), file('e')], [line('a', 'b'), line('b', 'c'), line('c', 'd'), line('d', 'e')]);
   const shape = codeShape(deep);
   assert.deepEqual([shape.depth, shape.layers, shape.layer.get('c'), shape.beyond.sort()], [5, 3, 2, ['d', 'e']]);
+  assert.deepEqual(over(deep), ['imports 5 files deep is more than the 3 layers a code diagram holds']);
+  assert.deepEqual(codeCut(deep), ['d', 'e']);
+  assert.match(lintSpec(deep).warnings.join('\n'), /imports 5 files deep is more than the 3 layers a code diagram holds; `graph drop --ids d,e` leaves 3 and 2/);
+  assert.equal(trim(deep)!.command, 'graph drop --ids d,e');
   // Drawn as it is, no line runs backwards or round the drawing: each goes right or stays in its layer.
   const { layout: l, report } = await judge(deep);
   assert.deepEqual([l.direction, report.rungs, report.candidates.find((c) => c.chosen)!.worst], ['RIGHT', 1, undefined]);
