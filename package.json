@@ -1,6 +1,6 @@
 {
   "name": "gh-wat-dis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "gh-wat-dis: agent skills for system-design-rich GitHub issues, PRs and milestones. Installs skills into your harness, wires the GitHub MCP server, renders C4 diagrams to SVG, and grounds PRs in change-impact facts.",
   "type": "module",
   "license": "MIT",
