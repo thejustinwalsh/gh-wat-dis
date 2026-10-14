@@ -85,6 +85,8 @@ export interface SymbolFact {
   lines: number;
   before?: string;
   after?: string;
+  /** Set when the declaration is one the base had under another name, with the same body: that name. */
+  renamedFrom?: string;
   dependents: SymbolDependent[];
   provenance: Provenance;
   source: FactSource;
@@ -106,6 +108,8 @@ export interface ImportFact {
   /** The import sits in test-only code, such as a Rust `mod tests`. */
   testOnly?: boolean;
   change: 'added' | 'removed' | 'unchanged';
+  /** Set when the names reach `to` through a module that re-exports them: that module. */
+  through?: string;
   provenance: 'resolved';
 }
 
@@ -133,6 +137,8 @@ export interface ElementFact {
   parent?: string;
   external?: boolean;
   status: ElementStatus;
+  /** Set on a package the change renamed or moved: its old name, or its old folder when the name stayed. */
+  renamedFrom?: string;
   files: number;
   filesChanged: number;
   dependentsAffected: number;

@@ -326,7 +326,10 @@ test('ts: file level spec has a card per file with changed symbols and per impor
   // An importer outside the diff is a card with no rows. It is affected when a symbol it names changed its signature.
   const server = files.find((e) => e.id === 'packages/api/src/server.ts')!;
   assert.deepEqual([server.symbols, server.status], [undefined, 'affected']);
-  assert.ok(spec.relationships.some((r) => r.from === server.id && r.to === price.id && r.toSymbol === 'formatPrice' && r.label === ''));
+  // One line for each file that imports another. The server imports formatPrice through the package entry, which
+  // re-exports it and is a card too: the line goes to the entry, and the entry's re-export is the line on to price.ts.
+  const line = (from: string, to: string): number => spec.relationships.filter((r) => r.from === from && r.to === to && r.label === '').length;
+  assert.deepEqual([line(server.id, 'packages/shared/src/index.ts'), line('packages/shared/src/index.ts', price.id), line(server.id, price.id)], [1, 1, 0]);
   for (const r of spec.relationships) {
     if (r.toSymbol !== undefined) assert.ok(files.find((e) => e.id === r.to)!.symbols!.some((s) => s.name === r.toSymbol), `${r.to}#${r.toSymbol}`);
   }
@@ -845,14 +848,15 @@ test('code spec: slots go to the most changed files, a file that was not read sa
   // A file that only moved has no card, and the scope line counts the moves.
   assert.equal(card('src/moved/b.ts'), undefined);
   // Source in a language the tools do not read is named as that, not as a page.
-  assert.match(all.spec.scope!, /Not drawn: index\.ts \(\+4\)\. 2 files moved\. 1 changed source file in a language the tools do not read \(\.zig\)\. 1 other changed file \(pages, config, assets\)$/);
+  assert.match(all.spec.scope!, /Not drawn: golden\.ts \(\+300\)\. 2 files moved\. 1 changed source file in a language the tools do not read \(\.zig\)\. 1 other changed file \(pages, config, assets\)$/);
   assert.ok(all.notRead.some((f) => f.path === 'src/zig/run.zig'));
-  // Rows: the most changed symbol first, private or not.
-  // Rows: a new export first, then the most changed.
-  assert.deepEqual(card('src/generation.ts')!.symbols!.map((s) => s.name), ['small', 'generateChunk']);
+  // Rows: the hardest work first, private or not: the most complexity gained, then the most lines changed.
+  assert.deepEqual(card('src/generation.ts')!.symbols!.map((s) => s.name), ['generateChunk', 'small']);
   assert.equal(card('src/zig/run.zig'), undefined);
   // The list of re-exports shows six of its names and says how many more.
-  assert.equal(card('src/index.ts'), undefined, 'eight slots, and the list of re-exports is the ninth file');
+  // A test never takes a card before source does: eight slots, and the test is the ninth file.
+  assert.equal(card('test/golden.ts'), undefined, 'the test is the ninth file');
+  assert.ok(card('src/index.ts'));
   assert.equal(toCodeSpec(facts, { maxFiles: 9 }).spec.elements.find((e) => e.id === 'src/index.ts')!.description, 'and 15 more symbols');
 
   const three = toCodeSpec(facts, { maxFiles: 3 });
@@ -860,7 +864,7 @@ test('code spec: slots go to the most changed files, a file that was not read sa
   // A fixture and a list of re-exports rank below real files with less change.
   assert.ok(three.changedLeftOut.indexOf('src/register.ts') < three.changedLeftOut.indexOf('test/golden.ts'));
   assert.ok(three.changedLeftOut.indexOf('src/constants.ts') < three.changedLeftOut.indexOf('src/index.ts'));
-  assert.match(three.spec.scope!, /3 of 9 changed source files drawn\. Not drawn: register\.ts \(\+182\), golden\.ts \(\+300\) and 4 more/);
+  assert.match(three.spec.scope!, /3 of 9 changed source files drawn\. Not drawn: register\.ts \(\+182\), backend\.rs \(\+22\) and 4 more/);
 
   // No source file at all: there is no code diagram, and the command says so with exit 1.
   const none = toCodeSpec(codeFacts({ files: [fileFact('docs/index.html', 70, { kind: 'docs', language: null })] }));
@@ -923,7 +927,8 @@ test('facts: a changed architecture map, new imports of a changed file, and a fi
   assert.match(facts.caveats.join('\n'), /larger than 500 KB were not parsed/);
   const code = toCodeSpec(facts);
   assert.equal(code.spec.elements.find((e) => e.id === 'src/server/big.ts')!.description, 'not read: larger than 500 KB · +1 −1');
-  assert.ok(code.spec.relationships.some((x) => x.from === 'src/client/view.ts' && x.to === 'src/server/handler.ts' && x.toSymbol === 'limit' && x.status === 'added'));
+  // The view imported the handler before and still does, now with one more name: one grey line, to the file, since it names two.
+  assert.deepEqual(code.spec.relationships.filter((x) => x.from === 'src/client/view.ts' && x.to === 'src/server/handler.ts'), [{ from: 'src/client/view.ts', to: 'src/server/handler.ts', label: '' }]);
 });
 
 test('facts: a moved file keeps its imports, and an import of a deleted file is one the change removed', async () => {
@@ -995,16 +1000,17 @@ test('budget: both generators stay inside the budget of their diagram type, and 
   const edges = [edge('e9', 'e0', 1, 'added'), ...ids.flatMap((id, i) => [1, 2].filter((d) => i + d < 10).map((d) => edge(id, `e${i + d}`, 10 * d + i)))];
   assert.equal(edges.length, 18);
   const spec = toDiagramSpec(codeFacts({ elements: ids.map(element), edges }));
-  assert.deepEqual(over(spec), []);
+  // The generator keeps to the counts. How many stand side by side is for lint to say.
+  assert.deepEqual(over(spec).filter((w) => !w.includes('side by side')), []);
   assert.equal(load(spec).lines, BUDGET.container.lines);
   assert.ok(spec.relationships.some((r) => r.status === 'added'), 'a relationship the change added is never the one cut');
   // The lightest unchanged lines are the ones left out, and the scope line counts them.
   assert.ok(!spec.relationships.some((r) => r.from === 'e0' && r.to === 'e1') && !spec.relationships.some((r) => r.from === 'e1' && r.to === 'e2'));
-  assert.match(spec.scope!, /2 unchanged relationships are not drawn$/);
+  assert.match(spec.scope!, /6 unchanged relationships are not drawn$/);
   assert.equal(toDiagramSpec(codeFacts({ elements: ids.map(element), edges }), { all: true }).relationships.length, 18);
 
-  // File level: four files that each import four changed names from each of the others. A line is never cut,
-  // so the lines between one pair of files are drawn as fewer until the diagram is inside its budget.
+  // File level: four files that each import four changed names from each of the others: one line for each pair is 12,
+  // more than the 8 a code diagram holds. The last file goes, and the scope line names it.
   const files = ['a', 'b', 'c', 'd'].map((n) => `src/${n}.ts`);
   const names = (file: string): string[] => [1, 2, 3, 4].map((k) => `${file.slice(4, 5)}${k}`);
   const facts = codeFacts({
@@ -1014,15 +1020,16 @@ test('budget: both generators stay inside the budget of their diagram type, and 
   });
   const code = toCodeSpec(facts).spec;
   assert.deepEqual(over(code), []);
-  assert.equal(code.relationships.length, 12);
-  // Every pair that imports still has a line: no line between two cards means no import.
-  for (const from of files) for (const to of files) if (from !== to) assert.ok(code.relationships.some((r) => r.from === from && r.to === to), `${from} -> ${to}`);
-  assert.match(code.scope!, /One line stands for all the imports between two files$/);
+  assert.equal(code.relationships.length, 6);
+  // Every pair of drawn files that imports has a line: no line between two cards means no import.
+  const drawnFiles = code.elements.map((e) => e.id);
+  for (const from of drawnFiles) for (const to of drawnFiles) if (from !== to) assert.ok(code.relationships.some((r) => r.from === from && r.to === to), `${from} -> ${to}`);
+  assert.match(code.scope!, /3 of 4 changed source files drawn\. Not drawn: d\.ts \(\+20\)\. Left out to keep three layers of files and 8 lines that fit one image: d\.ts$/);
   assert.equal(code.direction, undefined, 'the generator leaves the direction to the form of the type');
-  // Inside the budget, each named import keeps its own line to its row, and the scope line says nothing of it.
-  const small = toCodeSpec(codeFacts({ files: facts.files.slice(0, 2), symbols: facts.symbols.filter((s) => s.file === files[0] || s.file === files[1]), imports: facts.imports.filter((i) => files.indexOf(i.from) < 2 && files.indexOf(i.to) < 2) })).spec;
-  assert.equal(small.relationships.length, 8);
-  assert.doesNotMatch(small.scope!, /stands for|to the rows/);
+  // Each import that names one name with a row ends on that row.
+  const one = toCodeSpec(codeFacts({ files: facts.files.slice(0, 2), symbols: facts.symbols.filter((s) => s.file === files[0] || s.file === files[1]),
+    imports: [{ from: files[0]!, to: files[1]!, toElement: 'app', toInDiff: true, names: ['b2'], whole: false, change: 'added', provenance: 'resolved' }] })).spec;
+  assert.deepEqual(one.relationships, [{ from: files[0], to: files[1], label: '', toSymbol: 'b2', status: 'added' }]);
 });
 
 test('budget: a code diagram from facts keeps three layers round the file with the most change, and names what it left out', async () => {
@@ -1040,6 +1047,6 @@ test('budget: a code diagram from facts keeps three layers round the file with t
   assert.equal(spec.elements[0]!.id, 'src/c.ts', 'the file with the most change is listed first');
   assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['src/a.ts', 'src/b.ts', 'src/c.ts']);
   assert.deepEqual(changedLeftOut.sort(), ['src/d.ts', 'src/e.ts']);
-  assert.match(spec.scope!, /Left out to keep three layers of files that fit one image: (d\.ts, e\.ts|e\.ts, d\.ts)$/);
+  assert.match(spec.scope!, /Left out to keep three layers of files and 8 lines that fit one image: (d\.ts, e\.ts|e\.ts, d\.ts)$/);
   assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] }, 'the spec passes the lint of the tool that wrote it');
 });

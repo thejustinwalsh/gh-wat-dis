@@ -23,15 +23,9 @@ const IMPORT_ROWS = 2;
 const CONTEXT_SLOTS = 2;
 /** Rows of changed symbols a card lists. With the rows for newly imported names it stays within the 8 a card draws. */
 const ROWS = 6;
-/**
- * One pair of files gets at most this many lines to rows. Past it, one line to the file stands for the rest.
- * When the diagram would hold more lines than its budget, the next smaller number is used, down to the one line to the file.
- */
-const LINES_PER_PAIR = [4, 2, 1, 0];
 const CHANGE: Record<string, Status> = { added: 'added', removed: 'removed', modified: 'changed' };
 const short = (sha: string): string => (/^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 7) : sha.toLowerCase().replace('_', ' '));
 const count = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
-const base = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 const delta = (f: FileFact): string => [f.insertions ? `+${f.insertions}` : '', f.deletions ? `−${f.deletions}` : ''].filter(Boolean).join(' ') || '0 lines';
 const FIXTURE = /(^|\/)(fixtures?|__fixtures__|__mocks__|golden|testdata|snapshots?)(\/|\.)|\.snap$/;
 const CONFIG = /(^|\/)[^/]*\.config\.[cm]?[jt]s$/;
@@ -62,13 +56,13 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     const key = `${c.file}\0${c.name.split(' > ')[0]}`;
     rise.set(key, (rise.get(key) ?? 0) + Math.abs((c.after?.cognitive ?? 0) - (c.before?.cognitive ?? 0)));
   }
-  const amount = (s: SymbolFact): number => s.lines + 3 * (rise.get(`${s.file}\0${s.name}`) ?? 0);
   const tests = new Set([...facts.tests.changed, ...facts.tests.importingChanged]);
 
   // Which changed files get a card: source in a parsed language, by how much of it changed.
   // A list of re-exports, a fixture, a test or a build config holds little of a change, so it ranks low.
   const isCode = (f: FileFact): boolean => f.language !== null && (f.kind === 'source' || f.kind === 'test') && !f.binary;
   const barrel = (path: string): boolean => (symbols.get(path) ?? []).length > 0 && symbols.get(path)!.every((s) => s.kind === 'reexport');
+  const testish = (f: FileFact): boolean => tests.has(f.path) || f.kind === 'test' || E2E.test(f.path) || FIXTURE.test(f.path);
   const weight = (f: FileFact): number => {
     const own = f.insertions + f.deletions + 3 * [...rise].filter(([k]) => k.startsWith(`${f.path}\0`)).reduce((n, [, v]) => n + v, 0);
     return own * (barrel(f.path) ? 0.15 : 1) * (FIXTURE.test(f.path) ? 0.25 : E2E.test(f.path) ? 0.3 : tests.has(f.path) || f.kind === 'test' ? 0.5 : 1) * (CONFIG.test(f.path) ? 0.25 : 1);
@@ -76,46 +70,51 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
   const code = facts.files.filter(isCode)
     // A file that only moved has nothing to show on a card. The scope line counts the moves.
     .filter((f) => symbols.has(f.path) || f.skipped !== undefined || f.insertions + f.deletions > 0)
-    .sort((a, b) => weight(b) - weight(a) || a.path.localeCompare(b.path));
+    // A test, an e2e spec or a fixture never takes a card before source does.
+    .sort((a, b) => Number(testish(a)) - Number(testish(b)) || weight(b) - weight(a) || a.path.localeCompare(b.path));
 
-  // Every proven import, as from -> to -> what is imported. A file in the diff lists all its imports in the
-  // facts. A file outside the diff is known through the changed symbols it names and the changed files it imports.
-  type Use = { kept: Set<string>; added: Set<string>; removed: Set<string>; whole: boolean; fresh: boolean; gone: boolean; other: boolean };
+  // Every proven import, as from -> to -> what is imported. The facts list the imports among the changed files,
+  // the files that import them and the files they import, on both sides of the diff. The dependents are a fallback
+  // for facts written before they did.
+  type Use = { kept: Set<string>; added: Set<string>; removed: Set<string>; keptWhole: boolean; addedWhole: boolean; removedWhole: boolean; other: boolean; direct: boolean; through: Set<string> };
   const uses = new Map<string, Map<string, Use>>();
   const use = (from: string, to: string): Use => {
     const targets = uses.get(from) ?? uses.set(from, new Map()).get(from)!;
-    return targets.get(to) ?? targets.set(to, { kept: new Set(), added: new Set(), removed: new Set(), whole: false, fresh: false, gone: false, other: false }).get(to)!;
+    return targets.get(to) ?? targets.set(to, { kept: new Set(), added: new Set(), removed: new Set(), keptWhole: false, addedWhole: false, removedWhole: false, other: false, direct: false, through: new Set() }).get(to)!;
   };
   const listed = new Set(facts.imports.map((i) => i.from));
   for (const i of facts.imports) {
     if (i.from === i.to) continue;
     const u = use(i.from, i.to);
+    if (i.through) u.through.add(i.through); else u.direct = true;
     for (const name of i.names) (i.change === 'added' ? u.added : i.change === 'removed' ? u.removed : u.kept).add(name);
-    if (i.change === 'added' && (i.whole || !i.names.length)) { u.fresh = true; u.whole = true; }
-    if (i.change === 'unchanged' && (i.whole || !i.names.length)) u.whole = true;
-    if (i.change === 'removed' && (i.whole || !i.names.length)) u.gone = true;
+    const whole = i.whole || !i.names.length;
+    if (whole) { if (i.change === 'added') u.addedWhole = true; else if (i.change === 'removed') u.removedWhole = true; else u.keptWhole = true; }
   }
   for (const s of facts.symbols) {
     for (const d of s.dependents) {
       if (d.file === s.file || listed.has(d.file)) continue;
-      if (d.provenance === 'resolved') use(d.file, s.file).kept.add(s.name); else use(d.file, s.file).whole = true;
+      const u = use(d.file, s.file);
+      u.direct = true;
+      if (d.provenance === 'resolved') u.kept.add(s.name); else u.keptWhole = true;
     }
   }
   for (const d of facts.dependents.direct) {
     if (listed.has(d.file)) continue;
     for (const file of d.imports) {
       const u = use(d.file, file);
+      u.direct = true;
       const mine = d.symbols.filter((name) => symbols.get(file)?.some((s) => s.name === name));
       for (const name of mine) u.kept.add(name);
       // It imports the file and names none of its changed symbols: the whole module, or names that did not change.
-      if (!mine.length) { if (d.provenance === 'heuristic') u.whole = true; else u.other = true; }
+      if (!mine.length) { if (d.provenance === 'heuristic') u.keptWhole = true; else u.other = true; }
     }
   }
   const changedNames = (file: string): Set<string> => new Set((symbols.get(file) ?? []).map((s) => s.name));
   /** True when the import reaches something the change touched: a changed symbol by name, or the whole of a file that has one. */
   const touches = (to: string, u: Use): boolean => {
     const names = changedNames(to);
-    return names.size > 0 && (u.whole || [...u.kept, ...u.added, ...u.removed].some((n) => names.has(n)));
+    return names.size > 0 && (u.keptWhole || u.addedWhole || [...u.kept, ...u.added, ...u.removed].some((n) => names.has(n)));
   };
 
   // The diagram is composed, checked against the shape of a code diagram, and composed again without the files
@@ -161,9 +160,13 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     const rows = new Map<string, Set<string>>();
     for (const file of drawn) {
       const fact = changed.get(file);
-      // New exports first, then the most changed. A private constant of a script or a test says least, so it goes last.
-      const rank = (s: SymbolFact): number => (s.kind === 'reexport' ? 3 : !s.exported && s.kind === 'const' ? 2 : s.exported && s.change === 'added' ? 0 : 1);
-      const list = [...(symbols.get(file) ?? [])].sort((a, b) => rank(a) - rank(b) || amount(b) - amount(a) || a.name.localeCompare(b.name));
+      // The hardest work first: the largest rise in complexity, then the most lines changed, then a new export
+      // before the rest. So the function whose complexity rose most is always a row. A re-export, and a private
+      // constant of a script or a test, say least and go last.
+      const last = (s: SymbolFact): number => (s.kind === 'reexport' ? 2 : !s.exported && s.kind === 'const' ? 1 : 0);
+      const riseOf = (s: SymbolFact): number => rise.get(`${s.file}\0${s.name}`) ?? 0;
+      const list = [...(symbols.get(file) ?? [])].sort((a, b) => last(a) - last(b) || riseOf(b) - riseOf(a) || b.lines - a.lines
+        || Number(!(b.exported && b.change === 'added')) - Number(!(a.exported && a.change === 'added')) || a.name.localeCompare(b.name));
       const shown: SpecSymbol[] = list.slice(0, ROWS).map((s) => ({ name: s.name, kind: s.kind, status: CHANGE[s.change]! }));
       // A name that another drawn file starts to import from this one gets a row with no mark, so the line has a row to end on.
       const wanted = new Set<string>();
@@ -193,34 +196,24 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
       });
     }
 
-    const lines = (perPair: number): SpecRelationship[] => {
-      const relationships: SpecRelationship[] = [];
-      for (const from of drawn) {
-        for (const [to, u] of uses.get(from) ?? []) {
-          if (!drawn.includes(to)) continue;
-          const row = rows.get(to)!;
-          const live = [...new Set([...u.kept, ...u.added])].sort();
-          const onRows = live.filter((n) => row.has(n)).slice(0, perPair);
-          // One line for each name that has a row. A name the change added to the import carries the added mark.
-          for (const toSymbol of onRows) relationships.push({ from, to, label: '', toSymbol, ...(u.added.has(toSymbol) ? { status: 'added' as const } : {}) });
-          const gone = [...u.removed].filter((n) => row.has(n) && !live.includes(n)).sort();
-          for (const toSymbol of gone.slice(0, perPair)) relationships.push({ from, to, label: '', toSymbol, status: 'removed' });
-          // One line to the file for what has no row: the whole module, or names that are not rows.
-          const rest = live.filter((n) => !onRows.includes(n));
-          if (rest.length || u.whole || u.other) {
-            const allNew = u.fresh || (rest.length > 0 && rest.every((n) => u.added.has(n)) && !u.whole && !u.other);
-            relationships.push({ from, to, label: '', ...(allNew ? { status: 'added' as const } : {}) });
-          } else if (!live.length && !relationships.some((r) => r.from === from && r.to === to) && (u.gone || u.removed.size > 0)) {
-            relationships.push({ from, to, label: '', status: 'removed' });
-          }
-        }
+    // One line for each file that imports another, drawn whichever side of the diff each file is on. It ends on a row
+    // when the import names exactly one name that has a row, and on the file otherwise. Green when the import is new,
+    // red when it is gone, grey when it was there before. A name that reaches a file through a module that re-exports
+    // it is drawn to that file only when the module is not a card: when it is, the line goes to the module, and the
+    // module's own re-export is the line on from there.
+    const relationships: SpecRelationship[] = [];
+    for (const from of drawn) {
+      for (const [to, u] of uses.get(from) ?? []) {
+        if (!drawn.includes(to) || to === from) continue;
+        if (!u.direct && [...u.through].every((m) => drawn.includes(m))) continue;
+        const live = [...new Set([...u.kept, ...u.added])];
+        const removed = !live.length && !u.keptWhole && !u.addedWhole && !u.other && (u.removed.size > 0 || u.removedWhole);
+        const added = !removed && !u.kept.size && !u.keptWhole && !u.other && (u.added.size > 0 || u.addedWhole);
+        const names = removed ? [...u.removed] : live;
+        const one = names.length === 1 && !(removed ? u.removedWhole : u.keptWhole || u.addedWhole || u.other) && rows.get(to)!.has(names[0]!) ? names[0] : undefined;
+        relationships.push({ from, to, label: '', ...(one !== undefined ? { toSymbol: one } : {}), ...(removed ? { status: 'removed' as const } : added ? { status: 'added' as const } : {}) });
       }
-      return relationships;
-    };
-    // A line between two cards always means an import, and no line means none. So lines are never cut:
-    // past the budget, the lines between one pair of files are drawn as fewer, down to one.
-    const perPair = LINES_PER_PAIR.find((n) => lines(n).length <= BUDGET.code.lines) ?? 0;
-    const relationships = lines(perPair);
+    }
 
     const leftOut = code.filter((f) => !drawn.includes(f.path));
     const changedLeftOut = leftOut.map((f) => f.path);
@@ -230,7 +223,14 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     const kinds = [...new Set(unparsed.map((f) => `.${f.path.slice(f.path.lastIndexOf('.') + 1)}`))].sort();
     const other = facts.files.filter((f) => !isCode(f) && !unparsed.includes(f)).length;
     const moved = facts.files.filter((f) => f.status === 'renamed').length;
-    const biggest = leftOut.slice(0, 2).map((f) => `${base(f.path)} (${delta(changed.get(f.path)!)})`);
+    // A file is named by the shortest tail of its path that no other file here shares.
+    const known = [...new Set([...drawn, ...code.map((f) => f.path), ...excluded])];
+    const tail = (path: string): string => {
+      const parts = path.split('/');
+      for (let k = 1; k <= parts.length; k++) { const t = parts.slice(-k).join('/'); if (known.filter((o) => o === t || o.endsWith(`/${t}`)).length <= 1) return t; }
+      return path;
+    };
+    const biggest = leftOut.slice(0, 2).map((f) => `${tail(f.path)} (${delta(changed.get(f.path)!)})`);
     const parts = [
       `${drawn.filter((f) => changed.has(f)).length} of ${count(code.length, 'changed source file')} drawn`,
       ...(leftOut.length ? [`Not drawn: ${biggest.join(', ')}${leftOut.length > 2 ? ` and ${leftOut.length - 2} more` : ''}`] : []),
@@ -238,8 +238,7 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
       ...(moved ? [`${count(moved, 'file')} moved`] : []),
       ...(unparsed.length ? [`${count(unparsed.length, 'changed source file')} in a language the tools do not read (${kinds.join(', ')})`] : []),
       ...(other > 0 ? [`${count(other, 'other changed file')} (pages, config, assets)`] : []),
-      ...(excluded.size ? [`Left out to keep three layers of files that fit one image: ${[...excluded].slice(0, 3).map(base).join(', ')}${excluded.size > 3 ? ` and ${excluded.size - 3} more` : ''}`] : []),
-      ...(perPair < LINES_PER_PAIR[0]! ? [perPair === 0 ? 'One line stands for all the imports between two files' : `At most ${count(perPair, 'line')} to the rows of a file from any one file; one more to the file stands for the rest`] : []),
+      ...(excluded.size ? [`Left out to keep three layers of files and ${BUDGET.code.lines} lines that fit one image: ${[...excluded].slice(0, 3).map(tail).join(', ')}${excluded.size > 3 ? ` and ${excluded.size - 3} more` : ''}`] : []),
     ];
     return {
       spec: {

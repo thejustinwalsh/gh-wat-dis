@@ -129,13 +129,22 @@ export function drop(spec: DiagramSpec, opts: DropOptions): DiagramSpec {
     if (rest.length === out.elements.length) break;
     out = clean({ ...out, elements: rest });
   }
-  // The scope line of a code diagram counts the files it draws. After a drop it would count cards that are gone.
-  const cards = (s: DiagramSpec): number => s.elements.filter((e) => e.type === 'file').length;
-  const removed = cards(spec) - cards(out);
-  if (removed > 0 && out.scope) {
-    const said = /\. (\d+) cards? removed by hand$/.exec(out.scope);
-    const total = removed + (said ? Number(said[1]) : 0);
-    out = { ...out, scope: `${said ? out.scope.slice(0, said.index) : out.scope}. ${total} ${total === 1 ? 'card' : 'cards'} removed by hand` };
+  // The scope line counts what is drawn and what is not. After a drop those counts are kept true: a changed file that
+  // was dropped is one fewer drawn, an affected element one more not drawn, and the line says how many were taken out by hand.
+  const ids = new Set(out.elements.map((e) => e.id));
+  const went = spec.elements.filter((e) => !ids.has(e.id) && e.type !== 'boundary' && e.type !== 'node');
+  if (went.length && out.scope) {
+    const isFile = went.some((e) => e.type === 'file');
+    const changedFiles = went.filter((e) => e.type === 'file' && ['added', 'changed', 'removed'].includes(e.status ?? '')).length;
+    const affected = went.filter((e) => e.type !== 'file' && e.status === 'affected').length;
+    let scope = out.scope
+      .replace(/\b(\d+) of (\d+ changed source files? drawn)/, (_, n: string, rest: string) => `${Number(n) - changedFiles} of ${rest}`)
+      .replace(/\b(\d+) more affected (?:elements are|element is) not drawn/, (_, n: string) => { const k = Number(n) + affected; return `${k} more affected ${k === 1 ? 'element is' : 'elements are'} not drawn`; });
+    const word = isFile ? 'card' : 'element';
+    const said = new RegExp(`\\. (\\d+) ${word}s? removed by hand$`).exec(scope);
+    const total = went.length + (said ? Number(said[1]) : 0);
+    scope = `${said ? scope.slice(0, said.index) : scope}. ${total} ${total === 1 ? word : `${word}s`} removed by hand`;
+    out = { ...out, scope };
   }
   return out;
 }

@@ -135,7 +135,22 @@ class Collector {
       const fn = call.field('function');
       if (!fn || !((fn.kind() === 'identifier' && fn.text() === 'require') || fn.kind() === 'import')) continue;
       const spec = unquote(call.field('arguments')?.children().find((c) => c.isNamed()) ?? null);
-      if (spec) this.imports.push({ spec, names: [], whole: true });
+      if (!spec) continue;
+      // `const { a, b: c } = await import('./x')` and `(await import('./x')).a` name what they take, as a static import does.
+      let at = call.parent();
+      while (at && (at.kind() === 'await_expression' || at.kind() === 'parenthesized_expression')) at = at.parent();
+      const names: string[] = [];
+      const pattern = at?.kind() === 'variable_declarator' ? at.field('name') : null;
+      if (pattern?.kind() === 'object_pattern') {
+        for (const c of pattern.children()) {
+          if (c.kind() === 'shorthand_property_identifier_pattern') names.push(c.text());
+          else if (c.kind() === 'pair_pattern') { const key = c.field('key'); if (key) names.push(key.text()); }
+        }
+      } else if (at?.kind() === 'member_expression') {
+        const prop = at.field('property');
+        if (prop) names.push(prop.text());
+      }
+      this.imports.push({ spec, names, whole: names.length === 0 });
     }
   }
 

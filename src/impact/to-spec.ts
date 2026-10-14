@@ -8,7 +8,7 @@ function label(e: EdgeFact): string {
   return e.source === 'manifest' ? 'Declares a dependency on' : 'Imported code from';
 }
 /** How many files import across the relationship, where the map names no technology. */
-const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : undefined);
+const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : e.source === 'manifest' ? 'package manifest' : undefined);
 
 /** Past its budget an element diagram is a hairball: the affected elements are cut to the most reached, and the unchanged lines to the heaviest. */
 const MAX_ELEMENTS = BUDGET.container.boxes;
@@ -66,8 +66,9 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
 
   const elements: SpecElement[] = facts.elements.filter((e) => keep.has(e.id)).map((e) => ({
     id: e.id, type: e.type, name: e.name,
-    ...(e.technology ? { technology: e.technology } : {}),
-    description: e.description ?? `${e.files} ${e.files === 1 ? 'file' : 'files'} · ${e.filesChanged} changed`,
+    // An element found as a folder, with no map and no manifest, has no technology to name. It says it is a folder.
+    ...(e.technology ? { technology: e.technology } : e.source === 'git' ? { technology: 'folder' } : {}),
+    description: [e.renamedFrom ? `renamed from ${e.renamedFrom}` : '', e.description ?? `${e.files} ${e.files === 1 ? 'file' : 'files'} · ${e.filesChanged} changed`].filter(Boolean).join(' · '),
     ...(e.parent && keep.has(e.parent) ? { parent: e.parent } : {}),
     ...(e.external ? { external: true } : {}),
     status: e.status,

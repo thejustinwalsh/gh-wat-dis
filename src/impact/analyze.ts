@@ -9,7 +9,7 @@ import type { DiffEntry } from './git.ts';
 import { complexityFacts } from './complexity.ts';
 import type { Side } from './complexity.ts';
 import { buildGraph, reverseReach } from './graph.ts';
-import { diffManifest, isManifest } from './manifests.ts';
+import { diffManifest, isManifest, packageName } from './manifests.ts';
 import type { Graph, InEdge } from './model.ts';
 import { starTargets } from './model.ts';
 import type { SymbolChange } from './symbols.ts';
@@ -134,6 +134,18 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     readBlobs(root, range.base, needBase),
     history(root, range.head ?? 'HEAD', new Date(now.getTime() - 90 * DAY), now),
   ]);
+  // A package whose manifest moved or whose name changed is the same package renamed: its new name, then its old one.
+  const renamedPkg = new Map<string, { from: string; manifest: string; named: boolean }>();
+  for (const e of entries) {
+    if (!isManifest(e.path) || e.status === 'added' || e.status === 'deleted') continue;
+    const was = packageName(basePath(e), baseBlobs.get(basePath(e))), is = packageName(e.path, tree.read(e.path));
+    if (was && is && (was !== is || basePath(e) !== e.path)) renamedPkg.set(is, { from: was === is ? basePath(e).replace(/\/[^/]*$/, '') : was, manifest: e.path, named: was !== is });
+  }
+  // A file that imported a renamed package by its old name imports the same package: it is read with the new name.
+  const renamedText = (text: string): string => {
+    for (const [is, r] of renamedPkg) if (r.named) text = text.replace(new RegExp(`(['"])${r.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=['"/])`, 'g'), `$1${is}`);
+    return text;
+  };
   const touched = new Set(entries.flatMap((e) => [e.path, ...(e.oldPath ? [e.oldPath] : [])]));
   const hist = coChange(commits, touched, (p) => tree.has(p));
 
@@ -152,10 +164,12 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   for (const e of entries) {
     const head = graph.nodes.get(e.path);
     if (head) headRows.push([e.path, head.edges.filter((x) => !x.traced).map((x) => x.to)]);
-    const baseText = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
+    const baseBlob = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
+    const baseText = baseBlob === undefined ? undefined : renamedText(baseBlob);
     const baseLang = languageOf(basePath(e));
     const base = baseText !== undefined && baseLang ? graph.resolveOther(baseLang === 'rust' ? e.path : basePath(e), baseText, baseLang === 'rust' ? undefined : baseOnly) : null;
-    if (base) baseRows.push([basePath(e), base.targets]);
+    // The base side is counted at the files' head paths, so that a package that moved is the same element on both sides.
+    if (base) baseRows.push([e.path, base.targets.map((t) => movedTo.get(t) ?? t)]);
     else if (e.status !== 'added' && baseLang) baseGraphGaps++;
     if ((e.status === 'added' ? !head : e.status === 'deleted' ? !base : !head || !base)) continue;
     // The imports of this file: gained, lost and kept. Both sides are resolved the same way, without the
@@ -223,6 +237,35 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     }
   }
   const directList = [...direct.values()].sort((a, b) => a.file.localeCompare(b.file));
+
+  // The imports among the files a code diagram may draw: the changed files, the files that import them, and the
+  // files they import. Then every import between two drawn cards is a line, whichever side of the diff each is on.
+  // A file outside the diff reads the same on both sides, so its imports are kept ones. A name that reaches a file
+  // through a module that re-exports it is listed with that module, and a re-export is an import of what it re-exports.
+  const near = new Set<string>([...changed.keys()].filter((p) => graph.nodes.has(p)));
+  for (const d of directList) near.add(d.file);
+  for (const i of imports) if (graph.nodes.has(i.to)) near.add(i.to);
+  const listedPairs = new Set(imports.map((i) => `${i.from}\0${i.to}`));
+  const kept = (from: string, to: string, names: string[], whole: boolean, testOnly: boolean, through?: string): void => {
+    if (listedPairs.has(`${from}\0${to}`) || from === to) return;
+    listedPairs.add(`${from}\0${to}`);
+    imports.push({ from, to, toElement: els.of(to), toInDiff: changed.has(to), names: [...new Set(names)].sort(), whole, ...(testOnly ? { testOnly } : {}), change: 'unchanged', ...(through ? { through } : {}), provenance: 'resolved' });
+  };
+  for (const from of near) {
+    const node = graph.nodes.get(from)!;
+    const bySpec = new Map(node.edges.filter((x) => !x.traced).map((x) => [x.via[0], x.to]));
+    for (const x of node.edges) {
+      if (!near.has(x.to)) continue;
+      // A changed file lists its direct imports with their changes above. Only what it reaches through a re-export is added here.
+      if (changed.has(from) && !x.traced) continue;
+      const through = x.traced ? bySpec.get(x.via[0]) : undefined;
+      kept(from, x.to, x.names, x.whole, x.testOnly, through !== x.to ? through : undefined);
+    }
+    for (const sym of node.syms) {
+      const to = sym.reexport?.to;
+      if (to && near.has(to)) kept(from, to, sym.name === '*' ? [] : [sym.reexport!.name], sym.name === '*', false);
+    }
+  }
   const reach = reverseReach(graph, entries.map((e) => e.path), depth);
   const rollup = new Map<string, TransitiveRollup>();
   const dependentsByElement = new Map<string, number>();
@@ -289,7 +332,10 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   };
   for (const p of graph.packages) {
     for (const dep of p.deps) {
-      const added = dependencies.some((d) => d.manifest === p.manifest && d.name === dep && d.change === 'added');
+      // A dependency on a package that was renamed is the same dependency when the old name went from this manifest.
+      const renamedFrom = renamedPkg.get(dep)?.from;
+      const added = dependencies.some((d) => d.manifest === p.manifest && d.name === dep && d.change === 'added')
+        && !dependencies.some((d) => d.manifest === p.manifest && d.name === renamedFrom && d.change === 'removed');
       declare(els.of(p.manifest), els.of(pkgByName.get(dep)!.manifest), added && !dependencies.some((d) => d.manifest === p.manifest && d.name === dep && d.change === 'removed') ? 'added' : 'unchanged');
     }
   }
@@ -339,6 +385,9 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
       : d.files === 0 ? 'removed' : row.added === d.files ? 'added' : 'changed';
     const { found: _found, globs: _globs, ...rest } = d;
     void _found; void _globs;
+    // A package that was renamed is changed, not added: its files moved in from its old name.
+    const renamed = [...renamedPkg.values()].find((r) => els.of(r.manifest) === d.id);
+    if (renamed) return { ...rest, status: status === 'added' || status === 'unchanged' ? 'changed' : status, renamedFrom: renamed.from, filesChanged: row.changed, dependentsAffected };
     return { ...rest, status, filesChanged: row.changed, dependentsAffected };
   });
 
@@ -384,7 +433,8 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
       const e = changed.get(f.path)!;
       const head = e.status === 'deleted' ? undefined : tree.read(f.path);
       const base = e.status === 'added' ? undefined : baseBlobs.get(basePath(e));
-      return { path: f.path, basePath: basePath(e), ...(base !== undefined ? { base } : {}), ...(head !== undefined ? { head } : {}) };
+      const renamed = new Map(symbols.filter((x) => x.file === f.path && x.renamedFrom).map((x) => [x.name, x.renamedFrom!]));
+      return { path: f.path, basePath: basePath(e), ...(base !== undefined ? { base } : {}), ...(head !== undefined ? { head } : {}), ...(renamed.size ? { renamed } : {}) };
     });
     try { complexity = complexityFacts(opts.cccc, sides); measured = true; } catch (e) {
       graph.unavailable.push({ tool: 'cccc', reason: e instanceof Error ? e.message : String(e) });

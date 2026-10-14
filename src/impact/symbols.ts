@@ -12,6 +12,8 @@ export interface SymbolChange {
   before?: string;
   after?: string;
   container?: string;
+  /** Set when the declaration is one the base had under this name: the same body, renamed. */
+  renamedFrom?: string;
 }
 
 const MAX_SIGNATURE = 400;
@@ -62,6 +64,40 @@ function byName(syms: Sym[]): Map<string, Sym> {
   return out;
 }
 
+/** A word on its own: the name as an identifier, not as part of a longer one. */
+const word = (name: string): RegExp => new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
+
+/**
+ * A declaration that went away and one that came, of one kind, whose bodies match once the old name reads as the
+ * new one, are one declaration renamed: a change of name, not a new function with all its complexity. A body that
+ * changed as well still counts while at least half of its lines are the same: a rename often renames what the body mentions.
+ */
+function renames(changes: SymbolChange[], base: Map<string, Sym>, head: Map<string, Sym>): SymbolChange[] {
+  const gone = changes.filter((c) => c.change === 'removed' && base.has(c.name));
+  const used = new Set<SymbolChange>();
+  const out: SymbolChange[] = [];
+  for (const c of changes) {
+    if (c.change !== 'added' || !head.has(c.name)) { out.push(c); continue; }
+    const y = head.get(c.name)!;
+    const after = code(y.text);
+    let best: { old: SymbolChange; lines: number } | undefined;
+    for (const old of gone) {
+      if (used.has(old) || old.kind !== c.kind) continue;
+      const x = base.get(old.name)!;
+      const before = code(x.text).replace(word(old.name), c.name);
+      const lines = linesChanged(before, after);
+      // Lines that are in both texts, against the longer one. A rename often renames what the body mentions too.
+      const size = Math.max(before.split('\n').length, after.split('\n').length);
+      const same = (before.split('\n').length + after.split('\n').length - lines) / 2;
+      if (same / size >= 0.5 && (!best || lines < best.lines)) best = { old, lines };
+    }
+    if (!best) { out.push(c); continue; }
+    used.add(best.old);
+    out.push({ name: c.name, kind: c.kind, ...(c.container ? { container: c.container } : {}), exported: c.exported, change: 'modified', signatureChanged: false, lines: best.lines, renamedFrom: best.old.name });
+  }
+  return out.filter((c) => !used.has(c));
+}
+
 /** Compare the declarations of one file on base and head. `null` means the file is absent on that side. */
 export function diffSymbols(base: Sym[] | null, head: Sym[] | null): SymbolChange[] {
   const a = byName(base ?? []), b = byName(head ?? []);
@@ -82,5 +118,5 @@ export function diffSymbols(base: Sym[] | null, head: Sym[] | null): SymbolChang
       out.push({ ...common, exported: y.exported, change: 'modified', signatureChanged, lines: linesChanged(before, after), ...(signatureChanged ? { before: clip(x.header), after: clip(y.header) } : {}) });
     }
   }
-  return out;
+  return renames(out, a, b);
 }
