@@ -86,7 +86,7 @@ Read the facts in this order:
 
 **`coChange`: which pairs to keep.** Most pairs are history noise. Keep one only when the missing file describes, tests or configures the changed file it is paired with: the README for a command, the schema for a query, the test for a module. Open that file and check. Then drop the pair, or list it under `Unknowns` with what you found.
 
-**An element that is not in the map.** An element whose `source` is not `config` (a `test` directory, `(root)`) is a directory fallback. Report it as "not in the architecture map". Propose a map entry only when it holds product code.
+**An element that is not in the map.** An element whose `source` is `git` (a `test` directory, `(root)`, any folder when there is no map and no workspace) is a directory fallback. It counts in the rules below like any element: a fallback that is `added` draws a diagram as an added element does. Report it as "not in the architecture map". Propose a map entry only when it holds product code.
 
 **`complexity` is an input, not a grade.** Never print a score in an issue or PR, and never call code complex. Use the numbers to decide what the reader needs: see "When a diagram is needed". When `tiers.unavailable` lists cccc, the numbers are absent: say so only if the user asks, and offer `npx gh-wat-dis doctor --tools install`.
 
@@ -150,7 +150,7 @@ The measure is how hard the change is to follow, not how much it touches. A chan
 | One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a code diagram earns its place, or a dynamic diagram when the difficulty is the order of steps. |
 | Between those | Apply the test below. |
 
-A rise is `after.cognitive` minus `before.cognitive`. A function the change added has no `before`: its rise is its whole `after.cognitive`, so a new function that scores 15 counts as a rise of 15. A function the change removed counts as 0 in these rows. A removed file or a removed command is structure: the second row covers it.
+A rise is `after.cognitive` minus `before.cognitive`. A function the change added has no `before`: its rise is its whole `after.cognitive`, so a new function that scores 15 counts as a rise of 15. A function renamed with the same body is not new: `impact` pairs it with its old name (`renamedFrom` on the symbol), so its rise is what its body gained. A package that moved or was renamed is `changed` with `renamedFrom`, not `added`, and its relationships keep their status. A function the change removed counts as 0 in these rows. A removed file or a removed command is structure: the second row covers it.
 
 The numbers point at where to look. The test decides.
 
