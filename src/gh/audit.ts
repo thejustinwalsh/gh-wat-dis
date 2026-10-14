@@ -46,8 +46,8 @@ export interface AuditReport {
 }
 
 export interface RawAuditIssue extends RawListIssue { issue_dependencies_summary?: { total_blocked_by: number } }
-export interface RawBlocker { number: number; title: string; state: string; updated_at: string }
-export interface OpenPr { number: number; title: string; updatedAt: string; isDraft: boolean; closes: number[] }
+export interface RawBlocker { number: number; title: string; state: string; updated_at: string; created_at?: string }
+export interface OpenPr { number: number; title: string; createdAt?: string; updatedAt: string; isDraft: boolean; closes: number[] }
 export interface MergedPr { number: number; title: string; body: string | null; closes: number[] }
 
 export interface AuditInput {
@@ -61,7 +61,7 @@ export interface AuditInput {
   openPrs: OpenPr[];
   mergedPrs: MergedPr[];
   labels: LiveLabel[];
-  /** One status for each open milestone. */
+  /** One rated status for each open milestone. */
   milestones: MilestoneStatus[];
   /** Open issue number to the issues that block it, open and closed. */
   blockers: Map<number, RawBlocker[]>;
@@ -125,16 +125,22 @@ export function audit(input: AuditInput): AuditReport {
       findings: issueRows(cfg, issues).filter((r) => r.missing.length)
         .map((r) => issue(r.number, r.title, null, null, `Missing: ${r.missing.join(', ')}.`)).sort((a, b) => a.number! - b.number!),
     }),
+    // The current milestone is due now, so every rating but moving and done is a finding for it, not started included.
+    // A later milestone that has not started is in its normal state.
     'milestone-status': () => ({
-      title: 'Stalled or blocked milestone', finds: `The current milestone with no issue closed in ${stalledAfterDays} days, or with open issues that wait on a blocker.`,
-      findings: input.milestones.filter((m) => m.milestone.current && (m.status === 'stalled' || m.status === 'blocked'))
-        .map((m) => (m.status === 'stalled'
-          ? milestone(m, m.daysSinceLastClose, m.daysSinceLastClose === null ? null : 'days', `Stalled. ${m.reason}`)
-          : milestone(m, m.counts.blocked, 'issues', `Blocked. ${m.reason}`))),
+      title: 'Milestone rating', finds: `The current milestone rated stalled (no issue closed in ${stalledAfterDays} days), blocked, growing or not started. Each finding gives the signals that decided the rating.`,
+      findings: input.milestones.filter((m) => m.milestone.current && m.rating !== 'moving' && m.rating !== 'done').map((m) => {
+        const why = `${m.rating[0]!.toUpperCase()}${m.rating.slice(1)}. ${m.reason} Signals: ${m.signals.filter((s) => s.decides).map((s) => s.text).join(' ')}`;
+        const added = m.signals.find((s) => s.name === 'addedLast7Days')?.value ?? null;
+        if (m.rating === 'stalled') return milestone(m, m.daysSinceLastClose, m.daysSinceLastClose === null ? null : 'days', why);
+        if (m.rating === 'blocked') return milestone(m, m.counts.blocked, 'issues', why);
+        if (m.rating === 'growing') return milestone(m, added, 'issues', why);
+        return milestone(m, m.counts.open, 'issues', why);
+      }),
     }),
     'finished-milestone': () => ({
       title: 'Finished milestone left open', finds: 'Open milestones where every issue is closed.',
-      findings: input.milestones.filter((m) => m.status === 'done').map((m) => milestone(m, m.counts.closed, 'issues', m.reason)),
+      findings: input.milestones.filter((m) => m.rating === 'done').map((m) => milestone(m, m.counts.closed, 'issues', m.reason)),
     }),
     'orphan-prs': () => ({
       title: 'Orphan PRs', finds: 'Open pull requests that close no issue.',

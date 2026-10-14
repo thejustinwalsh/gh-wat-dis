@@ -174,7 +174,9 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 ## Status comment (milestone or epic)
 
 ```markdown
-**<Moving | Blocked | Stalled | Done>**: <one sentence, the reason from the tool>
+**<Moving | Growing | Stalled | Blocked | Not started | Done>**: <one sentence, the reason from the tool>
+
+**Signals:** <the text of each signal the tool marks as deciding, then any other signal a reader would act on>
 
 | | Count |
 |---|---|
@@ -196,7 +198,7 @@ Rich content (diagram, risk table, status) lives in the **tracking issue**: an i
 - <question> → @<the issue's assignee, else the repository owner>
 ```
 
-The numbers come from `npx gh-wat-dis milestone`. Counts are issues only: pull requests and the tracking issue are not counted. There is no schedule rating, because milestones have no due dates. Omit `Needs a decision` when there is none.
+The rating, the signals and the numbers come from `npx gh-wat-dis milestone`. Counts are issues only: pull requests and the tracking issue are not counted. The rating never stands alone: the `Signals` line carries the numbers behind it, so a reader can disagree. No signal is a date that a person set, because milestones have no due dates. Omit `Needs a decision` when there is none.
 
 ## Diagrams
 

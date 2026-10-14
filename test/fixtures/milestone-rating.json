@@ -1,0 +1,719 @@
+{
+ "now": "2026-10-13T12:00:00Z",
+ "cases": [
+  {
+   "name": "near release, and more issues joined than closed",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 6
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "closed",
+     "closed_at": "2026-10-01T00:00:00Z",
+     "updated_at": "2026-10-01T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "closed",
+     "closed_at": "2026-10-02T00:00:00Z",
+     "updated_at": "2026-10-02T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 4,
+     "title": "t4",
+     "state": "closed",
+     "closed_at": "2026-10-03T00:00:00Z",
+     "updated_at": "2026-10-03T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 5,
+     "title": "t5",
+     "state": "closed",
+     "closed_at": "2026-10-08T00:00:00Z",
+     "updated_at": "2026-10-08T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 6,
+     "title": "t6",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 7,
+     "title": "t7",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 8,
+     "title": "t8",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-10-12T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": {
+    "2": {
+     "joinedAt": "2026-09-20T00:00:00Z",
+     "reopened": 0
+    },
+    "3": {
+     "joinedAt": "2026-09-20T00:00:00Z",
+     "reopened": 2
+    },
+    "4": {
+     "joinedAt": "2026-09-20T00:00:00Z",
+     "reopened": 0
+    },
+    "5": {
+     "joinedAt": "2026-10-02T00:00:00Z",
+     "reopened": 0
+    },
+    "6": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 1
+    },
+    "7": {
+     "joinedAt": "2026-10-11T00:00:00Z",
+     "reopened": 0
+    },
+    "8": {
+     "joinedAt": null,
+     "reopened": 0
+    }
+   },
+   "want": {
+    "rating": "growing",
+    "decides": [
+     "closedShare",
+     "closedLast7Days",
+     "addedLast7Days"
+    ],
+    "values": {
+     "closedShare": 57,
+     "closedLast7Days": 1,
+     "daysSinceLastClose": 5,
+     "addedAfterStart": 4,
+     "addedLast7Days": 3,
+     "reopened": 2,
+     "conditionsClosed": 2
+    }
+   }
+  },
+  {
+   "name": "the same scope growth early in the milestone",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 6
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "closed",
+     "closed_at": "2026-10-08T00:00:00Z",
+     "updated_at": "2026-10-08T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 4,
+     "title": "t4",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 5,
+     "title": "t5",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 6,
+     "title": "t6",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 7,
+     "title": "t7",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": {
+    "3": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 0
+    },
+    "4": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 0
+    },
+    "5": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 0
+    },
+    "6": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 0
+    },
+    "7": {
+     "joinedAt": "2026-10-10T00:00:00Z",
+     "reopened": 0
+    },
+    "2": {
+     "joinedAt": "2026-09-20T00:00:00Z",
+     "reopened": 0
+    }
+   },
+   "want": {
+    "rating": "moving",
+    "decides": [
+     "daysSinceLastClose"
+    ],
+    "values": {
+     "closedShare": 17,
+     "addedAfterStart": 5,
+     "addedLast7Days": 5,
+     "conditionsClosed": 1
+    }
+   }
+  },
+  {
+   "name": "near release with no timeline read",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 6
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "closed",
+     "closed_at": "2026-10-01T00:00:00Z",
+     "updated_at": "2026-10-01T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "closed",
+     "closed_at": "2026-10-02T00:00:00Z",
+     "updated_at": "2026-10-02T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 4,
+     "title": "t4",
+     "state": "closed",
+     "closed_at": "2026-10-03T00:00:00Z",
+     "updated_at": "2026-10-03T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 5,
+     "title": "t5",
+     "state": "closed",
+     "closed_at": "2026-10-08T00:00:00Z",
+     "updated_at": "2026-10-08T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 6,
+     "title": "t6",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 7,
+     "title": "t7",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 8,
+     "title": "t8",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-10-12T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": null,
+   "want": {
+    "rating": "moving",
+    "decides": [
+     "daysSinceLastClose"
+    ],
+    "values": {
+     "addedAfterStart": null,
+     "addedLast7Days": null,
+     "reopened": null
+    }
+   }
+  },
+  {
+   "name": "a later milestone with nothing closed, blocked from outside",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.2.0",
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 2
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {
+    "2": [
+     {
+      "number": 90,
+      "title": "earlier work",
+      "state": "open",
+      "created_at": "2026-09-01T00:00:00Z"
+     }
+    ]
+   },
+   "openPrs": [],
+   "events": {},
+   "want": {
+    "rating": "not started",
+    "decides": [
+     "closedShare",
+     "inReview"
+    ],
+    "values": {
+     "closedShare": 0,
+     "blockedOutside": 1,
+     "oldestBlockerDays": 42,
+     "addedAfterStart": 0,
+     "daysSinceLastClose": null
+    }
+   }
+  },
+  {
+   "name": "nothing closed, one pull request open",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 2
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [
+    {
+     "number": 40,
+     "closes": [
+      2
+     ],
+     "createdAt": "2026-10-04T00:00:00Z"
+    },
+    {
+     "number": 41,
+     "closes": [
+      2,
+      99
+     ],
+     "createdAt": "2026-10-10T00:00:00Z"
+    },
+    {
+     "number": 42,
+     "closes": [
+      99
+     ],
+     "createdAt": "2026-09-01T00:00:00Z"
+    }
+   ],
+   "events": {},
+   "want": {
+    "rating": "moving",
+    "decides": [
+     "inReview"
+    ],
+    "values": {
+     "inReview": 1,
+     "oldestReviewDays": 9
+    }
+   }
+  },
+  {
+   "name": "no close in 12 days and no pull request",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 2
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "closed",
+     "closed_at": "2026-10-01T00:00:00Z",
+     "updated_at": "2026-10-01T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": {},
+   "want": {
+    "rating": "stalled",
+    "decides": [
+     "daysSinceLastClose",
+     "inReview"
+    ],
+    "values": {
+     "daysSinceLastClose": 12,
+     "closedLast7Days": 0
+    }
+   }
+  },
+  {
+   "name": "every issue closed",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": "Goal.\n\n**Done when**\n- `tool --help` lists the flag (#2)\n- #3 and #4 are closed\n- `https://example.com/` returns 200\n\n**Tracking:** #1"
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [
+    {
+     "number": 1,
+     "title": "t1",
+     "state": "open",
+     "closed_at": null,
+     "updated_at": "2026-09-20T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 2
+     }
+    },
+    {
+     "number": 2,
+     "title": "t2",
+     "state": "closed",
+     "closed_at": "2026-10-01T00:00:00Z",
+     "updated_at": "2026-10-01T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 3,
+     "title": "t3",
+     "state": "closed",
+     "closed_at": "2026-10-02T00:00:00Z",
+     "updated_at": "2026-10-02T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    },
+    {
+     "number": 4,
+     "title": "t4",
+     "state": "closed",
+     "closed_at": "2026-10-02T00:00:00Z",
+     "updated_at": "2026-10-02T00:00:00Z",
+     "created_at": "2026-09-20T00:00:00Z",
+     "sub_issues_summary": {
+      "total": 0
+     }
+    }
+   ],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": {},
+   "want": {
+    "rating": "done",
+    "decides": [
+     "closedShare"
+    ],
+    "values": {
+     "closedShare": 100,
+     "conditionsClosed": 2
+    }
+   }
+  },
+  {
+   "name": "a milestone with no issues",
+   "milestone": {
+    "title": "v0.3.0",
+    "number": 3,
+    "state": "open",
+    "description": null
+   },
+   "openMilestones": [
+    "v0.3.0"
+   ],
+   "items": [],
+   "blockedBy": {},
+   "openPrs": [],
+   "events": {},
+   "want": {
+    "rating": "not started",
+    "decides": [
+     "closedShare",
+     "inReview"
+    ],
+    "values": {
+     "closedShare": 0,
+     "conditionsClosed": null
+    }
+   }
+  }
+ ]
+}

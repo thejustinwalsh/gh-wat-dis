@@ -27,8 +27,8 @@ Run every check unless the user names some. The stale thresholds come from `.age
 | Stale issues | Open, no update in 60 days | `audit` → `stale-issues` |
 | Stale PRs | Open, no update in 14 days | `audit` → `stale-prs` |
 | Missing fields | Open issues with no type, no surface, no priority or no size label, or with more than one type, priority or size. A tracking issue needs a type only: its surface, priority and size are those of its sub-issues. | `audit` → `missing-fields` |
-| Stalled or blocked milestone | The current milestone with no issue closed in 7 days, or with open issues that wait on a blocker. A later milestone has not started, and the tool reports no status for it. | `audit` → `milestone-status` |
-| Finished milestone left open | Every issue closed | `audit` → `finished-milestone` |
+| Milestone rating | The current milestone rated `stalled`, `blocked`, `growing` or `not started`. The finding gives the rating, its reason and the signals that decided it. The current milestone is due now, so `not started` is a finding for it. A later milestone rated `not started` is in its normal state and is not a finding. | `audit` → `milestone-status` |
+| Finished milestone left open | An open milestone rated `done`: every issue closed | `audit` → `finished-milestone` |
 | Orphan PRs | Open PR that closes no issue | `audit` → `orphan-prs` |
 | Done but open | Issue whose linked PR merged. Also an open issue in the current milestone that a merged PR names with `Refs`: read each PR the finding names and say whether it finished the work. | `audit` → `done-but-open`, then read the PRs |
 | Label hygiene | Labels the config wants and GitHub lacks, labels that drifted, and labels outside the plan with the number of open issues on each (status is not a label; type is a label only on a user repository) | `audit` → `labels` |

@@ -1,6 +1,6 @@
 ---
 name: wat-milestone
-description: Create, plan, track and close GitHub milestones. Writes a short milestone description plus a tracking issue with a system diagram, reports status from the milestone tool (counts, what is in review, what is blocked, done-when conditions), and proposes scope cuts. Milestones run in sequence with no due dates. Use when the user asks to create or plan a milestone or release, asks "where are we on <milestone>", wants a status update or burndown, or wants to close or roll over a milestone.
+description: Create, plan, track and close GitHub milestones. Writes a short milestone description plus a tracking issue with a system diagram, reports status from the milestone tool (a rating with the measured signals behind it, counts, what is in review, what is blocked, done-when conditions), and proposes scope cuts. Milestones run in sequence with no due dates. Use when the user asks to create or plan a milestone or release, asks "where are we on <milestone>", wants a status update or burndown, or wants to close or roll over a milestone.
 license: MIT
 ---
 
@@ -51,7 +51,8 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
    | `counts.closedLast7Days`, `daysSinceLastClose` | How recently work closed |
    | `open[]` | Each open issue with `inReview` (pull request numbers) and `blockedBy` (number, title, `inMilestone`) |
    | `closed[]` | Each closed issue with its close time, newest first |
-   | `status`, `reason` | `done`, `blocked`, `stalled` or `moving`, and the one fact behind it |
+   | `rating`, `reason` | `done`, `not started`, `blocked`, `stalled`, `growing` or `moving`, and the one fact behind it. The rules are in "The rating has no dates" below. |
+   | `signals[]` | Every number behind the rating: `name`, `value`, `text` (the number as a sentence) and `decides` (true for the signals the rule used). `value` is null when the tool could not measure it. |
    | `doneWhen` | The conditions from the milestone description |
 
    When `trackingFrom` is `sub-issues`, say so in one line and propose adding `**Tracking:** #<n>` to the milestone description.
@@ -63,19 +64,28 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
    - Never mark a condition met from an indirect fact.
 3. **Find what changed.** Read the comments on the tracking issue (`issue_read` with `get_comments`, or `gh issue view <tracking> --comments`). The last status comment is the baseline. No earlier status: write "First status."
 4. **Name the 1 to 3 issues that decide the outcome**: the ones that block others, or that a done-when condition needs. They go in the format's "Decides the outcome" list.
-5. **Write** the Status comment format from `../wat/references/formats.md`. If `status` is `blocked` or `stalled`, propose what to do: which issue to unblock, or which issues move to the next milestone and what this one still delivers.
+5. **Write** the Status comment format from `../wat/references/formats.md`. The rating never stands alone: the first line gives the word and `reason`, and the `Signals` line gives the `text` of each signal with `decides: true`, plus any other signal a reader would act on (an issue reopened, a blocker that is weeks old, scope added). Copy the numbers. Do not add a judgement the signals do not carry.
+   - `blocked` or `stalled`: propose what to do. Name the issue to unblock, or the issues that move to the next milestone and what this one still delivers.
+   - `growing`: list the issues that joined in the last 7 days (the newest in `open[]`) and propose which of them move to the next milestone.
+   - `not started` on a milestone where `milestone.current` is false: this is the normal state of a later milestone. Report it in one line and propose nothing.
 6. **Show it in chat.** A status the user only asked to see needs no file: write it in the reply. When the user asks to post it, save it to your task folder, check it with `npx gh-wat-dis lint <file> --kind comment`, and post it as a comment on the tracking issue.
 
-### Status has no dates
+### The rating has no dates
 
-Milestones here have no due dates, and a date never sets importance. The current milestone is the lowest open version, and it is always due now. So the status says whether work moves, not whether it is on schedule:
+Milestones here have no due dates, and a date never sets importance. The current milestone is the lowest open version, and it is always due now. So the rating says whether work moves and whether the milestone closes in on its end, not whether it is on schedule. The tool checks the rules in this order, and the first one that holds gives the rating:
 
-| Status | The tool reports it when |
-|---|---|
-| `done` | Every issue is closed |
-| `blocked` | An open issue waits on something outside the milestone, or every open issue waits on another |
-| `stalled` | No issue closed in 7 days and no pull request is open |
-| `moving` | None of the above |
+| Rating | The tool reports it when | Signals that decide |
+|---|---|---|
+| `done` | Every issue is closed | `closedShare` |
+| `not started` | No issue is closed, and no open pull request closes one | `closedShare`, `inReview` |
+| `blocked` | An open issue waits on something outside the milestone, or every open issue waits on another | `blockedOutside`, `blocked` |
+| `stalled` | No issue closed in 7 days and no pull request is open | `daysSinceLastClose`, `inReview` |
+| `growing` | Half the issues or more are closed, and more issues joined in the last 7 days than closed | `closedShare`, `addedLast7Days`, `closedLast7Days` |
+| `moving` | None of the above | `daysSinceLastClose`, or `inReview` when no issue is closed |
+
+Milestones run in sequence, so an early milestone can take in new work and stay `moving`. Past half closed the milestone is near release, and new scope that outruns the closes makes it `growing`. An issue counts as added when it joined the milestone after the milestone's first close.
+
+The other signals print with every rating and change no word: `oldestReviewDays`, `oldestBlockerDays`, `addedAfterStart`, `reopened`, and `conditionsClosed` (done-when conditions that name an issue and have every named issue closed). `conditionsClosed` is an indirect fact: it never marks a condition met.
 
 Never ask the user for a due date, and never propose one.
 
