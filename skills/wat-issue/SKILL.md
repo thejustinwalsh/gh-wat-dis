@@ -10,7 +10,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
 
 ## Steps
 
-1. **Scan for related work before you write the body.** Put a working title and the few facts you have in `.wat-tmp/issue.md`. Do not draft sections yet: a duplicate makes them wasted work. Then:
+1. **Scan for related work before you write the body.** Put a working title and the facts a search can match in `.wat-tmp/issue.md`: the error text, the file paths, and the function, flag or command names. Two or three lines are enough. Do not draft sections yet: a duplicate makes them wasted work. Then:
    ```bash
    npx gh-wat-dis related --title "<title>" --body-file .wat-tmp/issue.md --md
    ```
@@ -25,7 +25,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    - **Labels:** one or more surface labels from `labels.surfaces` for the parts of the product the work touches. Add the `agents` label only when an agent owns the issue, or the issue holds a prompt an agent runs on a schedule: agent orchestration and maintenance. An issue that is about agents, or that an agent happens to work on, does not get it. No other labels at filing time. When a surface depends on a decision the issue leaves open, label only the surfaces the work touches whichever way the decision goes, and name the possible extra surface beside that decision in `Unknowns`.
    - **Priority:** a label, one of `labels.priorities` (`critical`, `major`, `minor`, `nit`). A person decides it. Set it only when the user gives one. Otherwise leave it for triage, which proposes it.
    - **Relations:** a parent when the issue is part of a larger one, blocked by when it must wait. An issue that goes into a milestone becomes a sub-issue of that milestone's tracking issue (`npx gh-wat-dis milestone` prints it as `tracking`).
-   - **Milestone:** propose one only when a rule under "Milestone match" in [../wat-triage/SKILL.md](../wat-triage/SKILL.md) holds, and name the rule. Read that section now if the skill is not loaded. Otherwise leave it empty: backlog is a valid answer.
+   - **Milestone:** when the user has already placed the issue in a milestone or the backlog, use that. Otherwise propose one only when a rule under "Milestone match" in [../wat-triage/SKILL.md](../wat-triage/SKILL.md) holds, and name the rule. Read that section now if the skill is not loaded. Otherwise leave it empty: backlog is a valid answer.
    - **Size:** a label, one of `labels.sizes` (`s`, `m`, `l`, `xl`). Set it only when the user gives one. Otherwise triage proposes it.
 8. **Read it as the assignee.** Can a person who was not in this conversation start the work from the body alone? If a term, a reason or a condition is missing, add it. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/issue.md --kind issue`.
 9. **Show the draft.** Print title, fields and body. Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
