@@ -155,10 +155,27 @@ In an issue as in a pull request, `Refs #n` lines go last, after the Agent conte
 
 ## Milestone
 
-GitHub renders only basic Markdown in milestone descriptions. Use plain text, bold, lists and links. No alerts, no `<details>`, no Mermaid, no images.
+A milestone description is read in two places, and they treat it differently. The milestone page renders it as Markdown. The milestones list prints the source as one run of plain text, with every `**`, `#` and `|` showing as typed. Write for both: a first sentence that reads well alone, then bold labels and short lists.
+
+**Use only these.** Plain sentences, `**bold**`, `-` lists, inline code, links, and full URLs.
+
+**Never use these.** `lint --kind milestone` rejects or warns on each.
+
+| Never | Why |
+|---|---|
+| A heading (`## Scope`) | The list shows `## Scope`. Use a bold label on its own line. |
+| A table | The list shows pipes and dashes. |
+| A task list (`- [ ]`) | The page draws boxes nobody can tick, and they count toward no progress. Progress comes from the issues in the milestone. |
+| An image | `gh` uploads no attachment for a milestone, and the list shows the source. The diagram goes in the tracking issue. |
+| An alert, `<details>`, any HTML | Not seen to render in any milestone, and the list shows the source. |
+| Mermaid, footnotes, math | Not seen to render in any milestone. |
+
+**An issue number is not a link here.** GitHub does not link `#12` in a milestone description: it stays plain text on the page and in the list. Keep `**Tracking:** #<n>` as written, because `npx gh-wat-dis milestone` reads the tracking issue from that line. To give the reader a link they can click, write the full URL (`https://github.com/<owner>/<repo>/issues/12`): GitHub turns that into a reference link. An `@name` does become a link.
+
+**A line break is kept.** A single newline shows as a line break on the page, as in a comment. So the three label lines below stay on three lines.
 
 ```markdown
-<Goal: one sentence. What users or the system can do when this ships. No date.>
+<Goal: one sentence. What users or the system can do when this ships. No date. The milestones list shows this sentence first.>
 
 **Done when**
 - <condition that names its check: a command and its output, a URL and its status, or an issue number>
@@ -168,6 +185,21 @@ GitHub renders only basic Markdown in milestone descriptions. Use plain text, bo
 **Out of scope:** <the thing people will assume is included>
 **Tracking:** #<tracking issue>
 ```
+
+What GitHub does with each element, read from the rendered pages on 2026-10-13 (issue #5 of gh-wat-dis). "Page" is `/milestone/<n>`. "List" is `/milestones`.
+
+| Element | Page | List | Checked on |
+|---|---|---|---|
+| Paragraph, `**bold**`, `-` list, inline code | Renders | Source as plain text | This repository's milestone 1 |
+| Single newline | Line break | Collapsed to a space | This repository's milestone 1 |
+| `#12` | Plain text, no link | Plain text | This repository's milestone 1 |
+| Full issue or PR URL | Reference link `owner/repo#12` | Not checked | Other public milestones |
+| `[text](url)`, a bare URL, `@name` | Link | Not checked | Other public milestones |
+| Heading, numbered list, quote, fenced code | Renders | Not checked | Other public milestones |
+| Task list | Boxes that cannot be ticked | Not checked | Other public milestones |
+| Table, image, alert, `<details>`, HTML, Mermaid, footnote | Not known: no public milestone found that uses one | Not checked | None |
+
+"Not checked" on the list means no page was read for that element there. The list page printed the whole source of this repository's milestone as text, so expect the same for any element.
 
 Rich content (diagram, risk table, status) lives in the **tracking issue**: an issue with the milestone's issues as its sub-issues. See the `wat-milestone` skill.
 

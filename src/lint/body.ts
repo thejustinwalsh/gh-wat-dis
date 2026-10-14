@@ -72,6 +72,7 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
   const OPEN = /^\s*<div\s+align=["']center["']\s*>\s*$/i;
   const CLOSE = /^\s*<\/div>\s*$/i;
   L.forEach((l, i) => {
+    if (kind === 'milestone') return; // no image belongs in a milestone description: see below
     if (l.kind === 'code' || l.kind === 'fence' || !/^\s*!\[[^\]]*\]\([^)]+\)\s*$/.test(l.t)) return;
     const before = L[i - 1];
     const after = L[i + 1];
@@ -93,11 +94,19 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
   }
 
   if (kind === 'milestone') {
+    // What GitHub does with a milestone description was read from its pages: see "Milestone" in
+    // skills/wat/references/formats.md. The milestone page renders Markdown. The milestones list prints
+    // the source as one run of plain text, so every block element shows there as its raw characters.
+    const LIST = 'The milestones list prints the description as plain text';
     for (const l of L) {
-      if (/^>\s*\[!/.test(l.t)) err(l.n, 'milestone descriptions do not render alerts');
-      if (l.kind !== 'code' && /<details|<picture|<img/i.test(l.t)) err(l.n, 'milestone descriptions do not render HTML blocks');
-      if (l.kind !== 'code' && /!\[[^\]]*\]\(/.test(l.t)) err(l.n, 'milestone descriptions do not render images. Put the diagram in the tracking issue.');
-      if (l.kind === 'fence' && l.lang === 'mermaid') err(l.n, 'milestone descriptions do not render Mermaid');
+      if (l.kind === 'fence' && l.lang === 'mermaid') err(l.n, `${LIST}, and no milestone was found that draws Mermaid. Put the diagram in the tracking issue.`);
+      if (l.kind === 'code' || l.kind === 'fence') continue;
+      if (/^>\s*\[!/.test(l.t)) err(l.n, `${LIST}, so an alert shows there as "> [!NOTE]". State the caveat as a sentence, or put the alert in the tracking issue.`);
+      if (/<details|<picture|<img|<div|<table/i.test(l.t)) err(l.n, `${LIST}, so an HTML block shows there as its tags. Put it in the tracking issue.`);
+      if (/!\[[^\]]*\]\(/.test(l.t)) err(l.n, `${LIST}, and gh uploads no attachment for a milestone. Put the diagram in the tracking issue.`);
+      if (l.kind === 'heading') warn(l.n, `${LIST}, so a heading shows there as "${l.t.match(/^#+/)![0]} ...". Use a bold label on its own line: **Done when**.`);
+      if (/^[-*+]\s+\[[ xX]\]\s/.test(l.t)) warn(l.n, 'a task list in a milestone description renders as boxes nobody can tick, and counts toward no progress. Use a plain list: progress comes from the issues in the milestone.');
+      if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(l.t) && l.t.includes('|')) warn(l.n, `${LIST}, so a table shows there as pipes and dashes. Use a list, or put the table in the tracking issue.`);
     }
   } else {
     const alerts = visible.filter((l) => /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.test(l.t));
