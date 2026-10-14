@@ -1006,7 +1006,7 @@ test('budget: both generators stay inside the budget of their diagram type, and 
   assert.ok(spec.relationships.some((r) => r.status === 'added'), 'a relationship the change added is never the one cut');
   // The lightest unchanged lines are the ones left out, and the scope line counts them.
   assert.ok(!spec.relationships.some((r) => r.from === 'e0' && r.to === 'e1') && !spec.relationships.some((r) => r.from === 'e1' && r.to === 'e2'));
-  assert.match(spec.scope!, /6 unchanged relationships are not drawn$/);
+  assert.match(spec.scope!, /4 unchanged relationships are not drawn$/);
   assert.equal(toDiagramSpec(codeFacts({ elements: ids.map(element), edges }), { all: true }).relationships.length, 18);
 
   // File level: four files that each import four changed names from each of the others: one line for each pair is 12,

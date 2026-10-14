@@ -51,7 +51,10 @@ export interface LayoutOptions {
   detail?: Detail;
   direction?: 'DOWN' | 'RIGHT';
   numbered?: boolean;
-  /** Target width / height. When set, ELK may cut a long chain and continue it on the next row or column. */
+  /**
+   * Target width / height. When set, the layers of the first layout are cut into rows (left to right) or columns
+   * (top down) and laid out again as partitions, so a long chain continues on the next row or column.
+   */
   wrap?: number;
 }
 
@@ -390,7 +393,6 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     'elk.layered.spacing.edgeEdgeBetweenLayers': gap(12),
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.mergeEdges': 'false',
-    ...(opts.wrap ? { 'elk.aspectRatio': String(opts.wrap), 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.layered.wrapping.additionalEdgeSpacing': '14' } : {}),
   };
   // Parts with no line between them are packed as rectangles. A layered layout is for parts that are joined.
   const packed = {
@@ -550,12 +552,159 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
         : { id: `\u0000part\u0000${k}`, layoutOptions: joined, children: ids.map((id) => built.get(id)), edges: inside(ids) })),
     };
   };
+  /**
+   * Wrapping on partitions, the mechanism the layers of a code diagram use. The first layout gives the layers of each
+   * part along the direction. They are cut into rows (columns top down) that come closest to the shape asked for, and a
+   * file's partition is its place in its row. The rows stand one under the other in each partition, in order, and the
+   * line from the end of one row to the start of the next is an ordinary line between partitions, turned to run with them.
+   */
+  const wrapInto = async (first: any, aspect: number): Promise<any> => {
+    const along = (r: { x: number; y: number; width: number; height: number }): [number, number] => (down ? [r.y, r.height] : [r.x, r.width]);
+    const across = (r: { x: number; y: number; width: number; height: number }): [number, number] => (down ? [r.x, r.width] : [r.y, r.height]);
+    const leaves = new Map<string, any>();
+    const walk = (node: any): void => { for (const c of node.children ?? []) { const b = boxes.get(String(c.id)); if (b && !b.group) leaves.set(String(c.id), c); walk(c); } };
+    walk(first);
+    const column = new Map<string, number>(), row = new Map<string, number>();
+    let cut = false;
+    for (const ids of parts.values()) {
+      const mine = [...leaves.keys()].filter((id) => ids.includes(topOf(id)));
+      if (mine.length < 2) continue;
+      // Layers: leaves whose spans along the direction overlap stand in one layer.
+      const sorted = mine.sort((a, b) => along(leaves.get(a))[0] - along(leaves.get(b))[0]);
+      const layers: { ids: string[]; from: number; to: number; lo: number; hi: number }[] = [];
+      for (const id of sorted) {
+        const [at, size] = along(leaves.get(id)), [x, w] = across(leaves.get(id));
+        const last = layers.at(-1);
+        if (last && at < last.to - 1) { last.ids.push(id); last.to = Math.max(last.to, at + size); last.lo = Math.min(last.lo, x); last.hi = Math.max(last.hi, x + w); }
+        else layers.push({ ids: [id], from: at, to: at + size, lo: x, hi: x + w });
+      }
+      if (layers.length < 2) continue;
+      // Rows: the layers cut into runs of at least two layers each. The cut that comes closest to the shape asked for
+      // wins, and a cut that many lines cross costs more: each of them runs back to the start of the next row.
+      const gapAlong = Math.max(0, ...layers.slice(1).map((l, j) => l.from - layers[j]!.to));
+      const layerOf = new Map<string, number>();
+      layers.forEach((l, j) => { for (const id of l.ids) layerOf.set(id, j); });
+      const at = (id: string): number | undefined => {
+        if (layerOf.has(id)) return layerOf.get(id);
+        const inside = (kids.get(id) ?? []).map((c) => at(c.id)).filter((v): v is number => v !== undefined);
+        return inside.length ? Math.min(...inside) : undefined;
+      };
+      const spans = lines.map(({ rel }) => [at(rel.from), at(rel.to)]).filter((p): p is [number, number] => p[0] !== undefined && p[1] !== undefined && p[0] !== p[1]);
+      const cutBy = (b: number): number => spans.filter(([x, y]) => Math.min(x, y) <= b && b < Math.max(x, y)).length;
+      const shapeOf = (rs: number[][]): number => {
+        const length = Math.max(...rs.map((r) => layers[r.at(-1)!]!.to - layers[r[0]!]!.from));
+        const depth = rs.reduce((n, r) => n + Math.max(...r.map((j) => layers[j]!.hi)) - Math.min(...r.map((j) => layers[j]!.lo)), 0) + (rs.length - 1) * (gapAlong + 40);
+        return down ? depth / length : length / depth;
+      };
+      // A row wider than the page costs most: GitHub scales the whole image down to fit it.
+      const wide = (rs: number[][]): number => {
+        const length = Math.max(...rs.map((r) => layers[r.at(-1)!]!.to - layers[r[0]!]!.from));
+        const depth = rs.reduce((n, r) => n + Math.max(...r.map((j) => layers[j]!.hi)) - Math.min(...r.map((j) => layers[j]!.lo)), 0) + (rs.length - 1) * (gapAlong + 40);
+        return Math.max(0, (down ? depth : length) - PAGE) / 100;
+      };
+      const cost = (rs: number[][]): number => wide(rs) + Math.abs(Math.log(shapeOf(rs) / aspect)) + 0.1 * rs.slice(0, -1).reduce((n, r) => n + cutBy(r.at(-1)!), 0);
+      // No cut is one of the choices: a part already closer to the shape stays as it is.
+      let best: number[][] = [layers.map((_, j) => j)];
+      let bestCost = wide(best) + Math.abs(Math.log(shapeOf(best) / aspect));
+      const split = (from: number, left: number, acc: number[][]): void => {
+        if (left === 1) {
+          if (layers.length - from < 2) return;
+          const rs = [...acc, layers.slice(from).map((_, j) => from + j)];
+          const c = cost(rs);
+          if (c < bestCost) { best = rs; bestCost = c; }
+          return;
+        }
+        for (let end = from + 2; end <= layers.length - 2 * (left - 1); end++) split(end, left - 1, [...acc, layers.slice(from, end).map((_, j) => from + j)]);
+      };
+      for (let k = 2; k <= Math.min(4, Math.floor(layers.length / 2)); k++) split(0, k, []);
+      if (best.length < 2) continue;
+      cut = true;
+      best.forEach((r, k) => r.forEach((j, c) => { for (const id of layers[j]!.ids) { column.set(id, c); row.set(id, k); } }));
+    }
+    if (!cut) return undefined;
+    // A group stands at the first partition and row of what it holds, and so does its title.
+    const firstOf = (id: string, of: Map<string, number>): number | undefined => {
+      if (of.has(id)) return of.get(id);
+      const inside = (kids.get(id) ?? []).map((c) => firstOf(c.id, of)).filter((v): v is number => v !== undefined);
+      return inside.length ? Math.min(...inside) : undefined;
+    };
+    const mark = (node: any): void => {
+      const id = String(node.id);
+      const real = id.startsWith('\u0000title\u0000') ? id.slice(7) : id;
+      if (node.layoutOptions?.['elk.algorithm'] === 'layered') Object.assign(node.layoutOptions, { 'elk.partitioning.activate': 'true', 'elk.layered.crossingMinimization.semiInteractive': 'true' });
+      if (boxes.has(real) && (!boxes.get(real)!.group || id !== real)) {
+        const c = firstOf(real, column);
+        // The rows keep their order, and each keeps the order of the first layout: a node's position across is its row first.
+        const r = firstOf(real, row), at = leaves.get(real);
+        const cross = (r ?? 0) * 100000 + (at ? across(at)[0] : 0);
+        const step = 2000 * (c ?? 0);
+        const position = down ? `(${cross},${step})` : `(${step},${cross})`;
+        if (c !== undefined) node.layoutOptions = { ...(node.layoutOptions ?? {}), 'elk.partitioning.partition': String(2 * c), 'elk.position': position };
+      }
+      // Model order puts the rows in order in each partition.
+      if (node.children) node.children.sort((a: any, b: any) => (firstOf(String(a.id).replace(/^\u0000title\u0000/, ''), row) ?? 0) - (firstOf(String(b.id).replace(/^\u0000title\u0000/, ''), row) ?? 0));
+      for (const c of node.children ?? []) mark(c);
+    };
+    for (const node of built.values()) mark(node);
+    built = new Map([...built].sort(([a], [b]) => (firstOf(a, row) ?? 0) - (firstOf(b, row) ?? 0)));
+    // A line that runs against the partitions is turned round for the engine, and turned back when it is read.
+    // A line between two rows in one partition is a line inside a layer: both ends run to a turn point in the gap
+    // after it, as in a code diagram, and its words are that point. The point stands in the group that holds both ends.
+    const holder = (a: string, z: string): any => {
+      const za = chain(z);
+      const common = chain(a).slice(1).find((id) => za.slice(1).includes(id));
+      if (common === undefined) return undefined;
+      const find = (node: any): any => (String(node.id) === common ? node : (node.children ?? []).map(find).find(Boolean));
+      return [...built.values()].map(find).find(Boolean);
+    };
+    const extra: any[] = [];
+    for (const item of [...edges]) {
+      const edge = item.edge;
+      if (!String(edge.id).startsWith('e')) continue;
+      const i = Number(String(edge.id).slice(1));
+      const a = firstOf(String(edge.sources[0]), column), z = firstOf(String(edge.targets[0]), column);
+      if (a === undefined || z === undefined) continue;
+      if (a > z) { [edge.sources, edge.targets] = [edge.targets, edge.sources]; back.has(i) ? back.delete(i) : back.add(i); }
+      else if (a === z) {
+        const label = labels.get(i)!;
+        const turn = { id: turnId(i), width: label.lines.length ? label.w : 0.1, height: label.lines.length ? label.h : 0.1, layoutOptions: { 'elk.partitioning.partition': String(2 * a + 1), 'elk.position': down ? `(${(firstOf(String(edge.sources[0]), row) ?? 0) * 100000},${2000 * a + 1000})` : `(${2000 * a + 1000},${(firstOf(String(edge.sources[0]), row) ?? 0) * 100000})` } };
+        const into = holder(String(edge.sources[0]), String(edge.targets[0]));
+        if (into) into.children.push(turn); else extra.push({ turn, part: find(item.part) });
+        // Both halves run from an end of the line to the point, whichever way the engine had the line before.
+        const [start, end] = back.has(i) ? [edge.targets[0], edge.sources[0]] : [edge.sources[0], edge.targets[0]];
+        back.delete(i);
+        edge.sources = [start];
+        edge.targets = [turnId(i)];
+        delete edge.labels;
+        edges.push({ part: item.part, edge: { id: `h${i}`, sources: [end], targets: [turnId(i)] } });
+      }
+    }
+    const graphOf = (modelOrder: boolean): any => {
+      const g: any = graph(modelOrder);
+      // A turn point outside every group stands at the top, or in the part that holds its line.
+      const keys = [...parts.keys()];
+      for (const { turn, part } of extra) {
+        const box = g.layoutOptions['elk.algorithm'] === 'rectpacking' ? g.children.find((c: any) => c.id === `\u0000part\u0000${keys.indexOf(part)}`) : g;
+        (box ?? g).children.push(structuredClone(turn));
+      }
+      const rows = { 'elk.partitioning.activate': 'true', 'elk.layered.crossingMinimization.semiInteractive': 'true', 'elk.layered.layering.strategy': 'INTERACTIVE' };
+      g.layoutOptions = { ...g.layoutOptions, ...rows };
+      for (const c of g.children ?? []) if (String(c.id).startsWith('\u0000part\u0000')) c.layoutOptions = { ...c.layoutOptions, ...rows };
+      return g;
+    };
+    return elk.layout(structuredClone(graphOf(true))).catch(() => elk.layout(structuredClone(graphOf(false))));
+  };
   const elk = new (ELK as any)();
   // ELK writes its results into the graph it is given, so each run gets a copy: a second run must not overwrite the first.
   const run = (modelOrder: boolean): Promise<any> => elk.layout(structuredClone(graph(modelOrder))).catch(() => elk.layout(structuredClone(graph(false))));
   // Model order keeps the layout close to the order the spec lists things in.
   // ELK rejects it on some nested graphs, so the second attempt runs without it.
   let done = await run(true);
+  let cutRows = false;
+  if (opts.wrap && !shape) {
+    const again = await wrapInto(done, opts.wrap);
+    if (again) { done = again; cutRows = true; }
+  }
   // Lines that arrive at one row each have a port, and their order on the side of the card is fixed before the
   // engine runs. So the first layout tells where each line comes from, and the ports are put in that order, top to
   // bottom, for a second layout: lines that reach one row from above arrive above, and do not cross on the way in.
@@ -651,10 +800,6 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   }
   paths.sort((a, b) => spec.relationships.indexOf(a.rel) - spec.relationships.indexOf(b.rel));
   // A wrap that cut nothing gives the same drawing as no wrap.
-  const wrapped = Boolean(opts.wrap) && paths.some((p) => {
-    const a = boxes.get(p.rel.from)!, z = boxes.get(p.rel.to)!;
-    if (a === z || back.has(spec.relationships.indexOf(p.rel))) return false;
-    return down ? z.x >= a.x + a.w && z.y < a.y : z.y >= a.y + a.h && z.x < a.x;
-  });
+  const wrapped = cutRows;
   return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, ...(shape ? { layered: true } : {}) };
 }

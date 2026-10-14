@@ -12,17 +12,17 @@ import { active } from './vocab.ts';
  */
 export const BUDGET: Record<DiagramType, { boxes: number; lines: number }> = {
   context: { boxes: 8, lines: 10 },
-  container: { boxes: 12, lines: 12 },
-  component: { boxes: 12, lines: 12 },
+  container: { boxes: 12, lines: 14 },
+  component: { boxes: 12, lines: 14 },
   code: { boxes: 8, lines: 8 },
   dynamic: { boxes: 8, lines: 8 },
-  deployment: { boxes: 12, lines: 12 },
-  landscape: { boxes: 12, lines: 12 },
+  deployment: { boxes: 12, lines: 14 },
+  landscape: { boxes: 12, lines: 14 },
 };
 /**
  * Boxes in a chain, and boxes side by side at one step of it. A chain longer than this is taller than a page top down
- * and wider than it left to right, and more boxes side by side are wider than the page. Wrapping a chain is a rung of
- * the ladder, but it cannot be counted on: the layout engine leaves some wrapped lines unfinished.
+ * and wider than it left to right, and more boxes side by side are wider than the page. Wrapping a chain onto rows is
+ * a rung of the ladder that every spec at the budget can stand on: the tests generate specs at these limits.
  */
 export const DEPTH_BUDGET = 8;
 export const BREADTH_BUDGET = 4;

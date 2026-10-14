@@ -82,8 +82,8 @@ test('lint: size limits', () => {
     s.elements[0].status = 'changed';
   });
   assert.match(marked.warnings, /14 elements is more than the 12 a container diagram holds; `graph focus --on status:changed,added,removed --hops 1` leaves 2 and 1/);
-  const lines = lint((s) => { for (let i = 0; i < 12; i++) s.relationships.push({ from: 'web', to: 'api', label: `Sends ${i}`, technology: 'HTTPS' }); });
-  assert.match(lines.warnings, /13 relationships is more than the 12 a container diagram holds/);
+  const lines = lint((s) => { for (let i = 0; i < 14; i++) s.relationships.push({ from: 'web', to: 'api', label: `Sends ${i}`, technology: 'HTTPS' }); });
+  assert.match(lines.warnings, /15 relationships is more than the 14 a container diagram holds/);
   assert.match(lint((s) => { s.relationships[0].label = 'x'.repeat(81); }).warnings, /label is 81 characters; keep it under 80/);
   assert.match(lint((s) => { s.elements.push({ id: 'g', type: 'boundary', name: 'g'.repeat(41) }); s.elements[0].parent = 'g'; }).warnings, /group "g" name is 41 characters; keep it under 40/);
   assert.equal(many(40).errors, '');
@@ -442,7 +442,7 @@ test('judge: a direction, a label mode and a level of detail that are named are 
   const { render } = await import('../src/diagram/svg.ts');
   const { advise } = await import('../src/diagram/advise.ts');
   // A spec that names left to right where that is far too wide is drawn left to right, and the report says no rung fits.
-  const named: DiagramSpec = { ...fixture('diagram-three-groups'), direction: 'RIGHT' };
+  const named: DiagramSpec = { ...pressure('wide-right'), direction: 'RIGHT' };
   const pinned = await render(named);
   assert.equal(pinned.direction, 'RIGHT');
   assert.ok(pinned.report.candidates.every((k) => k.direction === 'RIGHT'));
@@ -644,11 +644,11 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   assert.equal(kept.length, 1);
   assert.deepEqual([kept[0]!.rung, kept[0]!.fails], [1, []]);
   // A spec that no rung fits is still drawn, and the layout line says so before the warnings.
-  const wide = run(fileURLToPath(new URL('./fixtures/diagram-three-groups.json', import.meta.url)), '-o', join(dir, 'c.svg'), '--direction', 'right');
+  const wide = run(fileURLToPath(new URL('./fixtures/pressure/wide-right.json', import.meta.url)), '-o', join(dir, 'c.svg'), '--direction', 'right');
   assert.equal(wide.status, 0, wide.stderr);
   assert.match(wide.stderr, /^layout: no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/m);
   assert.match(wide.stderr, /^warning: \d+px is wider than GitHub's 860px body/m);
-  assert.match(wide.stderr, /^fix: no --direction right gives \d+ x \d+px with \d warnings?, where there (was 1|were \d)\.$/m);
+  assert.match(wide.stderr, /^fix: no --direction right gives \d+ x \d+px with (no warning|\d warnings?, where there (was 1|were \d))\.$/m);
   assert.equal(run(spec, '--report', '-o', '-').status, 2);
 });
 
@@ -705,11 +705,11 @@ test('judge: height is warned about, and a fix is printed only after the tool tr
   const { advise } = await import('../src/diagram/advise.ts');
   const tall = (await judge(pressure('11-code8x6'))).report;
   assert.match(tall.warnings.join('\n'), /the image is \d+px tall/);
-  // Forcing a flow left to right makes it too wide. Dropping the option is the fix, and it was judged.
+  // Forcing a chain across two groups left to right makes it too wide. Dropping the option is the fix, and it was judged.
   const forced = { direction: 'RIGHT' as const };
-  const wide = (await judge(pressure('06-dynamic8'), forced)).report;
+  const wide = (await judge(pressure('wide-right'), forced)).report;
   assert.match(wide.warnings[0]!, /is wider than GitHub's 860px body/);
-  const advice = await advise(pressure('06-dynamic8'), forced, wide);
+  const advice = await advise(pressure('wide-right'), forced, wide);
   assert.deepEqual(advice.fixes.map((f) => [f.command, f.warnings]), [['no --direction right', []]]);
   // Nothing mends a spec of eight files that all import one another: no fix is offered.
   const none = await advise(pressure('11-code8x6'), {}, tall);
@@ -781,9 +781,9 @@ test('round 3: sizes are the whole image everywhere, and a fix never cuts the ch
   assert.ok(mid.height > 900 && mid.report.warnings.some((w) => w.includes('px tall')), `${mid.height}`);
   // The size in a fix line is the size you get when you apply it.
   const forced = { direction: 'RIGHT' as const };
-  const wide = await render(pressure('06-dynamic8'), forced);
-  const fix = (await advise(pressure('06-dynamic8'), forced, wide.report)).fixes[0]!;
-  const applied = await render(pressure('06-dynamic8'));
+  const wide = await render(pressure('wide-right'), forced);
+  const fix = (await advise(pressure('wide-right'), forced, wide.report)).fixes[0]!;
+  const applied = await render(pressure('wide-right'));
   assert.deepEqual([fix.command, fix.width, fix.height], ['no --direction right', applied.width, applied.height]);
   // The deployment spec: dropping what is unchanged would take two of the three added lines with it. That fix is not offered.
   const spec = pressure('n15-deployment');
