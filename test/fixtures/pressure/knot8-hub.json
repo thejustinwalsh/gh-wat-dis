@@ -1,0 +1,195 @@
+{
+  "title": "Eight files round one hub",
+  "type": "code",
+  "scope": "gh-wat-dis",
+  "elements": [
+    {
+      "id": "f0",
+      "type": "file",
+      "name": "src/graph/ops.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "drop",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "focus",
+          "kind": "type"
+        },
+        {
+          "name": "collapse",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f1",
+      "type": "file",
+      "name": "src/graph/select.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "select",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "parseQuery",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f2",
+      "type": "file",
+      "name": "src/graph/split.ts",
+      "symbols": [
+        {
+          "name": "split",
+          "kind": "fn"
+        },
+        {
+          "name": "splitGroups",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f3",
+      "type": "file",
+      "name": "src/spec.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "DiagramSpec",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "SpecElement",
+          "kind": "type"
+        },
+        {
+          "name": "validate",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f4",
+      "type": "file",
+      "name": "src/diagram/lint.ts",
+      "status": "added",
+      "symbols": [
+        {
+          "name": "lintSpec",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "LintResult",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f5",
+      "type": "file",
+      "name": "src/diagram/budget.ts",
+      "symbols": [
+        {
+          "name": "over",
+          "kind": "fn"
+        },
+        {
+          "name": "trim",
+          "kind": "type"
+        },
+        {
+          "name": "BUDGET",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f6",
+      "type": "file",
+      "name": "src/diagram/layout.ts",
+      "status": "changed",
+      "symbols": [
+        {
+          "name": "layout",
+          "kind": "fn",
+          "status": "changed"
+        },
+        {
+          "name": "Layout",
+          "kind": "type"
+        },
+        {
+          "name": "NODE_W",
+          "kind": "type"
+        }
+      ]
+    },
+    {
+      "id": "f7",
+      "type": "file",
+      "name": "src/diagram/fit.ts",
+      "symbols": [
+        {
+          "name": "judge",
+          "kind": "fn"
+        },
+        {
+          "name": "fit",
+          "kind": "type"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "f0",
+      "to": "f1",
+      "toSymbol": "select"
+    },
+    {
+      "from": "f0",
+      "to": "f2",
+      "toSymbol": "splitGroups"
+    },
+    {
+      "from": "f0",
+      "to": "f3",
+      "toSymbol": "validate"
+    },
+    {
+      "from": "f1",
+      "to": "f4",
+      "toSymbol": "LintResult"
+    },
+    {
+      "from": "f2",
+      "to": "f5",
+      "toSymbol": "trim"
+    },
+    {
+      "from": "f3",
+      "to": "f6",
+      "toSymbol": "NODE_W"
+    },
+    {
+      "from": "f4",
+      "to": "f0",
+      "toSymbol": "drop"
+    },
+    {
+      "from": "f4",
+      "to": "f7",
+      "toSymbol": "fit"
+    }
+  ]
+}
