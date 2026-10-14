@@ -56,6 +56,8 @@ export interface LayoutOptions {
    * (top down) and laid out again as partitions, so a long chain continues on the next row or column.
    */
   wrap?: number;
+  /** A code diagram only: true keeps the files of each knot in one layer, instead of spreading them over the layers there are to spare. */
+  whole?: boolean;
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -356,11 +358,12 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   // Shape. A flow reads in step order. Every other diagram reads in the order the spec lists its relationships.
   const lines = spec.relationships.map((rel, i) => ({ rel, i })).filter(({ rel }) => placed.has(rel.from) && placed.has(rel.to));
   if (spec.type === 'dynamic') lines.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
-  // A code diagram left to right has its layers worked out here: no line runs backwards, and a line between two
-  // files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
-  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec) : undefined;
+  // A code diagram left to right has its layers worked out here: only a line along a knot runs backwards, and a line
+  // between two files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
+  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec, undefined, undefined, !opts.whole) : undefined;
   const within = (rel: SpecRelationship): boolean => shape !== undefined && rel.from !== rel.to && shape.layer.get(rel.from) === shape.layer.get(rel.to);
-  const back = shape ? new Set<number>() : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
+  // In a code diagram a line runs back only along a knot spread over layers: from a run of it to an earlier one.
+  const back = shape ? new Set(lines.filter(({ rel }) => shape.layer.get(rel.from)! > shape.layer.get(rel.to)!).map(({ i }) => i)) : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
   /** The two ends of a line as the layout engine gets them: source first. */
   const flow = (rel: SpecRelationship, i: number): [string, string] => (back.has(i) ? [rel.to, rel.from] : [rel.from, rel.to]);
   // Which elements have a line, themselves or inside them, and which have one arriving from beside them in their group.

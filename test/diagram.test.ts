@@ -784,9 +784,10 @@ test('judge: height is warned about, and a fix is printed only after the tool tr
   assert.match(wide.warnings[0]!, /is wider than GitHub's 860px body/);
   const advice = await advise(pressure('wide-right'), forced, wide);
   assert.deepEqual(advice.fixes.map((f) => [f.command, f.warnings]), [['no --direction right', []]]);
-  // Nothing mends a spec of eight files that all import one another: no fix is offered.
-  const none = await advise(pressure('11-code8x6'), {}, tall);
-  assert.deepEqual(none.fixes, []);
+  // Eight files that import one another in a ring are spread over the three layers. What is left past the budget of lines
+  // is mended by dropping the two files the change only reaches, and that fix was drawn before it is offered.
+  const ring = await advise(pressure('11-code8x6'), {}, tall);
+  assert.deepEqual(ring.fixes.map((f) => [f.command, f.warnings]), [['graph drop --status affected', []]]);
   // A warning never names a filter or an option. That is the job of a fix line.
   for (const w of [...tall.warnings, ...wide.warnings]) assert.doesNotMatch(w, /graph |--labels|--direction/);
   // Numbers already on the lines are never offered as the cure.
@@ -927,7 +928,7 @@ test('round 3: the command refuses --mermaid with --png, says a write failure pl
   assert.doesNotMatch(lost.stderr, /ENOENT/);
 });
 
-test('code shape: files stand in layers by import depth, a cycle shares a layer, and three layers are kept round the first file', async () => {
+test('code shape: files stand in layers by import depth, a cycle is spread over the layers to spare, and three layers are kept round the first file', async () => {
   const { codeShape } = await import('../src/diagram/code-shape.ts');
   const { over, codeCut, trim } = await import('../src/diagram/budget.ts');
   const { judge } = await import('../src/diagram/fit.ts');
@@ -938,9 +939,16 @@ test('code shape: files stand in layers by import depth, a cycle shares a layer,
   const chain = codeShape(spec(['a', 'b', 'c', 'late', 'alone'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('late', 'c')]));
   assert.deepEqual([...chain.layer], [['a', 0], ['b', 1], ['c', 2], ['late', 1], ['alone', 0]], 'a file stands just left of what it imports, and a file with no line in the shortest layer');
   assert.deepEqual([chain.layers, chain.depth, chain.beyond], [3, 3, []]);
-  // Two files that import each other are one layer.
-  const knot = codeShape(spec(['a', 'b', 'c'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('c', 'b')]));
-  assert.deepEqual([knot.layer.get('b'), knot.layer.get('c'), knot.depth], [1, 1, 2]);
+  // Two files that import each other are a knot. With a layer to spare it is spread over two, in the order that leaves
+  // the fewest imports running back; kept whole it shares one.
+  const cycle = spec(['a', 'b', 'c'].map((id) => file(id)), [line('a', 'b'), line('b', 'c'), line('c', 'b')]);
+  const knot = codeShape(cycle);
+  assert.deepEqual([knot.layer.get('a'), knot.layer.get('b'), knot.layer.get('c'), knot.depth], [0, 1, 2, 3]);
+  const whole = codeShape(cycle, undefined, undefined, false);
+  assert.deepEqual([whole.layer.get('b'), whole.layer.get('c'), whole.depth], [1, 1, 2]);
+  // A knot is never spread past the three layers: four files in a ring after one that imports them stay in two.
+  const ring = codeShape(spec(['x', 'p', 'q', 'r', 's'].map((id) => file(id)), [line('x', 'p'), line('p', 'q'), line('q', 'r'), line('r', 's'), line('s', 'p')]));
+  assert.deepEqual([ring.depth, ring.beyond], [3, []]);
   // Five deep: the three layers that hold the first file are drawn, and lint names the files to drop.
   const deep = spec([file('c', 'changed'), file('a'), file('b'), file('d'), file('e')], [line('a', 'b'), line('b', 'c'), line('c', 'd'), line('d', 'e')]);
   const shape = codeShape(deep);
