@@ -22,7 +22,7 @@ Always write the body to a file and pass `--body-file`. Never pass a body inline
 | Create the labels the config wants (type labels on a user repository, `agents`, surfaces) | `npx gh-wat-dis labels apply` |
 | Pin issue | `gh issue pin <n>` |
 
-`relate` looks up the ids that GitHub's relation calls need. You pass issue numbers.
+`relate` looks up the ids that GitHub's relation calls need. You pass issue numbers. An issue has one parent: `--parent` on an issue that has another parent replaces it, and the output states the old and the new one.
 
 ## Milestones (REST through `gh api`)
 
@@ -78,6 +78,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | Legend table for a diagram with numbered lines | `npx gh-wat-dis legend change.json` |
 | Open issues with type, surfaces, milestone and what is missing | `npx gh-wat-dis issues` · `--queue` for those that need triage |
 | What a repository with history holds: counts of what open issues lack, labels outside the plan, milestones | `npx gh-wat-dis survey` · `--issues` for one row per issue |
+| Maintenance findings: stale issues and PRs, missing fields, milestones, orphan PRs, done but open, labels, blocked chains | `npx gh-wat-dis audit` · `--text` for a table · `--check stale,labels` for some checks |
 | Related issues and PRs for a draft | `npx gh-wat-dis related --title "<title>" --body-file body.md --md` |
 | Related issues for an existing issue | `npx gh-wat-dis related --issue <n> --kind issue --md` |
 | Status numbers for a milestone: counts, in review, blocked, done-when | `npx gh-wat-dis milestone ["<title>"]` |
