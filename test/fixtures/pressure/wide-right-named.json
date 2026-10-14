@@ -1,0 +1,65 @@
+{
+  "title": "Orders across two groups, left to right",
+  "type": "container",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Storefront"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Back office"
+    },
+    {
+      "id": "c0",
+      "type": "container",
+      "name": "Web shop",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "c1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "g1"
+    },
+    {
+      "id": "c2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust",
+      "parent": "g2"
+    },
+    {
+      "id": "c3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "parent": "g2"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "c0",
+      "to": "c1",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c1",
+      "to": "c2",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c2",
+      "to": "c3",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    }
+  ],
+  "direction": "RIGHT"
+}

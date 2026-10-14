@@ -92,6 +92,47 @@ test('layout corpus: every drawing passes the gates on its geometry, and its run
   assert.deepEqual(table, JSON.parse(readFileSync(EXPECTED, 'utf8')), 'a drawing moved: look at it, then run UPDATE_LAYOUT=1 node --test test/layout.test.ts');
 });
 
+test('shape from structure: trees wrap without crossings, groups stay whole, knots spread over layers', async () => {
+  const { render: draw } = await import('../src/diagram/svg.ts');
+  const { advise } = await import('../src/diagram/advise.ts');
+  const named = new Map(specs);
+  // Each of these draws inside every gate. A tree's lines back to the next row nest, so they cross nothing.
+  const pass = ['n24-tree15', 'tree15-right', 'tree-deep-right', 'tree-deep', 'tree-wide', 'wide-right-named', 'groups3-chain', 'groups3-chain-right',
+    '11-code8x6', 'knot4-hub', 'knot4-all', 'knot6-ring', 'knot6-hub', 'knot8-ring', 'knot8-hub'];
+  for (const name of pass) {
+    const out = await draw(named.get(name)!);
+    const kept = out.report.candidates.find((c) => c.chosen)!;
+    assert.ok(out.report.passed, `${name}: ${out.report.why}`);
+    if (name.includes('tree')) assert.equal(kept.crossings, 0, `${name}: ${kept.crossings} crossings`);
+  }
+  // A wrap never cuts a group: each group is drawn whole on one row, and its boxes stay inside it.
+  for (const name of ['wide-right-named', 'groups3-chain-right']) {
+    const l = (await draw(named.get(name)!)).layout;
+    for (const g of l.nodes.filter((b) => b.group)) {
+      for (const b of l.nodes.filter((x) => x.el.parent === g.el.id)) assert.ok(b.x >= g.x && b.y >= g.y && b.x + b.w <= g.x + g.w && b.y + b.h <= g.y + g.h, `${name}: ${b.el.id} outside ${g.el.id}`);
+    }
+  }
+  // A chain inside one group, forced left to right, cannot wrap: the group is one piece. The drawing says so and the
+  // fix is to leave the direction to the type.
+  const one = { ...named.get('wide-right-one-group')!, direction: 'RIGHT' as const };
+  const forced = await draw(one);
+  assert.equal(forced.report.passed, false);
+  assert.ok(forced.report.candidates.every((c) => !c.wrapped), 'a wrap cut the group');
+  const fixes = (await advise(one, {}, forced.report)).fixes;
+  assert.deepEqual(fixes.map((f) => [f.command, f.warnings]), [['graph set --direction ""', []]]);
+  // A group whose name is wider than the page holds its boxes in one piece too, so it does not wrap. Shortening the name is
+  // the fix, and it was drawn first.
+  const long = named.get('n21-long-group-names')!;
+  const wide = await draw(long);
+  assert.equal(wide.report.passed, false);
+  const shorten = (await advise(long, {}, wide.report)).fixes[0]!;
+  assert.match(shorten.command, /^shorten the group names/);
+  assert.ok(shorten.width <= 860, `${shorten.width}`);
+  // Eight files in a ring are spread over three layers instead of one tall column.
+  const ring = (await draw(named.get('11-code8x6')!)).layout;
+  assert.equal(new Set(ring.nodes.map((b) => Math.round(b.x))).size, 3);
+});
+
 /**
  * Specs at the edge of each type's budget, made up from a seed: a chain of a given depth, at most four elements side
  * by side at each step, each joined to one before it, and then more lines between neighbouring steps until the line

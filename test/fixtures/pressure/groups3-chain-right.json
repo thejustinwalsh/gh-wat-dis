@@ -1,0 +1,102 @@
+{
+  "title": "Orders across three groups, left to right",
+  "type": "container",
+  "direction": "RIGHT",
+  "elements": [
+    {
+      "id": "g1",
+      "type": "boundary",
+      "name": "Storefront"
+    },
+    {
+      "id": "g2",
+      "type": "boundary",
+      "name": "Back office"
+    },
+    {
+      "id": "g3",
+      "type": "boundary",
+      "name": "Warehouse"
+    },
+    {
+      "id": "c0",
+      "type": "container",
+      "name": "Web shop",
+      "technology": "Rust",
+      "description": "Web shop service",
+      "parent": "g1"
+    },
+    {
+      "id": "c1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "description": "Orders API service",
+      "parent": "g1"
+    },
+    {
+      "id": "c2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust",
+      "description": "Billing service",
+      "parent": "g2"
+    },
+    {
+      "id": "c3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "description": "Ledger service",
+      "parent": "g2"
+    },
+    {
+      "id": "c4",
+      "type": "container",
+      "name": "Picking",
+      "technology": "Rust",
+      "description": "Picking service",
+      "parent": "g3"
+    },
+    {
+      "id": "c5",
+      "type": "container",
+      "name": "Dispatch",
+      "technology": "Rust",
+      "description": "Dispatch service",
+      "parent": "g3"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "c0",
+      "to": "c1",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c1",
+      "to": "c2",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c2",
+      "to": "c3",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c3",
+      "to": "c4",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c4",
+      "to": "c5",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    }
+  ]
+}

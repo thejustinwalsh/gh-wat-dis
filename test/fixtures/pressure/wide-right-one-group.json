@@ -1,0 +1,72 @@
+{
+  "title": "Orders through one group",
+  "type": "container",
+  "elements": [
+    {
+      "id": "g",
+      "type": "boundary",
+      "name": "Order pipeline"
+    },
+    {
+      "id": "c0",
+      "type": "container",
+      "name": "Web shop",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "c1",
+      "type": "container",
+      "name": "Orders API",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "c2",
+      "type": "container",
+      "name": "Billing",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "c3",
+      "type": "container",
+      "name": "Ledger",
+      "technology": "Rust",
+      "parent": "g"
+    },
+    {
+      "id": "c4",
+      "type": "container",
+      "name": "Notifier",
+      "technology": "Rust",
+      "parent": "g"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "c0",
+      "to": "c1",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c1",
+      "to": "c2",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c2",
+      "to": "c3",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    },
+    {
+      "from": "c3",
+      "to": "c4",
+      "label": "Sends orders to",
+      "technology": "HTTPS"
+    }
+  ]
+}

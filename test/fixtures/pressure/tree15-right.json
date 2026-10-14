@@ -1,0 +1,184 @@
+{
+  "title": "Binary tree of fifteen, left to right",
+  "type": "component",
+  "scope": "S",
+  "direction": "RIGHT",
+  "elements": [
+    {
+      "id": "t0",
+      "type": "component",
+      "name": "Gateway",
+      "technology": "TS"
+    },
+    {
+      "id": "t1",
+      "type": "component",
+      "name": "Orders API",
+      "technology": "TS"
+    },
+    {
+      "id": "t2",
+      "type": "component",
+      "name": "Billing",
+      "technology": "TS"
+    },
+    {
+      "id": "t3",
+      "type": "component",
+      "name": "Ledger",
+      "technology": "TS"
+    },
+    {
+      "id": "t4",
+      "type": "component",
+      "name": "Notifier",
+      "technology": "TS"
+    },
+    {
+      "id": "t5",
+      "type": "component",
+      "name": "Search",
+      "technology": "TS"
+    },
+    {
+      "id": "t6",
+      "type": "component",
+      "name": "Indexer",
+      "technology": "TS"
+    },
+    {
+      "id": "t7",
+      "type": "component",
+      "name": "Catalogue",
+      "technology": "TS"
+    },
+    {
+      "id": "t8",
+      "type": "component",
+      "name": "Pricing",
+      "technology": "TS"
+    },
+    {
+      "id": "t9",
+      "type": "component",
+      "name": "Inventory",
+      "technology": "TS"
+    },
+    {
+      "id": "t10",
+      "type": "component",
+      "name": "Shipping",
+      "technology": "TS"
+    },
+    {
+      "id": "t11",
+      "type": "component",
+      "name": "Returns",
+      "technology": "TS"
+    },
+    {
+      "id": "t12",
+      "type": "component",
+      "name": "Fraud",
+      "technology": "TS"
+    },
+    {
+      "id": "t13",
+      "type": "component",
+      "name": "Identity",
+      "technology": "TS"
+    },
+    {
+      "id": "t14",
+      "type": "component",
+      "name": "Sessions",
+      "technology": "TS"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "t0",
+      "to": "t1",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t0",
+      "to": "t2",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t1",
+      "to": "t3",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t1",
+      "to": "t4",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t2",
+      "to": "t5",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t2",
+      "to": "t6",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t3",
+      "to": "t7",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t3",
+      "to": "t8",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t4",
+      "to": "t9",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t4",
+      "to": "t10",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t5",
+      "to": "t11",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t5",
+      "to": "t12",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t6",
+      "to": "t13",
+      "label": "Delegates to",
+      "technology": "function call"
+    },
+    {
+      "from": "t6",
+      "to": "t14",
+      "label": "Delegates to",
+      "technology": "function call"
+    }
+  ]
+}

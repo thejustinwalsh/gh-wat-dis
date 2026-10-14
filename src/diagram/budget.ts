@@ -55,7 +55,7 @@ export function over(spec: DiagramSpec): string[] {
   }
   // Every other diagram is held to a chain no longer than a page and no more boxes side by side than it holds.
   if (spec.type !== 'code') {
-    const shape = codeShape(spec, undefined, Infinity);
+    const shape = codeShape(spec, undefined, Infinity, false);
     // Elements with no line are packed apart from the rest, so only those with a line stand side by side.
     const ids = new Set(spec.elements.map((e) => e.id));
     const joined = new Set(spec.relationships.filter((r) => r.from !== r.to && ids.has(r.from) && ids.has(r.to)).flatMap((r) => [r.from, r.to]));

@@ -56,6 +56,13 @@ export interface LayoutOptions {
    * (top down) and laid out again as partitions, so a long chain continues on the next row or column.
    */
   wrap?: number;
+  /**
+   * With `wrap`: a line back to the start of another row leaves its box forward, runs back between the rows and enters
+   * its target forward. Without, it runs straight back against the partitions.
+   */
+  returns?: boolean;
+  /** A code diagram only: true keeps the files of each knot in one layer, instead of spreading them over the layers there are to spare. */
+  whole?: boolean;
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -94,6 +101,8 @@ const CARD_MAX = 240;
 const CARD_WIDEST = 360;
 /** Room a code diagram leaves for the gap between two layers, its lines and their turns, when it shares the page out among its cards. */
 const LAYER_GAP = 96;
+/** How far apart the two lines of a wrapped line's turn are, where it steps back to the start of another row. */
+const RETURN_STEP = 12;
 const PAGE = 812;
 /** Room at the top of a card for the name of its group. */
 export const CARD_LANE = 14;
@@ -356,11 +365,12 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   // Shape. A flow reads in step order. Every other diagram reads in the order the spec lists its relationships.
   const lines = spec.relationships.map((rel, i) => ({ rel, i })).filter(({ rel }) => placed.has(rel.from) && placed.has(rel.to));
   if (spec.type === 'dynamic') lines.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
-  // A code diagram left to right has its layers worked out here: no line runs backwards, and a line between two
-  // files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
-  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec) : undefined;
+  // A code diagram left to right has its layers worked out here: only a line along a knot runs backwards, and a line
+  // between two files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
+  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec, undefined, undefined, !opts.whole) : undefined;
   const within = (rel: SpecRelationship): boolean => shape !== undefined && rel.from !== rel.to && shape.layer.get(rel.from) === shape.layer.get(rel.to);
-  const back = shape ? new Set<number>() : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
+  // In a code diagram a line runs back only along a knot spread over layers: from a run of it to an earlier one.
+  const back = shape ? new Set(lines.filter(({ rel }) => shape.layer.get(rel.from)! > shape.layer.get(rel.to)!).map(({ i }) => i)) : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
   /** The two ends of a line as the layout engine gets them: source first. */
   const flow = (rel: SpecRelationship, i: number): [string, string] => (back.has(i) ? [rel.to, rel.from] : [rel.from, rel.to]);
   // Which elements have a line, themselves or inside them, and which have one arriving from beside them in their group.
@@ -433,6 +443,9 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const topOf = (id: string): string => chain(id).at(-1)!;
   // elkjs takes and returns plain JSON, so the graph is untyped at this boundary.
   const turnId = (i: number): string => `\u0000turn\u0000${i}`;
+  /** The two points a line of a wrap turns at on its way back to the start of another row. */
+  const exitId = (i: number): string => `\u0000exit\u0000${i}`;
+  const entryId = (i: number): string => `\u0000entr\u0000${i}`;
   const turns: unknown[] = [];
   const edges: { part: string; edge: any }[] = lines.flatMap(({ rel, i }) => {
     const label = edgeLabel(rel, numbered ? relNumber(spec, rel) : undefined);
@@ -554,134 +567,234 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   };
   /**
    * Wrapping on partitions, the mechanism the layers of a code diagram use. The first layout gives the layers of each
-   * part along the direction. They are cut into rows (columns top down) that come closest to the shape asked for, and a
-   * file's partition is its place in its row. The rows stand one under the other in each partition, in order, and the
-   * line from the end of one row to the start of the next is an ordinary line between partitions, turned to run with them.
+   * part along the direction. A group at the top holds the layers its boxes stand in together, and they make one slab
+   * with any box of those layers: a wrap never cuts a group. The slabs are cut into rows (columns top down) that come
+   * closest to the shape asked for. An element at the top takes the place of its slab in its row as its partition, a box
+   * inside a group keeps the place of its layer in the group, and the rows stand one under the other in each partition,
+   * in order. With `returns`, a line from one row back to the start of another leaves its box forward, turns in the gap
+   * after it, runs back between the rows on a track of its own, and turns again in the gap before its target, which it
+   * enters forward. Without, it runs straight back against the partitions.
    */
   const wrapInto = async (first: any, aspect: number): Promise<any> => {
-    const along = (r: { x: number; y: number; width: number; height: number }): [number, number] => (down ? [r.y, r.height] : [r.x, r.width]);
-    const across = (r: { x: number; y: number; width: number; height: number }): [number, number] => (down ? [r.x, r.width] : [r.y, r.height]);
-    const leaves = new Map<string, any>();
-    const walk = (node: any): void => { for (const c of node.children ?? []) { const b = boxes.get(String(c.id)); if (b && !b.group) leaves.set(String(c.id), c); walk(c); } };
+    type R = { x: number; y: number; width: number; height: number };
+    const along = (r: R): [number, number] => (down ? [r.y, r.height] : [r.x, r.width]);
+    const across = (r: R): [number, number] => (down ? [r.x, r.width] : [r.y, r.height]);
+    const rects = new Map<string, R>();
+    const walk = (node: any): void => { for (const c of node.children ?? []) { if (boxes.has(String(c.id))) rects.set(String(c.id), c); walk(c); } };
     walk(first);
     const column = new Map<string, number>(), row = new Map<string, number>();
     let cut = false;
     for (const ids of parts.values()) {
-      const mine = [...leaves.keys()].filter((id) => ids.includes(topOf(id)));
+      const mine = [...rects.keys()].filter((id) => !boxes.get(id)!.group && ids.includes(topOf(id)));
       if (mine.length < 2) continue;
       // Layers: leaves whose spans along the direction overlap stand in one layer.
-      const sorted = mine.sort((a, b) => along(leaves.get(a))[0] - along(leaves.get(b))[0]);
+      const sorted = mine.sort((a, b) => along(rects.get(a)!)[0] - along(rects.get(b)!)[0]);
       const layers: { ids: string[]; from: number; to: number; lo: number; hi: number }[] = [];
       for (const id of sorted) {
-        const [at, size] = along(leaves.get(id)), [x, w] = across(leaves.get(id));
+        const [at, size] = along(rects.get(id)!), [x, w] = across(rects.get(id)!);
         const last = layers.at(-1);
         if (last && at < last.to - 1) { last.ids.push(id); last.to = Math.max(last.to, at + size); last.lo = Math.min(last.lo, x); last.hi = Math.max(last.hi, x + w); }
         else layers.push({ ids: [id], from: at, to: at + size, lo: x, hi: x + w });
       }
       if (layers.length < 2) continue;
-      // Rows: the layers cut into runs of at least two layers each. The cut that comes closest to the shape asked for
-      // wins, and a cut that many lines cross costs more: each of them runs back to the start of the next row.
-      const gapAlong = Math.max(0, ...layers.slice(1).map((l, j) => l.from - layers[j]!.to));
+      // Slabs: runs of layers that a group at the top holds across. A cut between two of them would split the group, so
+      // a slab goes onto one row whole.
       const layerOf = new Map<string, number>();
       layers.forEach((l, j) => { for (const id of l.ids) layerOf.set(id, j); });
+      const held = new Set<number>();
+      const spans = new Map<string, [number, number]>();
+      for (const id of mine) {
+        const top = topOf(id), j = layerOf.get(id)!, s = spans.get(top);
+        spans.set(top, s ? [Math.min(s[0], j), Math.max(s[1], j)] : [j, j]);
+      }
+      for (const [lo, hi] of spans.values()) for (let b = lo; b < hi; b++) held.add(b);
+      const slabs: { layers: number[]; from: number; to: number; lo: number; hi: number }[] = [];
+      layers.forEach((l, j) => {
+        const last = slabs.at(-1);
+        if (last && held.has(j - 1)) { last.layers.push(j); last.to = l.to; last.lo = Math.min(last.lo, l.lo); last.hi = Math.max(last.hi, l.hi); }
+        else slabs.push({ layers: [j], from: l.from, to: l.to, lo: l.lo, hi: l.hi });
+      });
+      if (slabs.length < 2) continue;
+      // Rows: the slabs cut into runs. The cut that comes closest to the shape asked for wins, and a cut that many lines
+      // cross costs more: each of them runs back to the start of the next row.
+      const gapAlong = Math.max(0, ...slabs.slice(1).map((l, j) => l.from - slabs[j]!.to));
+      const slabOf = new Map<string, number>();
+      slabs.forEach((s, j) => { for (const k of s.layers) for (const id of layers[k]!.ids) slabOf.set(id, j); });
       const at = (id: string): number | undefined => {
-        if (layerOf.has(id)) return layerOf.get(id);
+        if (slabOf.has(id)) return slabOf.get(id);
         const inside = (kids.get(id) ?? []).map((c) => at(c.id)).filter((v): v is number => v !== undefined);
         return inside.length ? Math.min(...inside) : undefined;
       };
-      const spans = lines.map(({ rel }) => [at(rel.from), at(rel.to)]).filter((p): p is [number, number] => p[0] !== undefined && p[1] !== undefined && p[0] !== p[1]);
-      const cutBy = (b: number): number => spans.filter(([x, y]) => Math.min(x, y) <= b && b < Math.max(x, y)).length;
-      const shapeOf = (rs: number[][]): number => {
-        const length = Math.max(...rs.map((r) => layers[r.at(-1)!]!.to - layers[r[0]!]!.from));
-        const depth = rs.reduce((n, r) => n + Math.max(...r.map((j) => layers[j]!.hi)) - Math.min(...r.map((j) => layers[j]!.lo)), 0) + (rs.length - 1) * (gapAlong + 40);
-        return down ? depth / length : length / depth;
-      };
+      const crossing = lines.map(({ rel }) => [at(rel.from), at(rel.to)]).filter((p): p is [number, number] => p[0] !== undefined && p[1] !== undefined && p[0] !== p[1]);
+      const cutBy = (b: number): number => crossing.filter(([x, y]) => Math.min(x, y) <= b && b < Math.max(x, y)).length;
+      const measureRows = (rs: number[][]): { length: number; depth: number } => ({
+        length: Math.max(...rs.map((r) => slabs[r.at(-1)!]!.to - slabs[r[0]!]!.from)),
+        depth: rs.reduce((n, r) => n + Math.max(...r.map((j) => slabs[j]!.hi)) - Math.min(...r.map((j) => slabs[j]!.lo)), 0) + (rs.length - 1) * (gapAlong + 40),
+      });
+      const shapeOf = (rs: number[][]): number => { const { length, depth } = measureRows(rs); return down ? depth / length : length / depth; };
       // A row wider than the page costs most: GitHub scales the whole image down to fit it.
-      const wide = (rs: number[][]): number => {
-        const length = Math.max(...rs.map((r) => layers[r.at(-1)!]!.to - layers[r[0]!]!.from));
-        const depth = rs.reduce((n, r) => n + Math.max(...r.map((j) => layers[j]!.hi)) - Math.min(...r.map((j) => layers[j]!.lo)), 0) + (rs.length - 1) * (gapAlong + 40);
-        return Math.max(0, (down ? depth : length) - PAGE) / 100;
-      };
+      const wide = (rs: number[][]): number => { const { length, depth } = measureRows(rs); return Math.max(0, (down ? depth : length) - PAGE) / 100; };
       const cost = (rs: number[][]): number => wide(rs) + Math.abs(Math.log(shapeOf(rs) / aspect)) + 0.1 * rs.slice(0, -1).reduce((n, r) => n + cutBy(r.at(-1)!), 0);
       // No cut is one of the choices: a part already closer to the shape stays as it is.
-      let best: number[][] = [layers.map((_, j) => j)];
+      let best: number[][] = [slabs.map((_, j) => j)];
       let bestCost = wide(best) + Math.abs(Math.log(shapeOf(best) / aspect));
       const split = (from: number, left: number, acc: number[][]): void => {
         if (left === 1) {
-          if (layers.length - from < 2) return;
-          const rs = [...acc, layers.slice(from).map((_, j) => from + j)];
+          const rs = [...acc, slabs.slice(from).map((_, j) => from + j)];
           const c = cost(rs);
           if (c < bestCost) { best = rs; bestCost = c; }
           return;
         }
-        for (let end = from + 2; end <= layers.length - 2 * (left - 1); end++) split(end, left - 1, [...acc, layers.slice(from, end).map((_, j) => from + j)]);
+        for (let end = from + 1; end <= slabs.length - (left - 1); end++) split(end, left - 1, [...acc, slabs.slice(from, end).map((_, j) => from + j)]);
       };
-      for (let k = 2; k <= Math.min(4, Math.floor(layers.length / 2)); k++) split(0, k, []);
+      for (let k = 2; k <= Math.min(4, slabs.length); k++) split(0, k, []);
       if (best.length < 2) continue;
       cut = true;
-      best.forEach((r, k) => r.forEach((j, c) => { for (const id of layers[j]!.ids) { column.set(id, c); row.set(id, k); } }));
+      // An element at the top stands in the column of its slab in its row: the engine places it as one box. A box inside a
+      // group keeps the place of its layer in the group, so the group is drawn as it was.
+      best.forEach((r, k) => r.forEach((j, c) => {
+        for (const [top, [lo, hi]] of spans) {
+          if (slabOf.get(layers[lo]!.ids[0]!) !== j) continue;
+          column.set(top, c);
+          row.set(top, k);
+          for (let l = lo; l <= hi; l++) for (const id of layers[l]!.ids) if (id !== top && topOf(id) === top) { column.set(id, l - lo); row.set(id, k); }
+        }
+      }));
     }
     if (!cut) return undefined;
-    // A group stands at the first partition and row of what it holds, and so does its title.
+    // A group stands at the first column and row of what it holds, and so does its title.
     const firstOf = (id: string, of: Map<string, number>): number | undefined => {
       if (of.has(id)) return of.get(id);
       const inside = (kids.get(id) ?? []).map((c) => firstOf(c.id, of)).filter((v): v is number => v !== undefined);
       return inside.length ? Math.min(...inside) : undefined;
     };
+    /** Where an element stood across the direction in the first layout. */
+    const acrossOf = (id: string): number => across(rects.get(id) ?? rects.get(topOf(id))!)[0];
+    /** A position for the engine, which keeps the order it gives within a partition: the row first, then the place across in the first layout. */
+    const place = (step: number, cross: number): string => (down ? `(${cross},${step})` : `(${step},${cross})`);
+    // Partitions: a box stands at 2c + 1 for its column c. The gap before a column is 2c, the gap after it 2c + 2.
     const mark = (node: any): void => {
       const id = String(node.id);
       const real = id.startsWith('\u0000title\u0000') ? id.slice(7) : id;
       if (node.layoutOptions?.['elk.algorithm'] === 'layered') Object.assign(node.layoutOptions, { 'elk.partitioning.activate': 'true', 'elk.layered.crossingMinimization.semiInteractive': 'true' });
-      if (boxes.has(real) && (!boxes.get(real)!.group || id !== real)) {
-        const c = firstOf(real, column);
-        // The rows keep their order, and each keeps the order of the first layout: a node's position across is its row first.
-        const r = firstOf(real, row), at = leaves.get(real);
-        const cross = (r ?? 0) * 100000 + (at ? across(at)[0] : 0);
-        const step = 2000 * (c ?? 0);
-        const position = down ? `(${cross},${step})` : `(${step},${cross})`;
-        if (c !== undefined) node.layoutOptions = { ...(node.layoutOptions ?? {}), 'elk.partitioning.partition': String(2 * c), 'elk.position': position };
+      if (boxes.has(real)) {
+        // A title stands inside its group, at the first column of what the group holds.
+        const inner = (of: Map<string, number>): number | undefined => {
+          const v = (kids.get(real) ?? []).map((k) => firstOf(k.id, of)).filter((x): x is number => x !== undefined);
+          return v.length ? Math.min(...v) : undefined;
+        };
+        const c = id === real ? firstOf(real, column) : inner(column), r = firstOf(real, row);
+        if (c !== undefined) node.layoutOptions = { ...(node.layoutOptions ?? {}), 'elk.partitioning.partition': String(2 * c + 1), 'elk.position': place(2000 * c, (r ?? 0) * 100000 + (rects.has(real) ? acrossOf(real) : 0)) };
       }
       // Model order puts the rows in order in each partition.
       if (node.children) node.children.sort((a: any, b: any) => (firstOf(String(a.id).replace(/^\u0000title\u0000/, ''), row) ?? 0) - (firstOf(String(b.id).replace(/^\u0000title\u0000/, ''), row) ?? 0));
       for (const c of node.children ?? []) mark(c);
     };
     for (const node of built.values()) mark(node);
-    built = new Map([...built].sort(([a], [b]) => (firstOf(a, row) ?? 0) - (firstOf(b, row) ?? 0)));
-    // A line that runs against the partitions is turned round for the engine, and turned back when it is read.
-    // A line between two rows in one partition is a line inside a layer: both ends run to a turn point in the gap
-    // after it, as in a code diagram, and its words are that point. The point stands in the group that holds both ends.
+    const byRow = (a: string, b: string): number => (firstOf(a, row) ?? 0) - (firstOf(b, row) ?? 0);
+    built = new Map([...built].sort(([a], [b]) => byRow(a, b)));
+    for (const [key, ids] of parts) parts.set(key, [...ids].sort(byRow));
+    /** The group that holds both ends of a line, as the engine gets it. */
     const holder = (a: string, z: string): any => {
       const za = chain(z);
       const common = chain(a).slice(1).find((id) => za.slice(1).includes(id));
       if (common === undefined) return undefined;
-      const find = (node: any): any => (String(node.id) === common ? node : (node.children ?? []).map(find).find(Boolean));
-      return [...built.values()].map(find).find(Boolean);
+      const look = (node: any): any => (String(node.id) === common ? node : (node.children ?? []).map(look).find(Boolean));
+      return [...built.values()].map(look).find(Boolean);
     };
-    const extra: any[] = [];
+    const extra: { turn: any; part: string }[] = [];
+    /**
+     * A point a line turns at. With `ports` the line passes through it: it arrives on the side lines arrive on and goes on
+     * from the other, so that the engine takes it round the outside of the rows to get there.
+     */
+    const point = (id: string, partition: number, position: string, ports?: { id: string; side: 'in' | 'out' }[]): any => ({
+      id, width: 0.1, height: 0.1,
+      layoutOptions: { 'elk.partitioning.partition': String(partition), 'elk.position': position, ...(ports ? { 'elk.portConstraints': 'FIXED_POS' } : {}) },
+      ...(ports ? { ports: ports.map((p) => ({
+        id: p.id, x: !down && p.side === 'out' ? 0.1 : 0, y: down && p.side === 'out' ? 0.1 : 0, width: 0, height: 0,
+        layoutOptions: { 'elk.port.side': down ? (p.side === 'in' ? 'NORTH' : 'SOUTH') : p.side === 'in' ? 'WEST' : 'EAST' },
+      })) } : {}),
+    });
+    const compareKeys = (x: number[], y: number[]): number => { for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) return x[k]! - y[k]!; return 0; };
+    /** The columns and rows of the two ends of a line, when both have them. */
+    // Between two elements at the top the engine sees their partitions, so a line between them goes by theirs; inside one,
+    // by the columns of its ends.
+    const ends = (rel: SpecRelationship): [number, number, number, number] | undefined => {
+      const ua = topOf(rel.from), uz = topOf(rel.to);
+      const [p, q] = ua === uz ? [rel.from, rel.to] : [ua, uz];
+      const v = [firstOf(p, column), firstOf(q, column), firstOf(ua, row), firstOf(uz, row)];
+      return v.every((x) => x !== undefined) ? v as [number, number, number, number] : undefined;
+    };
+    // The lines that run back to the start of each row, in the order they leave and then the order they arrive.
+    const backTo = new Map<string, number[]>();
+    for (const { rel, i } of lines) {
+      const e = ends(rel);
+      if (!e || e[2] === e[3] || e[0] < e[1]) continue;
+      const key = `${e[3]}\u0000${e[3] > e[2]}`;
+      backTo.set(key, [...(backTo.get(key) ?? []), i]);
+    }
+    for (const list of backTo.values()) {
+      const key = (i: number): number[] => { const r = spec.relationships[i]!; return [firstOf(r.from, row)!, acrossOf(r.from), acrossOf(r.to)]; };
+      list.sort((x, y) => compareKeys(key(x), key(y)));
+    }
     for (const item of [...edges]) {
       const edge = item.edge;
       if (!String(edge.id).startsWith('e')) continue;
       const i = Number(String(edge.id).slice(1));
-      const a = firstOf(String(edge.sources[0]), column), z = firstOf(String(edge.targets[0]), column);
-      if (a === undefined || z === undefined) continue;
-      if (a > z) { [edge.sources, edge.targets] = [edge.targets, edge.sources]; back.has(i) ? back.delete(i) : back.add(i); }
-      else if (a === z) {
-        const label = labels.get(i)!;
-        const turn = { id: turnId(i), width: label.lines.length ? label.w : 0.1, height: label.lines.length ? label.h : 0.1, layoutOptions: { 'elk.partitioning.partition': String(2 * a + 1), 'elk.position': down ? `(${(firstOf(String(edge.sources[0]), row) ?? 0) * 100000},${2000 * a + 1000})` : `(${2000 * a + 1000},${(firstOf(String(edge.sources[0]), row) ?? 0) * 100000})` } };
-        const into = holder(String(edge.sources[0]), String(edge.targets[0]));
-        if (into) into.children.push(turn); else extra.push({ turn, part: find(item.part) });
-        // Both halves run from an end of the line to the point, whichever way the engine had the line before.
-        const [start, end] = back.has(i) ? [edge.targets[0], edge.sources[0]] : [edge.sources[0], edge.targets[0]];
+      const rel = spec.relationships[i]!;
+      const e = ends(rel);
+      if (!e) continue;
+      const [a, z, ra, rz] = e;
+      // The two ends as the line runs, whichever way the engine had it before.
+      const [src, dst] = back.has(i) ? [edge.targets[0], edge.sources[0]] : [edge.sources[0], edge.targets[0]];
+      const part = find(item.part);
+      if (a < z) {
+        // Forward along the partitions, whichever row it ends in: an ordinary line.
         back.delete(i);
-        edge.sources = [start];
-        edge.targets = [turnId(i)];
+        Object.assign(edge, { sources: [src], targets: [dst] });
+      } else if (ra === rz || !opts.returns) {
+        if (a > z) { back.add(i); Object.assign(edge, { sources: [dst], targets: [src] }); continue; }
+        // Two boxes of one column and row: both ends run to a point in the gap after it, and the words of the line are that
+        // point. The point stands in the group that holds both ends.
+        const label = labels.get(i)!;
+        const turn = point(turnId(i), 2 * a + 2, place(2000 * a + 1000, ra * 100000 + acrossOf(rel.from)));
+        Object.assign(turn, { width: label.lines.length ? label.w : 0.1, height: label.lines.length ? label.h : 0.1 });
+        const into = holder(rel.from, rel.to);
+        if (into) into.children.push(turn); else extra.push({ turn, part });
+        back.delete(i);
+        Object.assign(edge, { sources: [src], targets: [turnId(i)] });
         delete edge.labels;
-        edges.push({ part: item.part, edge: { id: `h${i}`, sources: [end], targets: [turnId(i)] } });
+        edges.push({ part: item.part, edge: { id: `h${i}`, sources: [dst], targets: [turnId(i)] } });
+      } else {
+        // To another row, back along the partitions: out forward through a point in the gap after its element, round and
+        // back between the rows, and in forward through a point in the gap before its target. On the way back it passes a
+        // point in each column it crosses, which stands between the row it leaves and the row it reaches.
+        // The lines back to one row nest: in the order they leave, they take the outer tracks first, and reach their
+        // targets in the same order. So going down, the line that leaves highest takes the lowest track.
+        const order = (backTo.get(`${rz}\u0000${rz > ra}`) ?? []).indexOf(i);
+        const n = backTo.get(`${rz}\u0000${rz > ra}`)?.length ?? 1;
+        extra.push({ part, turn: point(exitId(i), 2 * a + 2, place(2000 * a + 1000, ra * 100000 + acrossOf(rel.from) + order / 100), [{ id: `${exitId(i)}\u0000in`, side: 'in' }, { id: `${exitId(i)}\u0000back`, side: 'out' }]) });
+        extra.push({ part, turn: point(entryId(i), 2 * z, place(2000 * z - 1000, rz * 100000 + acrossOf(rel.to) + order / 100), [{ id: `${entryId(i)}\u0000back`, side: 'in' }, { id: `${entryId(i)}\u0000out`, side: 'out' }]) });
+        const between = (rz > ra ? rz * 100000 - 1000 : rz * 100000 + 90000) + (n - 1 - order);
+        const via: string[] = [];
+        for (let c = z; c <= a; c++) {
+          const id = `\u0000back\u0000${i}\u0000${c}`;
+          via.push(id);
+          extra.push({ part, turn: point(id, 2 * c + 1, place(2000 * c, between)) });
+        }
+        const route = [`${entryId(i)}\u0000back`, ...via, `${exitId(i)}\u0000back`];
+        back.delete(i);
+        Object.assign(edge, { sources: [src], targets: [`${exitId(i)}\u0000in`] });
+        // Each stretch is held straight before any other line, so the way back runs level and the turns line up with their ends.
+        const straight = { layoutOptions: { 'elk.layered.priority.straightness': '20' } };
+        Object.assign(edge, straight);
+        route.slice(1).forEach((to, k) => edges.push({ part: item.part, edge: { id: `v${i}_${k}`, sources: [route[k]], targets: [to], ...straight } }));
+        edges.push({ part: item.part, edge: { id: `w${i}`, sources: [`${entryId(i)}\u0000out`], targets: [dst], ...straight } });
       }
     }
     const graphOf = (modelOrder: boolean): any => {
       const g: any = graph(modelOrder);
-      // A turn point outside every group stands at the top, or in the part that holds its line.
+      // A turn point stands at the top, or in the part that holds its line.
       const keys = [...parts.keys()];
       for (const { turn, part } of extra) {
         const box = g.layoutOptions['elk.algorithm'] === 'rectpacking' ? g.children.find((c: any) => c.id === `\u0000part\u0000${keys.indexOf(part)}`) : g;
@@ -734,6 +847,8 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   /** The second half of each line that stays inside a layer: from its target out to the turn point. */
   const halves = new Map<number, Pt[]>();
   const turnAt = new Map<number, Rect>();
+  /** A wrapped line back to another row: the stretch between the rows, as the engine ran it from the entry to the exit, and the stretch from the entry into the target. */
+  const returns = new Map<number, Pt[][]>(), entries = new Map<number, Pt[]>();
   const read = (node: any): void => {
     for (const child of node.children ?? []) {
       const id = String(child.id);
@@ -747,6 +862,12 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
       const rel = spec.relationships[i]!;
       const points: Pt[] = (edge.sections ?? []).flatMap((s: any) => [s.startPoint, ...(s.bendPoints ?? []), s.endPoint]).map((p: Pt) => ({ x: p.x, y: p.y }));
       if (String(edge.id).startsWith('h')) { halves.set(i, points); continue; }
+      if (String(edge.id).startsWith('v')) {
+        const [n, k] = String(edge.id).slice(1).split('_').map(Number) as [number, number];
+        (returns.get(n) ?? returns.set(n, []).get(n)!)[k] = points;
+        continue;
+      }
+      if (String(edge.id).startsWith('w')) { entries.set(i, points); continue; }
       if (!String(edge.id).startsWith('e')) continue;
       if (back.has(i)) points.reverse();
       const placed = edge.labels?.[0];
@@ -755,6 +876,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     }
   };
   read(done);
+  // A wrapped line back to another row is its three stretches end to end: out to the exit, back between the rows, in from the entry.
+  for (const path of paths) {
+    const i = spec.relationships.indexOf(path.rel);
+    const stretches = returns.get(i), into = entries.get(i);
+    if (!stretches && !into) continue;
+    // The engine ran the way back from the entry to the exit, one stretch to each point on it.
+    const between = stretches && [...stretches].every((s) => s && s.length > 1) ? stretches.flat().reverse() : [];
+    path.points = path.points.length > 1 && between.length > 1 && (into?.length ?? 0) > 1 ? [...path.points, ...between, ...into!] : [];
+  }
   // A line inside a layer is its two halves, joined at the turn point. When both halves reach the point on one
   // level, the point and the stretch they share are left out, and the line turns where the first half did. When
   // they reach the side of a box of words at two levels, the line runs down that side between them.
@@ -764,8 +894,10 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     if (!half) continue;
     path.inLayer = true;
     if (path.points.length < 2 || half.length < 2) { path.points = []; continue; }
+    // Left to right the halves reach the point from the side, so one level is one y. Top down they reach it from above.
     const p = path.points.at(-1)!, q = half.at(-1)!;
-    path.points = Math.abs(p.y - q.y) < 0.5 ? [...path.points.slice(0, -1), ...half.slice(0, -1).reverse()] : [...path.points, ...half.slice().reverse()];
+    const level = down ? Math.abs(p.x - q.x) < 0.5 : Math.abs(p.y - q.y) < 0.5;
+    path.points = level ? [...path.points.slice(0, -1), ...half.slice(0, -1).reverse()] : [...path.points, ...half.slice().reverse()];
     const label = labels.get(i)!, at = turnAt.get(i);
     if (label.lines.length && at) path.label = { x: at.x, y: at.y, w: label.w, h: label.h, lines: label.lines };
   }
