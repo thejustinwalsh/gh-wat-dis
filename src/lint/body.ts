@@ -1,5 +1,7 @@
 // A backstop, not a style guide. It catches what GitHub would break and what is grossly
 // off-shape. Wording, section choice and length are the skills' job: see skills/wat/references.
+import { drawCommand } from '../impact/decide.ts';
+import type { DiagramDecision } from '../impact/types.ts';
 
 const KINDS = ['issue', 'pr', 'milestone', 'comment'] as const;
 export type Kind = (typeof KINDS)[number];
@@ -41,7 +43,10 @@ function scan(text: string): Line[] {
   return out;
 }
 
-export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind; exists?: (path: string) => boolean } = {}): BodyLint {
+/** The diagram decision from impact facts, and the facts file to name in the command that draws it. */
+export interface DiagramCheck { decision: DiagramDecision; facts: string }
+
+export function lintBody(text: string, { kind = 'issue', exists, diagram }: { kind?: Kind; exists?: (path: string) => boolean; diagram?: DiagramCheck } = {}): BodyLint {
   if (!KINDS.includes(kind)) throw new Error(`kind must be one of ${KINDS.join(', ')}`);
   const errors: Finding[] = [], warnings: Finding[] = [];
   const err = (line: number, msg: string): void => { errors.push({ line, msg }); };
@@ -157,6 +162,16 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       if (l.kind === 'code') { if (!run) startLine = l.n; run++; continue; }
       if (run > GROSS_CODE_LINES) warn(startLine, `code block of ${run} lines in the visible body. Long logs and data belong in "Agent context".`);
       run = 0;
+    }
+  }
+
+  // The facts decide whether the change needs a diagram. A body without one, when they say draw, is a warning: the
+  // body may carry the picture another way, and a person decides. When they give a skip reason, nothing is said.
+  if (diagram?.decision.draw && (kind === 'pr' || kind === 'issue')) {
+    const image = md.some((l) => /!\[[^\]]*\]\(|<img\b/i.test(l.t));
+    if (!image) {
+      const d = diagram.decision;
+      warn(0, `the facts say draw ${d.level === 'element' ? 'an' : 'a'} ${d.level} diagram: ${d.reasons[0]}${d.reasons.length > 1 ? ` (and ${d.reasons.length - 1} more)` : ''}. Draw it: ${drawCommand(d.level, diagram.facts)}, then attach it. Leave it out only when impact gives a skip reason.`);
     }
   }
 

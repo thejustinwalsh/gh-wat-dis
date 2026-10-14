@@ -78,7 +78,10 @@ function assertSpecValid(spec: DiagramSpec): void {
 }
 
 function assertMarkdownShape(md: string): void {
-  const lines = md.trimEnd().split('\n');
+  const all = md.trimEnd().split('\n');
+  // The diagram decision is a comment on the first line, which GitHub does not show.
+  assert.match(all[0]!, /^<!-- diagram: (draw an? (element|code|dynamic) diagram: .+\. Draw it: .+|no diagram: .+) -->$/);
+  const lines = all.slice(1);
   assert.match(lines[0]!, /^## Blast radius$/);
   assert.match(lines[2]!, /^\*\*\d+ files? changed in \d+ elements? · \d+ direct dependents?.*\*\*$/);
   assert.match(lines[lines.length - 1]!, /^_Sources: git[^_]*\.( Labels: [a-z, ]+\.)?_$/);
@@ -737,10 +740,11 @@ test('symbols: a comment is not a change, one name of a re-export list is one ch
 function codeFacts(part: Partial<Facts>): Facts {
   return {
     schema: 1, base: 'a'.repeat(40), head: 'b'.repeat(40), range: { baseRef: 'a', headRef: 'b', workingTree: false, depth: 3 },
+    diagram: { draw: false, level: null, reasons: [], skip: 'nothing changed', provenance: 'exact' },
     tiers: { ran: ['git', 'ast-grep'], languages: ['typescript'], unavailable: [] },
     summary: { filesChanged: 0, insertions: 0, deletions: 0, byKind: {}, elementsChanged: 0, directDependents: 0, exportedSignatureChanges: 0 },
     files: [], symbols: [], dependents: { direct: [], transitive: [] }, imports: [], elements: [], edges: [], contracts: [],
-    tests: { changed: [], importingChanged: [] }, coChange: [], dependencies: [], complexity: [], owners: [], caveats: [], ...part,
+    tests: { changed: [], importingChanged: [] }, coChange: [], dependencies: [], parts: [], complexity: [], owners: [], caveats: [], ...part,
   };
 }
 const fileFact = (path: string, lines: number, more: Partial<Facts['files'][number]> = {}): Facts['files'][number] => ({

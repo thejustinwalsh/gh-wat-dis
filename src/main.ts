@@ -56,7 +56,7 @@ export const TOOLS: Tool[] = [
   { name: 'mcp', group: SETUP, effect: 'local', usage: 'mcp <client> | mcp --apply [--scope user|project] [--dry-run]', description: 'Print the GitHub MCP server config for a harness, or write it for every harness found here. Stores no token.' },
   { name: 'doctor', group: SETUP, effect: 'local', usage: 'doctor [--offline] [--json] [--no-login] [--mcp user|project|skip] [--tools install|skip]', description: 'Check the runtime, gh, the skills, the GitHub MCP server, the config and the optional tools. Offers a fix where it has one, and installs an optional tool when asked.' },
 
-  { name: 'impact', group: FACTS, effect: 'reads', usage: 'impact [--base <ref>] [--head <ref>] [--working-tree] [--depth N] [--no-complexity]', description: 'Facts about a change: files, changed symbols, dependents, elements, contracts, owners, files that usually change together, and complexity moved (when cccc is installed). Each fact names its source.' },
+  { name: 'impact', group: FACTS, effect: 'reads', usage: 'impact [--base <ref>] [--head <ref>] [--working-tree] [--depth N] [--no-complexity]', description: 'Facts about a change: files, changed symbols, dependents, elements, contracts, owners, files that usually change together, the commands, skills and routes it added or removed, complexity moved (when cccc is installed), and whether it needs a diagram. Each fact names its source.' },
   { name: 'reach', group: FACTS, effect: 'reads', usage: 'reach <path|path#symbol|symbol>... [--depth N]', description: 'Who depends on a file or an exported symbol. Needs no diff.' },
   { name: 'owners', group: FACTS, effect: 'reads', usage: 'owners <path>...', description: 'CODEOWNERS for paths, with the rule that matched.' },
   { name: 'elements', group: FACTS, effect: 'reads', usage: 'elements', description: 'The architecture elements and the files each one maps, from the config or from the workspace layout.' },
@@ -72,7 +72,7 @@ export const TOOLS: Tool[] = [
   { name: 'relate', group: WRITE, effect: 'github', usage: 'relate <issue> [--parent <n>] [--blocked-by <n,n>] [--blocks <n,n>] [--remove]', description: 'Set or remove a native relation between issues: parent, blocked by, blocks. A new parent replaces the old one.' },
   { name: 'labels apply', group: WRITE, effect: 'github', usage: 'labels apply [--prune] [--dry-run]', description: 'Create and update the labels the config wants. --prune also deletes the others.' },
 
-  { name: 'graph from-facts', group: GRAPH, effect: 'reads', usage: 'graph from-facts [facts.json|-] [--all] [--level file [--max-files n]] [--title t]', description: 'A diagram spec from impact facts: the changed and reached elements with their status. --level file gives a code diagram: files as cards, changed symbols as rows.' },
+  { name: 'graph from-facts', group: GRAPH, effect: 'reads', usage: 'graph from-facts [facts.json|-] [--all] [--level file [--max-files n]] [--title t]', description: 'A diagram spec from impact facts: the changed and reached elements with their status, and each command, skill or route the change added or removed inside the element that holds it. --level file gives a code diagram: files as cards, changed symbols as rows.' },
   { name: 'graph from-config', group: GRAPH, effect: 'reads', usage: 'graph from-config [--title t] [--type container|component|context]', description: "A diagram spec of the whole architecture map in the repository's config." },
   { name: 'graph focus', group: GRAPH, effect: 'reads', usage: 'graph focus [spec.json|-] --on <id,id|status:changed,added> [--hops 1] [--direction both|in|out]', description: 'Keep some elements, their neighbours within N hops, and every ancestor.' },
   { name: 'graph collapse', group: GRAPH, effect: 'reads', usage: 'graph collapse [spec.json|-] (--into <id,id> | --to-type container|system|boundary)', description: 'Fold everything inside an element into it and merge the relationships.' },
@@ -87,9 +87,9 @@ export const TOOLS: Tool[] = [
 
   { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--report] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON." },
   { name: 'legend', group: RENDER, effect: 'reads', usage: 'legend [spec.json|-]', description: "A spec's relationships as a Markdown table, to sit under a diagram with numbered lines." },
-  { name: 'blast', group: RENDER, effect: 'reads', usage: 'blast [facts.json|-] [--max-items 5] [--no-heading] [--no-links]', description: 'Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.' },
+  { name: 'blast', group: RENDER, effect: 'reads', usage: 'blast [facts.json|-] [--max-items 5] [--no-heading] [--no-links]', description: 'Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links. The first line is the diagram decision, as a comment GitHub does not show.' },
 
-  { name: 'lint', group: CHECK, effect: 'reads', usage: 'lint <body.md|-> --kind issue|pr|milestone|comment [--json]', description: 'Backstop check of a body before it is posted: what GitHub would break, and gross shape errors. It does not judge wording.' },
+  { name: 'lint', group: CHECK, effect: 'reads', usage: 'lint <body.md|-> --kind issue|pr|milestone|comment [--facts <facts.json>] [--json]', description: 'Backstop check of a body before it is posted: what GitHub would break, and gross shape errors. With --facts, a warning when the facts say draw a diagram and the body has none. It does not judge wording.' },
 ];
 
 const EFFECTS: Record<Effect, string> = { reads: '', local: ' [writes local files]', github: ' [writes to GitHub]' };

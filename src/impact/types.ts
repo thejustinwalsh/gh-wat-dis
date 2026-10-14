@@ -88,6 +88,8 @@ export interface SymbolFact {
   /** Set when the declaration is one the base had under another name, with the same body: that name. */
   renamedFrom?: string;
   dependents: SymbolDependent[];
+  /** Set on a function that calls the same functions as before in another order: a change to the order of its steps. Read from the calls in its body. */
+  callsReordered?: true;
   provenance: Provenance;
   source: FactSource;
 }
@@ -169,6 +171,43 @@ export interface DependencyFact {
   to?: string;
   provenance: 'exact';
 }
+/** What a part is: something a user or another program calls by name. An `option` is a flag of a command, named `<command> --flag`. */
+export type PartKind = 'command' | 'tool' | 'skill' | 'route' | 'job' | 'bin' | 'export' | 'option';
+
+/**
+ * A part the change added or removed: a command, a tool, a skill, a route, a scheduled job, a `bin` or an `exports`
+ * entry, or an option of a command. The architecture map has no entry for it, so its element is the one that holds it.
+ */
+export interface PartFact {
+  name: string;
+  kind: PartKind;
+  change: 'added' | 'removed';
+  /** The element that holds the part: where its code is, when the tools could follow the registry to it. */
+  element: string;
+  /** The file that declares it: the registry, the manifest, the SKILL.md, the workflow. */
+  file: string;
+  line: number;
+  /** How the tools found it, in words: "COMMANDS in src/main.ts", "SKILL.md", "package.json bin". */
+  basis: string;
+  /** What calls it, when known: the element whose registry runs it, or the caller of its element in the architecture map. */
+  calledBy?: { element: string; label: string; technology?: string; provenance: Provenance; source: FactSource };
+  provenance: Provenance;
+  source: FactSource;
+}
+
+/** The diagram that fits the change, decided from the other facts. Draw is the default whenever source changed. */
+export interface DiagramDecision {
+  draw: boolean;
+  /** `element`: elements and relationships. `code`: files and symbols. `dynamic`: numbered steps. `null` when nothing is drawn. */
+  level: 'element' | 'code' | 'dynamic' | null;
+  /** What makes the diagram worth drawing, most specific first. Empty when nothing is drawn. */
+  reasons: string[];
+  /** Why no diagram is drawn: the change is one that a diagram adds nothing to. `null` when one is drawn. */
+  skip: string | null;
+  /** The label of the weakest fact the decision rests on. */
+  provenance: Provenance;
+}
+
 export interface OwnerFact { owner: string; files: string[]; dependentFiles: string[] }
 
 export interface Facts {
@@ -180,6 +219,8 @@ export interface Facts {
   range: { baseRef: string; headRef: string; workingTree: boolean; depth: number };
   /** Web address of the repository, from the `origin` remote. Absent when there is none. */
   repository?: string;
+  /** Whether the change needs a diagram, at which level, and why. */
+  diagram: DiagramDecision;
   tiers: Tiers;
   summary: FactsSummary;
   files: FileFact[];
@@ -193,6 +234,8 @@ export interface Facts {
   tests: { changed: string[]; importingChanged: string[] };
   coChange: CoChangeFact[];
   dependencies: DependencyFact[];
+  /** Commands, tools, skills, routes, jobs, `bin` and `exports` entries the change added or removed. */
+  parts: PartFact[];
   /** Empty when cccc did not run: see `tiers`. Largest change in cognitive complexity first. */
   complexity: ComplexityFact[];
   owners: OwnerFact[];

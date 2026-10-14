@@ -61,7 +61,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 
 | Need | Command |
 |---|---|
-| Facts on what a change touches and reaches | `npx gh-wat-dis impact > facts.json` |
+| Facts on what a change touches and reaches, the parts it added or removed, and whether it needs a diagram (`diagram`) | `npx gh-wat-dis impact > facts.json` |
 | The same, with uncommitted work | `npx gh-wat-dis impact --working-tree > facts.json` |
 | The same, between any two commits (a merged PR) | `npx gh-wat-dis impact --base <ref> --head <ref> > facts.json` |
 | Blast radius section for a PR body: what the change reaches outside its diff, with file links | `npx gh-wat-dis blast facts.json` |
@@ -89,6 +89,7 @@ No MCP server connected? Use `gh issue list|view`, `gh pr list|view|diff|checks`
 | What a PR will close on merge | `npx gh-wat-dis links --body-file pr.md --closes <n>,<m> --text` |
 | The same, for an open PR | `npx gh-wat-dis links --pr <n> --closes <n>,<m> --text` |
 | Backstop check of a body | `npx gh-wat-dis lint body.md --kind issue\|pr\|milestone\|comment` |
+| The same, and a warning when the facts say draw a diagram and the body has none | `npx gh-wat-dis lint body.md --kind pr --facts facts.json` |
 | Health check | `npx gh-wat-dis doctor` |
 
 ### Compose them
