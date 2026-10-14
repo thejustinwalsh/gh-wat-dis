@@ -1,7 +1,7 @@
 import { DETAILS, DIAGRAM_TYPES, ELEMENT_TYPES, LABEL_MODES, STATUSES } from '../spec.ts';
-import type { LintResult } from '../spec.ts';
+import type { DiagramSpec, LintResult } from '../spec.ts';
+import { GROUP_NAME_BUDGET, LABEL_BUDGET, over, trim } from './budget.ts';
 
-const WARN_ELEMENTS = 15;
 const MAX_ELEMENTS = 40;
 const MAX_DESCRIPTION = 120;
 const FULL_DETAIL_MAX = 5;
@@ -68,6 +68,7 @@ export function lintSpec(spec: unknown): LintResult {
     if (el.external !== undefined && typeof el.external !== 'boolean') errors.push(`element "${el.id}": external must be true or false`);
     if (typeof el.name === 'string' && [...el.name].length > MAX_NAME) errors.push(`element "${el.id}": name is ${[...el.name].length} characters; keep it under ${MAX_NAME}`);
     const id = el.id as string;
+    if (parentIds.has(id) && typeof el.name === 'string' && [...el.name].length > GROUP_NAME_BUDGET) warnings.push(`group "${id}" name is ${[...el.name].length} characters; keep it under ${GROUP_NAME_BUDGET}, since a group is never narrower than its name`);
     if (byId.has(id)) { errors.push(`element id "${id}" is used more than once`); badIds = true; }
     byId.set(id, el);
     if (el.name !== undefined && typeof el.name !== 'string') errors.push(`element "${id}": name must be text`);
@@ -160,6 +161,13 @@ export function lintSpec(spec: unknown): LintResult {
         errors.push(`${where}: ${key} "${String(rel[key])}" is not a symbol of "${String(rel[end])}"`);
       }
     }
+    for (const [end, key] of [['from', 'fromSymbol'], ['to', 'toSymbol']] as const) {
+      const symbols = dangling ? undefined : byId.get(rel[end] as string)!.symbols;
+      if (Array.isArray(symbols) && symbols.findIndex((sym) => isBag(sym) && sym.name === rel[key]) >= MAX_SYMBOLS) {
+        warnings.push(`${where}: ${key} "${String(rel[key])}" is past the ${MAX_SYMBOLS} rows a file draws, so the line ends on the file; list it among the first ${MAX_SYMBOLS}`);
+      }
+    }
+    if ([...label].length > LABEL_BUDGET) warnings.push(`${where} label is ${[...label].length} characters; keep it under ${LABEL_BUDGET}, and put the rest in the text`);
     // A line between two files with no words is an import.
     if (!label && isFile(rel.from) && isFile(rel.to)) return;
     if (!label) errors.push(`${where} has no label; say what flows or why`);
@@ -182,8 +190,14 @@ export function lintSpec(spec: unknown): LintResult {
 
   if (elements.length > MAX_ELEMENTS) {
     errors.push(`${elements.length} elements is more than ${MAX_ELEMENTS}; split the diagram or focus it with \`graph focus\``);
-  } else if (elements.length > WARN_ELEMENTS) {
-    warnings.push(`${elements.length} elements is more than ${WARN_ELEMENTS}; split the diagram or focus it with \`graph focus\``);
+  } else if (!errors.length) {
+    // Past its budget a diagram has no layout that reads well. The warning names the filter that brings it back in.
+    const typed = spec as unknown as DiagramSpec;
+    const much = over(typed);
+    if (much.length) {
+      const cut = trim(typed);
+      warnings.push(`${much.join(', and ')}; ${cut ? `\`${cut.command}\` leaves ${cut.boxes} and ${cut.lines}` : 'no filter brings it inside and keeps the change, so cut by hand or draw two diagrams (`graph split`)'}`);
+    }
   }
   return { errors, warnings };
 }

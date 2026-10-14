@@ -1,4 +1,5 @@
 import type { DiagramSpec, SpecElement, SpecRelationship, SpecSymbol, Status } from '../spec.ts';
+import { BUDGET } from '../diagram/budget.ts';
 import type { Facts, FileFact, SymbolFact } from './types.ts';
 
 export interface CodeSpecOptions { title?: string; maxFiles?: number }
@@ -15,15 +16,18 @@ export interface CodeSpecResult {
 }
 
 /** About five cards fit GitHub's width in one calm row. Eight is where a code diagram stops being read. */
-export const MAX_FILES = 8;
+export const MAX_FILES = BUDGET.code.boxes;
 /** A file gets at most this many rows for names that another file newly imports from it. */
 const IMPORT_ROWS = 2;
 /** Slots kept for files outside the diff: the ones that import a changed symbol, and the ones a changed file newly imports. */
 const CONTEXT_SLOTS = 2;
 /** Rows of changed symbols a card lists. With the rows for newly imported names it stays within the 8 a card draws. */
 const ROWS = 6;
-/** One pair of files gets at most this many lines to rows. Past it, one line to the file stands for the rest. */
-const LINES_PER_PAIR = 4;
+/**
+ * One pair of files gets at most this many lines to rows. Past it, one line to the file stands for the rest.
+ * When the diagram would hold more lines than its budget, the next smaller number is used, down to the one line to the file.
+ */
+const LINES_PER_PAIR = [4, 2, 1, 0];
 const CHANGE: Record<string, Status> = { added: 'added', removed: 'removed', modified: 'changed' };
 const short = (sha: string): string => (/^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 7) : sha.toLowerCase().replace('_', ' '));
 const count = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
@@ -184,26 +188,34 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     });
   }
 
-  const relationships: SpecRelationship[] = [];
-  for (const from of drawn) {
-    for (const [to, u] of uses.get(from) ?? []) {
-      if (!drawn.includes(to)) continue;
-      const row = rows.get(to)!;
-      const live = [...new Set([...u.kept, ...u.added])].sort();
-      const onRows = live.filter((n) => row.has(n)).slice(0, LINES_PER_PAIR);
-      // One line for each name that has a row. A name the change added to the import carries the added mark.
-      for (const toSymbol of onRows) relationships.push({ from, to, label: '', toSymbol, ...(u.added.has(toSymbol) ? { status: 'added' as const } : {}) });
-      for (const toSymbol of [...u.removed].filter((n) => row.has(n) && !live.includes(n)).sort()) relationships.push({ from, to, label: '', toSymbol, status: 'removed' });
-      // One line to the file for what has no row: the whole module, or names that are not rows.
-      const rest = live.filter((n) => !onRows.includes(n));
-      if (rest.length || u.whole || u.other) {
-        const allNew = u.fresh || (rest.length > 0 && rest.every((n) => u.added.has(n)) && !u.whole && !u.other);
-        relationships.push({ from, to, label: '', ...(allNew ? { status: 'added' as const } : {}) });
-      } else if (!live.length && !relationships.some((r) => r.from === from && r.to === to) && (u.gone || u.removed.size > 0)) {
-        relationships.push({ from, to, label: '', status: 'removed' });
+  const lines = (perPair: number): SpecRelationship[] => {
+    const relationships: SpecRelationship[] = [];
+    for (const from of drawn) {
+      for (const [to, u] of uses.get(from) ?? []) {
+        if (!drawn.includes(to)) continue;
+        const row = rows.get(to)!;
+        const live = [...new Set([...u.kept, ...u.added])].sort();
+        const onRows = live.filter((n) => row.has(n)).slice(0, perPair);
+        // One line for each name that has a row. A name the change added to the import carries the added mark.
+        for (const toSymbol of onRows) relationships.push({ from, to, label: '', toSymbol, ...(u.added.has(toSymbol) ? { status: 'added' as const } : {}) });
+        const gone = [...u.removed].filter((n) => row.has(n) && !live.includes(n)).sort();
+        for (const toSymbol of gone.slice(0, perPair)) relationships.push({ from, to, label: '', toSymbol, status: 'removed' });
+        // One line to the file for what has no row: the whole module, or names that are not rows.
+        const rest = live.filter((n) => !onRows.includes(n));
+        if (rest.length || u.whole || u.other) {
+          const allNew = u.fresh || (rest.length > 0 && rest.every((n) => u.added.has(n)) && !u.whole && !u.other);
+          relationships.push({ from, to, label: '', ...(allNew ? { status: 'added' as const } : {}) });
+        } else if (!live.length && !relationships.some((r) => r.from === from && r.to === to) && (u.gone || u.removed.size > 0)) {
+          relationships.push({ from, to, label: '', status: 'removed' });
+        }
       }
     }
-  }
+    return relationships;
+  };
+  // A line between two cards always means an import, and no line means none. So lines are never cut:
+  // past the budget, the lines between one pair of files are drawn as fewer, down to one.
+  const perPair = LINES_PER_PAIR.find((n) => lines(n).length <= BUDGET.code.lines) ?? 0;
+  const relationships = lines(perPair);
 
   const leftOut = code.filter((f) => !drawn.includes(f.path));
   const changedLeftOut = leftOut.map((f) => f.path);
@@ -221,13 +233,13 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     ...(moved ? [`${count(moved, 'file')} moved`] : []),
     ...(unparsed.length ? [`${count(unparsed.length, 'changed source file')} in a language the tools do not read (${kinds.join(', ')})`] : []),
     ...(other > 0 ? [`${count(other, 'other changed file')} (pages, config, assets)`] : []),
+    ...(perPair < LINES_PER_PAIR[0]! ? [perPair === 0 ? 'One line stands for all the imports between two files' : `At most ${count(perPair, 'line')} to the rows of a file from any one file; one more to the file stands for the rest`] : []),
   ];
   return {
     spec: {
       title: opts.title ?? `Changed code: ${short(facts.base)}..${short(facts.head)}`,
       type: 'code',
       scope: `${short(facts.base)}..${short(facts.head)}. ${parts.join('. ')}`,
-      direction: 'RIGHT',
       elements,
       relationships,
     },

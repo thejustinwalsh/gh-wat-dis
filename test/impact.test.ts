@@ -985,3 +985,42 @@ test('element spec: the end of an added relationship stays though the map does n
   const bare = codeFacts({ elements: [el('native', 'added', { source: 'git', provenance: 'heuristic', type: 'component' })], files: [fileFact('native/a.rs', 10, { element: 'native', language: 'rust' })] });
   assert.deepEqual(toDiagramSpec(bare).elements.map((e) => e.id), ['native']);
 });
+
+test('budget: both generators stay inside the budget of their diagram type, and the scope line says what was left out', async () => {
+  const { BUDGET, load, over } = await import('../src/diagram/budget.ts');
+  // Element level: ten changed elements with a line between every pair that is next to or one apart, and one added line.
+  const ids = Array.from({ length: 10 }, (_, i) => `e${i}`);
+  const element = (id: string): Facts['elements'][number] => ({ id, name: id.toUpperCase(), type: 'container', status: 'changed', files: 3, filesChanged: 1, dependentsAffected: 0, provenance: 'exact', source: 'config' });
+  const edge = (from: string, to: string, weight: number, status: Facts['edges'][number]['status'] = 'unchanged'): Facts['edges'][number] => ({ from, to, weight, status, provenance: 'resolved', source: 'ast-grep' });
+  const edges = [edge('e9', 'e0', 1, 'added'), ...ids.flatMap((id, i) => [1, 2].filter((d) => i + d < 10).map((d) => edge(id, `e${i + d}`, 10 * d + i)))];
+  assert.equal(edges.length, 18);
+  const spec = toDiagramSpec(codeFacts({ elements: ids.map(element), edges }));
+  assert.deepEqual(over(spec), []);
+  assert.equal(load(spec).lines, BUDGET.container.lines);
+  assert.ok(spec.relationships.some((r) => r.status === 'added'), 'a relationship the change added is never the one cut');
+  // The lightest unchanged lines are the ones left out, and the scope line counts them.
+  assert.ok(!spec.relationships.some((r) => r.from === 'e0' && r.to === 'e1') && !spec.relationships.some((r) => r.from === 'e1' && r.to === 'e2'));
+  assert.match(spec.scope!, /2 unchanged relationships are not drawn$/);
+  assert.equal(toDiagramSpec(codeFacts({ elements: ids.map(element), edges }), { all: true }).relationships.length, 18);
+
+  // File level: four files that each import four changed names from each of the others. A line is never cut,
+  // so the lines between one pair of files are drawn as fewer until the diagram is inside its budget.
+  const files = ['a', 'b', 'c', 'd'].map((n) => `src/${n}.ts`);
+  const names = (file: string): string[] => [1, 2, 3, 4].map((k) => `${file.slice(4, 5)}${k}`);
+  const facts = codeFacts({
+    files: files.map((f) => fileFact(f, 20)),
+    symbols: files.flatMap((f) => names(f).map((n) => symbolFact(f, n))),
+    imports: files.flatMap((from) => files.filter((to) => to !== from).map((to) => ({ from, to, toElement: 'app', toInDiff: true, names: names(to), whole: false, change: 'unchanged' as const, provenance: 'resolved' as const }))),
+  });
+  const code = toCodeSpec(facts).spec;
+  assert.deepEqual(over(code), []);
+  assert.equal(code.relationships.length, 12);
+  // Every pair that imports still has a line: no line between two cards means no import.
+  for (const from of files) for (const to of files) if (from !== to) assert.ok(code.relationships.some((r) => r.from === from && r.to === to), `${from} -> ${to}`);
+  assert.match(code.scope!, /One line stands for all the imports between two files$/);
+  assert.equal(code.direction, undefined, 'the generator leaves the direction to the form of the type');
+  // Inside the budget, each named import keeps its own line to its row, and the scope line says nothing of it.
+  const small = toCodeSpec(codeFacts({ files: facts.files.slice(0, 2), symbols: facts.symbols.filter((s) => s.file === files[0] || s.file === files[1]), imports: facts.imports.filter((i) => files.indexOf(i.from) < 2 && files.indexOf(i.to) < 2) })).spec;
+  assert.equal(small.relationships.length, 8);
+  assert.doesNotMatch(small.scope!, /stands for|to the rows/);
+});

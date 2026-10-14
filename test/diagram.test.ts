@@ -73,8 +73,19 @@ test('lint: size limits', () => {
   const many = (count: number) => lint((s) => {
     for (let i = 0; i < count - 2; i++) s.elements.push({ id: `c${i}`, type: 'component', name: `C${i}`, technology: 'Rust', description: 'd' });
   });
-  assert.equal(many(15).warnings, '');
-  assert.match(many(16).warnings, /16 elements is more than 15; split the diagram or focus it with `graph focus`/);
+  assert.equal(many(12).warnings, '');
+  // Past the budget of its type, the warning says so. With no change marked and no group to fold, no filter helps.
+  assert.match(many(13).warnings, /13 elements is more than the 12 a container diagram holds; no filter brings it inside and keeps the change/);
+  // With a change marked, the warning names the filter that brings the spec inside, and what it leaves.
+  const marked = lint((s) => {
+    for (let i = 0; i < 12; i++) s.elements.push({ id: `c${i}`, type: 'component', name: `C${i}`, technology: 'Rust', description: 'd' });
+    s.elements[0].status = 'changed';
+  });
+  assert.match(marked.warnings, /14 elements is more than the 12 a container diagram holds; `graph focus --on status:changed,added,removed --hops 1` leaves 2 and 1/);
+  const lines = lint((s) => { for (let i = 0; i < 16; i++) s.relationships.push({ from: 'web', to: 'api', label: `Sends ${i}`, technology: 'HTTPS' }); });
+  assert.match(lines.warnings, /17 relationships is more than the 16 a container diagram holds/);
+  assert.match(lint((s) => { s.relationships[0].label = 'x'.repeat(81); }).warnings, /label is 81 characters; keep it under 80/);
+  assert.match(lint((s) => { s.elements.push({ id: 'g', type: 'boundary', name: 'g'.repeat(41) }); s.elements[0].parent = 'g'; }).warnings, /group "g" name is 41 characters; keep it under 40/);
   assert.equal(many(40).errors, '');
   assert.match(many(41).errors, /41 elements is more than 40/);
 });

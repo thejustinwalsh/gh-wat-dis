@@ -1,4 +1,5 @@
 import type { DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
+import { BUDGET } from '../diagram/budget.ts';
 import type { EdgeFact, Facts, SpecOptions } from './types.ts';
 
 function label(e: EdgeFact): string {
@@ -9,8 +10,9 @@ function label(e: EdgeFact): string {
 /** How many files import across the relationship, where the map names no technology. */
 const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : undefined);
 
-/** Past this many elements an element diagram is a hairball: the affected ones are cut to the most reached. */
-const MAX_ELEMENTS = 12;
+/** Past its budget an element diagram is a hairball: the affected elements are cut to the most reached, and the unchanged lines to the heaviest. */
+const MAX_ELEMENTS = BUDGET.container.boxes;
+const MAX_LINES = BUDGET.container.lines;
 
 /**
  * Facts as a diagram spec: the elements the change touched, the ones it reaches, and both ends of
@@ -78,17 +80,32 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
     for (let p = byId.get(id)?.parent; p && !seen.has(p); p = byId.get(p)?.parent) { if (p === group) return true; seen.add(p); }
     return false;
   };
-  const relationships: SpecRelationship[] = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to) && !inside(e.from, e.to) && !inside(e.to, e.from)).map((e) => ({
+  let edges = facts.edges.filter((e) => keep.has(e.from) && keep.has(e.to) && !inside(e.from, e.to) && !inside(e.to, e.from));
+  // Every relationship the change added, removed or altered is drawn. The unchanged ones fill what room is left:
+  // those that touch a changed element first, then the ones the most files import across.
+  let cutLines = 0;
+  if (!opts.all && edges.length > MAX_LINES) {
+    const touched = (e: EdgeFact): number => Number(['added', 'removed', 'changed'].includes(byId.get(e.from)!.status)) + Number(['added', 'removed', 'changed'].includes(byId.get(e.to)!.status));
+    const calm = edges.filter((e) => e.status === 'unchanged').sort((a, b) => touched(b) - touched(a) || b.weight - a.weight || `${a.from} ${a.to}`.localeCompare(`${b.from} ${b.to}`));
+    const gone = new Set(calm.slice(Math.max(0, MAX_LINES - (edges.length - calm.length))));
+    cutLines = gone.size;
+    edges = edges.filter((e) => !gone.has(e));
+  }
+  const relationships: SpecRelationship[] = edges.map((e) => ({
     from: e.from, to: e.to, label: label(e),
     ...(technology(e) ? { technology: technology(e)! } : {}),
     status: e.status,
     meta: { weight: e.weight, provenance: e.provenance, source: e.source },
   }));
+  const left = [
+    ...(cut ? [`${cut} more affected ${cut === 1 ? 'element is' : 'elements are'} not drawn`] : []),
+    ...(cutLines ? [`${cutLines} unchanged ${cutLines === 1 ? 'relationship is' : 'relationships are'} not drawn`] : []),
+  ];
   const short = (sha: string): string => (/^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 7) : sha.toLowerCase().replace('_', ' '));
   return {
     title: opts.title ?? `Change impact: ${short(facts.base)}..${short(facts.head)}`,
     type: elements.length && elements.every((e) => e.type === 'component') ? 'component' : 'container',
-    ...(cut ? { scope: `the change and the elements it reaches most; ${cut} more affected ${cut === 1 ? 'element is' : 'elements are'} not drawn` } : {}),
+    ...(left.length ? { scope: `the change and ${cut ? 'the elements it reaches most' : 'what it reaches'}; ${left.join(', ')}` } : {}),
     elements,
     relationships,
   };
