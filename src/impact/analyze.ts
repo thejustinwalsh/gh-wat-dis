@@ -264,6 +264,8 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     }
     for (const sym of node.syms) {
       const to = sym.reexport?.to;
+      // A Rust file that re-exports its own module has no import of it: that is structure, and the graph has no edge.
+      if (from.endsWith('.rs') && to && !node.edges.some((x) => x.to === to)) continue;
       if (to && near.has(to)) kept(from, to, sym.name === '*' ? [] : [sym.reexport!.name], sym.name === '*', false);
     }
   }

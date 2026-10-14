@@ -38,10 +38,24 @@ function trace(nodes: Map<string, FileNode>): void {
       }
       if (e.whole) for (const to of starTargets(nodes, e.to)) if (to !== node.path) mergeEdge(extra, { to, names: [], whole: true, via: [...e.via], testOnly: e.testOnly, traced: true });
     }
+    // In Rust a name used through a re-export is an import of the file that defines it: `use crate::Bar` reaches
+    // bar.rs, not lib.rs. The names that reach another file leave the import of the module that re-exports them,
+    // and an import left with no name is dropped. In TypeScript the import of the barrel stays, with the traced one beside it.
+    const rust = node.path.endsWith('.rs');
+    if (rust) {
+      node.edges = node.edges.filter((e) => {
+        if (e.traced || !nodes.has(e.to)) return true;
+        const own = e.names.filter((name) => { const o = originOf(nodes, e.to, name); return !o || o.file === e.to || o.file === node.path; });
+        if (own.length === e.names.length) return true;
+        e.names = own;
+        return own.length > 0 || e.whole;
+      });
+    }
     const direct = new Map(node.edges.map((e) => [e.to, e]));
     for (const e of extra.values()) {
+      if (rust) delete e.traced;
       const cur = direct.get(e.to);
-      if (cur) mergeEdge(direct, { ...e, traced: cur.traced }); else node.edges.push(e);
+      if (cur) mergeEdge(direct, rust ? e : { ...e, traced: cur.traced }); else node.edges.push(e);
     }
   }
 }

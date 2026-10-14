@@ -522,8 +522,7 @@ test('rust: signatures, trait impls, dependents through use paths, crate edges',
     ['crates/api/src/everything.rs', 'heuristic'],
     ['crates/api/src/lib.rs', 'resolved'],
     ['crates/api/tests/quote.rs', 'resolved'],
-    ['crates/core/src/lib.rs', 'resolved'],
-  ]);
+  ], 'lib.rs re-exports its own module: that is structure, not a dependent');
   const impl = sym('impl Describe for Circle')!;
   assert.deepEqual([impl.kind, impl.change, impl.exported], ['trait-impl', 'added', true]);
   assert.ok(impl.dependents.some((d) => d.file === 'crates/api/src/lib.rs' && d.provenance === 'heuristic'));
@@ -532,16 +531,19 @@ test('rust: signatures, trait impls, dependents through use paths, crate edges',
   assert.equal(facts.summary.exportedSignatureChanges, 1);
 
   const direct = new Map(facts.dependents.direct.map((d) => [d.file, d]));
-  assert.deepEqual([...direct.keys()], ['crates/api/src/everything.rs', 'crates/api/src/lib.rs', 'crates/api/tests/quote.rs', 'crates/core/src/lib.rs']);
+  assert.deepEqual([...direct.keys()], ['crates/api/src/everything.rs', 'crates/api/src/lib.rs', 'crates/api/tests/quote.rs']);
   assert.equal(direct.get('crates/api/src/everything.rs')!.provenance, 'heuristic');
   assert.deepEqual(direct.get('crates/api/src/everything.rs')!.via, ['core_crate::pricing::*']);
   assert.equal(direct.get('crates/api/src/lib.rs')!.provenance, 'resolved');
   assert.deepEqual(direct.get('crates/api/src/lib.rs')!.symbols, ['format_price']);
   assert.equal(direct.get('crates/api/tests/quote.rs')!.isTest, true);
   assert.deepEqual(facts.tests.importingChanged, ['crates/api/tests/quote.rs']);
+  // `use core_crate::format_price` reaches the file that defines it, not the lib.rs that re-exports it, and the
+  // re-export of lib.rs's own module is structure: no import line leaves lib.rs.
+  assert.ok(facts.imports.some((i) => i.from === 'crates/api/tests/quote.rs' && i.to === 'crates/core/src/pricing.rs' && i.through === undefined), JSON.stringify(facts.imports));
+  assert.ok(!facts.imports.some((i) => (i.from === 'crates/api/tests/quote.rs' && i.to === 'crates/core/src/lib.rs') || i.from === 'crates/core/src/lib.rs'), JSON.stringify(facts.imports));
   assert.deepEqual(facts.dependents.transitive, [
     { element: 'api', count: 3, minDepth: 1, provenance: 'measured' },
-    { element: 'core-crate', count: 1, minDepth: 1, provenance: 'measured' },
     { element: 'cli', count: 1, minDepth: 2, provenance: 'measured' },
   ]);
 
@@ -568,7 +570,7 @@ test('rust: signatures, trait impls, dependents through use paths, crate edges',
 
   const reach = await reachOf({ cwd: dir, targets: ['format_price', 'crates/core/src/shape.rs#Circle::area'] });
   assert.deepEqual(reach.targets[0]!.matches.map((m) => m.file), ['crates/core/src/pricing.rs']);
-  assert.equal(reach.targets[0]!.matches[0]!.direct.length, 4);
+  assert.equal(reach.targets[0]!.matches[0]!.direct.length, 3);
   assert.deepEqual(reach.targets[0]!.matches[0]!.transitive.find((t) => t.element === 'cli'), { element: 'cli', count: 1, minDepth: 2, provenance: 'measured' });
   assert.deepEqual(reach.targets[1]!.matches[0]!.direct.map((d) => [d.file, d.provenance]), [['crates/api/src/lib.rs', 'heuristic']]);
 });
