@@ -301,7 +301,7 @@ test('ts: elements, edges, markdown and spec', async () => {
   // `tools` is a folder with no package: next to a workspace it is not an element.
   assert.deepEqual(spec.elements.map((e) => e.id).sort(), ['acme-api', 'acme-shared', 'acme-web']);
   // A generated line says what moves, and how many files import across it.
-  assert.deepEqual([spec.relationships.find((r) => r.from === 'acme-web')!.label, spec.relationships.find((r) => r.from === 'acme-web')!.technology], ['Imports code from', '3 imports']);
+  assert.deepEqual([spec.relationships.find((r) => r.from === 'acme-web')!.label, spec.relationships.find((r) => r.from === 'acme-web')!.technology], ['Imports formatPrice and legacyFormat from', '3 imports'], 'a generated line names what moves across it');
   assert.equal(spec.elements.find((e) => e.id === 'acme-shared')!.description, '4 files · 2 changed');
   const all = toDiagramSpec(facts, { all: true, title: 'Everything' });
   assertSpecValid(all);
@@ -1024,7 +1024,7 @@ test('budget: both generators stay inside the budget of their diagram type, and 
   // Every pair of drawn files that imports has a line: no line between two cards means no import.
   const drawnFiles = code.elements.map((e) => e.id);
   for (const from of drawnFiles) for (const to of drawnFiles) if (from !== to) assert.ok(code.relationships.some((r) => r.from === from && r.to === to), `${from} -> ${to}`);
-  assert.match(code.scope!, /3 of 4 changed source files drawn\. Not drawn: d\.ts \(\+20\)\. Left out to keep three layers of files and 8 lines that fit one image: d\.ts$/);
+  assert.match(code.scope!, /3 of 4 changed source files drawn\. Left out to keep three layers of files and 8 lines that fit one image: d\.ts$/);
   assert.equal(code.direction, undefined, 'the generator leaves the direction to the form of the type');
   // Each import that names one name with a row ends on that row.
   const one = toCodeSpec(codeFacts({ files: facts.files.slice(0, 2), symbols: facts.symbols.filter((s) => s.file === files[0] || s.file === files[1]),
@@ -1049,4 +1049,32 @@ test('budget: a code diagram from facts keeps three layers round the file with t
   assert.deepEqual(changedLeftOut.sort(), ['src/d.ts', 'src/e.ts']);
   assert.match(spec.scope!, /Left out to keep three layers of files and 8 lines that fit one image: (d\.ts, e\.ts|e\.ts, d\.ts)$/);
   assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] }, 'the spec passes the lint of the tool that wrote it');
+});
+
+test('code spec: a test never takes a card before source, the first file stays inside three layers, and each file is named once', async () => {
+  const { codeShape } = await import('../src/diagram/code-shape.ts');
+  const imp = (from: string, to: string, names: string[]) => ({ from, to, toElement: 'app', toInDiff: true, names, whole: false, change: 'unchanged' as const, provenance: 'resolved' as const });
+  // Nine changed source files, a changed test that imports the one with the most change, and two files outside the diff that import another.
+  const src = Array.from({ length: 9 }, (_, i) => `src/m${i}.ts`);
+  const facts = codeFacts({
+    files: [fileFact('test/all.test.ts', 400, { kind: 'test' }), ...src.map((f, i) => fileFact(f, 300 - i))],
+    symbols: src.map((f) => symbolFact(f, `x${f.slice(5, 6)}`)),
+    imports: [imp('test/all.test.ts', 'src/m0.ts', ['x0']), imp('src/u1.ts', 'src/m1.ts', ['x1']), imp('src/u2.ts', 'src/m1.ts', ['x1'])].map((i) => ({ ...i, toInDiff: true })),
+  });
+  const ids = toCodeSpec(facts).spec.elements.map((e) => e.id);
+  assert.ok(!ids.includes('test/all.test.ts'), `the test took a card while source was left out: ${ids.join(', ')}`);
+
+  // A chain of five changed files, the most changed in the middle: three layers are kept with it inside them.
+  const chain = Array.from({ length: 5 }, (_, i) => `src/c${i}.ts`);
+  const deep = codeFacts({
+    files: chain.map((f, i) => fileFact(f, i === 3 ? 500 : 100 - i)),
+    symbols: chain.map((f) => symbolFact(f, `y${f.slice(5, 6)}`)),
+    imports: chain.slice(0, -1).map((from, i) => imp(from, chain[i + 1]!, [`y${i + 1}`])),
+  });
+  const { spec } = toCodeSpec(deep);
+  assert.ok(spec.elements.some((e) => e.id === 'src/c3.ts'), 'the file with the most change is drawn');
+  assert.ok(!codeShape(spec).beyond.length && codeShape(spec).depth <= 3, 'the spec is inside three layers');
+  assert.deepEqual(lintSpec(spec), { errors: [], warnings: [] }, 'the spec passes the lint of the tool that wrote it');
+  const named = spec.scope!.match(/c\d\.ts/g) ?? [];
+  assert.equal(named.length, new Set(named).size, `each file is named once in the scope line: ${spec.scope}`);
 });

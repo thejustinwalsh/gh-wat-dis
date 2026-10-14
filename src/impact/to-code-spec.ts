@@ -31,6 +31,7 @@ const FIXTURE = /(^|\/)(fixtures?|__fixtures__|__mocks__|golden|testdata|snapsho
 const CONFIG = /(^|\/)[^/]*\.config\.[cm]?[jt]s$/;
 /** Pages and styles are not code the tools would read symbols from. */
 const MARKUP = /\.(html?|css|scss|sass|less|svg|xml)$/;
+const TEST = /(^|\/)(tests?|__tests__)\/|\.test\.[a-z]+$/;
 const E2E = /(^|\/)(e2e|playwright|cypress)\/|\.(e2e|spec)\.[a-z]+$/;
 
 /**
@@ -62,7 +63,8 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
   // A list of re-exports, a fixture, a test or a build config holds little of a change, so it ranks low.
   const isCode = (f: FileFact): boolean => f.language !== null && (f.kind === 'source' || f.kind === 'test') && !f.binary;
   const barrel = (path: string): boolean => (symbols.get(path) ?? []).length > 0 && symbols.get(path)!.every((s) => s.kind === 'reexport');
-  const testish = (f: FileFact): boolean => tests.has(f.path) || f.kind === 'test' || E2E.test(f.path) || FIXTURE.test(f.path);
+  const testPath = (path: string): boolean => tests.has(path) || changed.get(path)?.kind === 'test' || E2E.test(path) || FIXTURE.test(path) || TEST.test(path);
+  const testish = (f: FileFact): boolean => testPath(f.path);
   const weight = (f: FileFact): number => {
     const own = f.insertions + f.deletions + 3 * [...rise].filter(([k]) => k.startsWith(`${f.path}\0`)).reduce((n, [, v]) => n + v, 0);
     return own * (barrel(f.path) ? 0.15 : 1) * (FIXTURE.test(f.path) ? 0.25 : E2E.test(f.path) ? 0.3 : tests.has(f.path) || f.kind === 'test' ? 0.5 : 1) * (CONFIG.test(f.path) ? 0.25 : 1);
@@ -136,9 +138,11 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
     // The file with the most change is the one a reader comes for. A file that imports it by name is kept before any other extra card.
     const top = drawn[0];
     const ofTop = top === undefined ? [] : [...uses].filter(([from, targets]) => !drawn.includes(from) && targets.has(top) && touches(top, targets.get(top)!)).map(([from]) => from)
-      .sort((a, b) => Number(!changed.has(a)) - Number(!changed.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
+      .sort((a, b) => Number(testPath(a)) - Number(testPath(b)) || Number(!changed.has(a)) - Number(!changed.has(b)) || reach(b) - reach(a) || a.localeCompare(b));
     const around = context.filter((f) => [...(uses.get(f) ?? [])].some(([to, u]) => drawn.includes(to) && touches(to, u)) || drawn.some((d) => uses.get(d)?.has(f)));
-    for (const f of [...ofTop.slice(0, 1), ...around, ...pool.map((c) => c.path)]) if (drawn.length < max && !drawn.includes(f) && !excluded.has(f)) drawn.push(f);
+    // A test takes a card only when no source file is left to take it.
+    const fill = [...ofTop.slice(0, 1), ...around, ...pool.map((c) => c.path)];
+    for (const f of [...fill.filter((x) => !testPath(x)), ...fill.filter(testPath)]) if (drawn.length < max && !drawn.includes(f) && !excluded.has(f)) drawn.push(f);
 
     // Groups: the elements of the architecture map, or of the workspace. A top-level folder is not an architecture element.
     const elementOf = (file: string): string | undefined =>
@@ -217,6 +221,8 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
 
     const leftOut = code.filter((f) => !drawn.includes(f.path));
     const changedLeftOut = leftOut.map((f) => f.path);
+    // A file is named once: one left out to keep three layers is named there, not also among the files not drawn.
+    const notDrawn = leftOut.filter((f) => !excluded.has(f.path));
     const dependentsLeftOut = importers.filter((f) => !drawn.includes(f)).sort();
     // Source the tools do not parse is still source: it is named as such, with its languages.
     const unparsed = facts.files.filter((f) => f.language === null && f.kind === 'source' && !MARKUP.test(f.path));
@@ -230,10 +236,10 @@ export function toCodeSpec(facts: Facts, opts: CodeSpecOptions = {}): CodeSpecRe
       for (let k = 1; k <= parts.length; k++) { const t = parts.slice(-k).join('/'); if (known.filter((o) => o === t || o.endsWith(`/${t}`)).length <= 1) return t; }
       return path;
     };
-    const biggest = leftOut.slice(0, 2).map((f) => `${tail(f.path)} (${delta(changed.get(f.path)!)})`);
+    const biggest = notDrawn.slice(0, 2).map((f) => `${tail(f.path)} (${delta(changed.get(f.path)!)})`);
     const parts = [
       `${drawn.filter((f) => changed.has(f)).length} of ${count(code.length, 'changed source file')} drawn`,
-      ...(leftOut.length ? [`Not drawn: ${biggest.join(', ')}${leftOut.length > 2 ? ` and ${leftOut.length - 2} more` : ''}`] : []),
+      ...(notDrawn.length ? [`Not drawn: ${biggest.join(', ')}${notDrawn.length > 2 ? ` and ${notDrawn.length - 2} more` : ''}`] : []),
       ...(dependentsLeftOut.length ? [`${count(dependentsLeftOut.length, 'more importer')} not drawn`] : []),
       ...(moved ? [`${count(moved, 'file')} moved`] : []),
       ...(unparsed.length ? [`${count(unparsed.length, 'changed source file')} in a language the tools do not read (${kinds.join(', ')})`] : []),

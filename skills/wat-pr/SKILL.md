@@ -22,7 +22,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    ```bash
    npx gh-wat-dis graph from-facts .wat-tmp/facts.json > .wat-tmp/change.json
    ```
-   The spec is scoped to the change already: the elements it touched, the ones it reaches, and both ends of a relationship it added or removed. Edit it: replace generated labels with the real relationship ("publishes OrderPlaced", not "imports (3)") and add technology. Render it with the `wat-diagram` skill, and reshape it only when the renderer prints a warning. When every element is only `changed` and no relationship is new, the element diagram has no news: skip it. For a hard change inside one element or a few files, or a change whose point is which functions moved, draw the code level from the same facts:
+   The spec is scoped to the change already: the elements it touched, the ones it reaches, and both ends of a relationship it added or removed. Edit it: a generated line says only what the tools saw, the names one element imports from the other ("Imports toCodeSpec and 2 more from", "3 imports"), or "Imports code from" when no file near the change imports across it. Relabel each line with what it does ("publishes OrderPlaced") and its technology. Render it with the `wat-diagram` skill, and reshape it only when the renderer prints a warning. When every element is only `changed` and no relationship is new, the element diagram has no news: skip it. For a hard change inside one element or a few files, or a change whose point is which functions moved, draw the code level from the same facts:
    ```bash
    npx gh-wat-dis graph from-facts .wat-tmp/facts.json --level file > .wat-tmp/code.json
    ```

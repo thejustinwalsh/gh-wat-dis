@@ -2,10 +2,18 @@ import type { DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
 import { BUDGET } from '../diagram/budget.ts';
 import type { EdgeFact, Facts, SpecOptions } from './types.ts';
 
-function label(e: EdgeFact): string {
+/**
+ * A generated line says what moves across it as far as the tools saw it: the names one element imports from the
+ * other, read from the imports of the files around the change. Where no file near the change imports across it, the
+ * tools know only that code is imported. The author relabels the line with what it does.
+ */
+function label(e: EdgeFact, names: string[]): string {
   if (e.label) return e.label;
-  if (e.weight > 0) return 'Imports code from';
-  return e.source === 'manifest' ? 'Declares a dependency on' : 'Imported code from';
+  if (e.source === 'manifest' && !e.weight) return 'Declares a dependency on';
+  const verb = e.weight > 0 ? 'Imports' : 'Imported';
+  if (!names.length) return `${verb} code from`;
+  const shown = names.slice(0, 2).join(names.length === 2 ? ' and ' : ', ');
+  return `${verb} ${shown}${names.length > 2 ? ` and ${names.length - 2} more` : ''} from`;
 }
 /** How many files import across the relationship, where the map names no technology. */
 const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : e.source === 'manifest' ? 'package manifest' : undefined);
@@ -92,8 +100,18 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
     cutLines = gone.size;
     edges = edges.filter((e) => !gone.has(e));
   }
+  // The names each element imports from another, as the facts list them for the files around the change.
+  const elementOf = new Map<string, string>(facts.files.map((f) => [f.path, f.element]));
+  for (const d of facts.dependents.direct) elementOf.set(d.file, d.element);
+  const moved = new Map<string, Set<string>>();
+  for (const i of facts.imports) {
+    const from = elementOf.get(i.from);
+    if (from === undefined || from === i.toElement || i.change === 'removed') continue;
+    const key = `${from}\0${i.toElement}`;
+    for (const n of i.names) (moved.get(key) ?? moved.set(key, new Set()).get(key)!).add(n);
+  }
   const relationships: SpecRelationship[] = edges.map((e) => ({
-    from: e.from, to: e.to, label: label(e),
+    from: e.from, to: e.to, label: label(e, [...(moved.get(`${e.from}\0${e.to}`) ?? [])].sort()),
     ...(technology(e) ? { technology: technology(e)! } : {}),
     status: e.status,
     meta: { weight: e.weight, provenance: e.provenance, source: e.source },

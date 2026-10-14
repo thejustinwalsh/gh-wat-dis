@@ -242,6 +242,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   // files they import. Then every import between two drawn cards is a line, whichever side of the diff each is on.
   // A file outside the diff reads the same on both sides, so its imports are kept ones. A name that reaches a file
   // through a module that re-exports it is listed with that module, and a re-export is an import of what it re-exports.
+  // An import of a file that is new, or from one, was not there before: it is added.
   const near = new Set<string>([...changed.keys()].filter((p) => graph.nodes.has(p)));
   for (const d of directList) near.add(d.file);
   for (const i of imports) if (graph.nodes.has(i.to)) near.add(i.to);
@@ -249,7 +250,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const kept = (from: string, to: string, names: string[], whole: boolean, testOnly: boolean, through?: string): void => {
     if (listedPairs.has(`${from}\0${to}`) || from === to) return;
     listedPairs.add(`${from}\0${to}`);
-    imports.push({ from, to, toElement: els.of(to), toInDiff: changed.has(to), names: [...new Set(names)].sort(), whole, ...(testOnly ? { testOnly } : {}), change: 'unchanged', ...(through ? { through } : {}), provenance: 'resolved' });
+    imports.push({ from, to, toElement: els.of(to), toInDiff: changed.has(to), names: [...new Set(names)].sort(), whole, ...(testOnly ? { testOnly } : {}), change: changed.get(to)?.status === 'added' || changed.get(from)?.status === 'added' ? 'added' : 'unchanged', ...(through ? { through } : {}), provenance: 'resolved' });
   };
   for (const from of near) {
     const node = graph.nodes.get(from)!;
