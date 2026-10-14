@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { lintSpec, render } from '../src/diagram/index.ts';
 import { MAX_WIDTH } from '../src/diagram/fit.ts';
 import { GOLDEN } from '../src/diagram/judge.ts';
+import { BREADTH_BUDGET, BUDGET } from '../src/diagram/budget.ts';
 import { CARD_ROW } from '../src/diagram/layout.ts';
 import type { Layout, NodeBox, Pt, Rect } from '../src/diagram/layout.ts';
 import type { DiagramSpec } from '../src/spec.ts';
@@ -81,7 +82,7 @@ test('layout corpus: every drawing passes the gates on its geometry, and its run
     const l = out.layout;
     assert.deepEqual(gateFaults(spec, l), [], name);
     // What the judge says of its own choice agrees with the geometry.
-    assert.deepEqual(kept.fails.filter((g) => g !== 'width' && g !== 'height'), [], `${name}: ${out.report.why}`);
+    assert.deepEqual(kept.fails.filter((g) => g !== 'width' && g !== 'height' && g !== 'calm'), [], `${name}: ${out.report.why}`);
     assert.equal(kept.fails.includes('width'), out.width > MAX_WIDTH, name);
     assert.equal(kept.fails.includes('height'), out.height > Math.round(MAX_WIDTH * GOLDEN), name);
     assert.equal(out.report.passed, kept.fails.length === 0, name);
@@ -89,4 +90,50 @@ test('layout corpus: every drawing passes the gates on its geometry, and its run
   }
   if (process.env.UPDATE_LAYOUT) writeFileSync(EXPECTED, JSON.stringify(table, null, 2) + '\n');
   assert.deepEqual(table, JSON.parse(readFileSync(EXPECTED, 'utf8')), 'a drawing moved: look at it, then run UPDATE_LAYOUT=1 node --test test/layout.test.ts');
+});
+
+/**
+ * Specs at the edge of each type's budget, made up from a seed: a chain of a given depth, at most four elements side
+ * by side at each step, each joined to one before it, and then more lines between neighbouring steps until the line
+ * budget is used. A code diagram is three steps deep, as its budget says.
+ */
+function atBudget(type: DiagramSpec['type'], depth: number, seed: number): DiagramSpec {
+  let state = seed;
+  const random = (): number => { state = (state * 1103515245 + 12345) & 0x7fffffff; return state / 0x7fffffff; };
+  const { boxes, lines } = BUDGET[type];
+  const steps: number[][] = Array.from({ length: depth }, () => []);
+  for (let i = 0; i < boxes; i++) {
+    let k = i < depth ? i : Math.floor(random() * depth);
+    for (let t = 0; steps[k]!.length >= BREADTH_BUDGET && t < depth; t++) k = (k + 1) % depth;
+    steps[k]!.push(i);
+  }
+  const leaf = type === 'context' ? 'system' : type === 'code' ? 'file' : 'container';
+  const elements = Array.from({ length: boxes }, (_, i) => ({ id: `n${i}`, type: leaf, name: type === 'code' ? `src/file${i}.ts` : `Element ${i}`, technology: 'Rust' })) as DiagramSpec['elements'];
+  const relationships: DiagramSpec['relationships'] = [];
+  const seen = new Set<string>();
+  const add = (a: number, b: number): void => {
+    if (a === b || seen.has(`${a} ${b}`)) return;
+    seen.add(`${a} ${b}`);
+    relationships.push({ from: `n${a}`, to: `n${b}`, label: type === 'code' ? '' : 'Sends data to', ...(type === 'dynamic' ? { order: relationships.length + 1 } : {}) });
+  };
+  for (let k = 1; k < depth; k++) for (const b of steps[k]!) add(steps[k - 1]![Math.floor(random() * steps[k - 1]!.length)]!, b);
+  for (let guard = 0; relationships.length < lines && guard < 500; guard++) {
+    const k = Math.floor(random() * (depth - 1));
+    add(steps[k]![Math.floor(random() * steps[k]!.length)]!, steps[k + 1]![Math.floor(random() * steps[k + 1]!.length)]!);
+  }
+  return { title: 'At the budget', type, elements, relationships };
+}
+
+test('budget: a spec at the limit of its type has a layout that passes every gate', async () => {
+  const { judge } = await import('../src/diagram/fit.ts');
+  const { over } = await import('../src/diagram/budget.ts');
+  for (const type of ['context', 'container', 'component', 'code', 'dynamic', 'deployment', 'landscape'] as const) {
+    const depths = type === 'code' ? [3] : [3, 5, 8].filter((d) => d <= BUDGET[type].boxes && Math.ceil(BUDGET[type].boxes / d) <= BREADTH_BUDGET);
+    for (const depth of depths) for (const seed of [1, 2, 3, 4, 5]) {
+      const spec = atBudget(type, depth, seed);
+      assert.deepEqual(over(spec), [], `${type} depth ${depth} seed ${seed} is inside the budget`);
+      const { report } = await judge(spec);
+      assert.ok(report.passed, `${type} depth ${depth} seed ${seed}: ${report.why}`);
+    }
+  }
 });

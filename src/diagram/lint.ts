@@ -1,6 +1,7 @@
 import { DETAILS, DIAGRAM_TYPES, ELEMENT_TYPES, LABEL_MODES, STATUSES } from '../spec.ts';
 import type { DiagramSpec, LintResult } from '../spec.ts';
 import { GROUP_NAME_BUDGET, LABEL_BUDGET, over, trim } from './budget.ts';
+import { splitGroups } from '../graph/split.ts';
 
 const MAX_ELEMENTS = 40;
 const MAX_DESCRIPTION = 120;
@@ -10,6 +11,8 @@ const MAX_SYMBOLS = 8;
 const MAX_NAME = 120;
 /** An element of one of these types may hold others. A person, a store, a queue or a file may not. */
 const HOLDERS = new Set(['boundary', 'node', 'system', 'container', 'component']);
+/** Types that are only ever a group. */
+const HOLDERS_EMPTY = new Set(['boundary', 'node']);
 const SPEC_KEYS = new Set(['title', 'type', 'scope', 'direction', 'detail', 'labels', 'elements', 'relationships']);
 const ELEMENT_KEYS = new Set(['id', 'type', 'name', 'kind', 'technology', 'description', 'parent', 'external', 'status', 'symbols', 'meta']);
 const RELATIONSHIP_KEYS = new Set(['from', 'to', 'label', 'technology', 'status', 'order', 'fromSymbol', 'toSymbol', 'meta']);
@@ -124,6 +127,14 @@ export function lintSpec(spec: unknown): LintResult {
   }
 
   const orders = new Set<number>();
+  if (spec.type === 'code' && spec.direction !== undefined) warnings.push('a code diagram is drawn left to right in layers of files, and a direction overrides that form; leave direction out');
+  if (spec.type === 'code' && spec.labels === 'numbered') errors.push('labels: a code diagram has no words on its lines to number; leave labels out');
+  const seenRels = new Set<string>();
+  if (spec.type === 'dynamic' && relationships.length) {
+    const steps = relationships.filter((r) => isBag(r) && typeof r.order === 'number').map((r) => (r as Bag).order as number).sort((a, b) => a - b);
+    if (steps.length < relationships.length) warnings.push(`${relationships.length - steps.length} of the ${relationships.length} steps of this flow have no order; number every step from 1`);
+    else if (steps.some((n, i) => n !== i + 1)) warnings.push(`the steps of this flow are numbered ${steps.join(', ')}; number them 1 to ${steps.length} with no gap`);
+  }
   if (spec.type === 'dynamic' && relationships.length > MAX_STEPS) {
     warnings.push(`a flow of ${relationships.length} steps is more than ${MAX_STEPS}; write the steps as a numbered list, or draw two flows`);
   }
@@ -152,6 +163,12 @@ export function lintSpec(spec: unknown): LintResult {
         }
       }
     }
+    const relKey = JSON.stringify([rel.from, rel.to, rel.label ?? '', rel.fromSymbol ?? '', rel.toSymbol ?? '', rel.status ?? '', rel.technology ?? '']);
+    if (seenRels.has(relKey)) warnings.push(`${where} is listed more than once; keep one`);
+    seenRels.add(relKey);
+    if (!dangling && rel.from === rel.to && byId.get(rel.from as string)!.type === 'file' && rel.fromSymbol === undefined && rel.toSymbol === undefined) warnings.push(`${where}: a file that imports itself draws a loop that says nothing; leave it out`);
+    if (!dangling && rel.from === rel.to && parentIds.has(rel.from)) warnings.push(`${where} is a line from a group to itself; relate the elements inside it`);
+    if (!dangling && rel.from === rel.to && HOLDERS_EMPTY.has(String(byId.get(rel.from as string)!.type)) && !parentIds.has(rel.from)) warnings.push(`${where} is a line from an empty group to itself; leave it out`);
     const label = text(rel.label);
     const isFile = (end: unknown): boolean => typeof end === 'string' && byId.get(end)?.type === 'file';
     for (const [end, key] of [['from', 'fromSymbol'], ['to', 'toSymbol']] as const) {
@@ -196,7 +213,7 @@ export function lintSpec(spec: unknown): LintResult {
     const much = over(typed);
     if (much.length) {
       const cut = trim(typed);
-      warnings.push(`${much.join(', and ')}; ${cut ? `\`${cut.command}\` leaves ${cut.boxes} and ${cut.lines}` : 'no filter brings it inside and keeps the change, so cut by hand or draw two diagrams (`graph split`)'}`);
+      warnings.push(`${much.join(', and ')}; ${cut ? `\`${cut.command}\` leaves ${cut.boxes} and ${cut.lines}` : `no filter brings it inside and keeps the change, so cut by hand or draw two diagrams${splitGroups(typed).length > 1 ? ' (`graph split` writes one for each group)' : ''}`}`);
     }
   }
   return { errors, warnings };

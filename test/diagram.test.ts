@@ -82,8 +82,8 @@ test('lint: size limits', () => {
     s.elements[0].status = 'changed';
   });
   assert.match(marked.warnings, /14 elements is more than the 12 a container diagram holds; `graph focus --on status:changed,added,removed --hops 1` leaves 2 and 1/);
-  const lines = lint((s) => { for (let i = 0; i < 16; i++) s.relationships.push({ from: 'web', to: 'api', label: `Sends ${i}`, technology: 'HTTPS' }); });
-  assert.match(lines.warnings, /17 relationships is more than the 16 a container diagram holds/);
+  const lines = lint((s) => { for (let i = 0; i < 12; i++) s.relationships.push({ from: 'web', to: 'api', label: `Sends ${i}`, technology: 'HTTPS' }); });
+  assert.match(lines.warnings, /13 relationships is more than the 12 a container diagram holds/);
   assert.match(lint((s) => { s.relationships[0].label = 'x'.repeat(81); }).warnings, /label is 81 characters; keep it under 80/);
   assert.match(lint((s) => { s.elements.push({ id: 'g', type: 'boundary', name: 'g'.repeat(41) }); s.elements[0].parent = 'g'; }).warnings, /group "g" name is 41 characters; keep it under 40/);
   assert.equal(many(40).errors, '');
@@ -468,7 +468,7 @@ test('judge: a direction, a label mode and a level of detail that are named are 
 
 test('judge: the gates, the rank among layouts that pass, and the faults in words', async () => {
   const { compare, failed, faults, rank } = await import('../src/diagram/judge.ts');
-  const calm = { lines: 4, broken: 0, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
+  const calm = { lines: 4, broken: 0, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, roundabout: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
   const page = { width: 860, height: 1376 };
   assert.deepEqual(failed(calm, { width: 860, height: 1376 }, page), []);
   assert.deepEqual(failed({ ...calm, broken: 1, titles: 1, overlaps: 1 }, { width: 861, height: 1377 }, page), ['lines', 'text', 'overlap', 'width', 'height']);
@@ -495,7 +495,11 @@ test('judge: the gates, the rank among layouts that pass, and the faults in word
   ]);
   // A fault states what is wrong. A fix is printed by the tool only after it was tried.
   assert.doesNotMatch(poor.join(' '), /graph |--labels/);
-  assert.deepEqual(faults({ ...calm, crossings: 2 }, (id) => id), []);
+  // One crossing for every four lines is calm. More is a fault, and fails the calm gate.
+  assert.deepEqual(faults({ ...calm, crossings: 1 }, (id) => id), []);
+  assert.deepEqual(faults({ ...calm, crossings: 2 }, (id) => id), ['2 line crossings on 4 lines']);
+  assert.deepEqual(failed({ ...calm, crossings: 2 }, page, page), ['calm']);
+  assert.deepEqual(failed({ ...calm, roundabout: 1 }, page, page), ['calm']);
 });
 
 test('legend: the table rows carry the numbers drawn on the lines, in the same order', async () => {
@@ -643,7 +647,7 @@ test('cli: stderr says what layout was kept, and --report prints the judgement a
   assert.equal(wide.status, 0, wide.stderr);
   assert.match(wide.stderr, /^layout: no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/m);
   assert.match(wide.stderr, /^warning: \d+px is wider than GitHub's 860px body/m);
-  assert.match(wide.stderr, /^fix: no --direction right gives \d+ x \d+px with \d of these \d warnings left\.$/m);
+  assert.match(wide.stderr, /^fix: no --direction right gives \d+ x \d+px with \d warnings?, where there (was 1|were \d)\.$/m);
   assert.equal(run(spec, '--report', '-o', '-').status, 2);
 });
 

@@ -49,11 +49,16 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
         if (next.elements.length < 2 || next.elements.some((e) => (e.type === 'boundary' || e.type === 'node') && !parents.has(e.id))) return;
       }
       if (o === opts && !goneEls.length && !goneRels.length && specs.length === 1 && specs[0]!.direction === spec.direction && JSON.stringify(specs[0]!.elements.map((e) => e.name)) === JSON.stringify(spec.elements.map((e) => e.name))) return;
-      // The change itself is never cut: what it added, changed or removed stays in the picture.
-      if (!folds && (goneEls.some((e) => active(e.status)) || goneRels.some((r) => active(r.status)))) return;
+      // The change itself is never cut or folded away: every element and every line that the change added, changed or
+      // removed is still in the picture, as itself and with its mark. A fix that loses one is not offered, whatever it saves.
+      const kept = new Map(specs.flatMap((x) => x.elements.map((e) => [e.id, e.status] as const)));
+      const keptRels = new Map(specs.flatMap((x) => x.relationships.map((r) => [relKey(r), r.status] as const)));
+      if (spec.elements.some((e) => changes(e.status) && kept.get(e.id) !== e.status)) return;
+      if (spec.relationships.some((r) => changes(r.status) && keptRels.get(relKey(r)) !== r.status)) return;
       const names = goneEls.slice(0, 3).map((e) => `"${e.name}"`).join(', ') + (goneEls.length > 3 ? ` and ${goneEls.length - 3} more` : '');
       const removes = folds ? (goneEls.length ? `folds ${plural(goneEls.length, 'element')} into ${goneEls.length === 1 ? 'its group' : 'their groups'}` : '')
-        : [goneEls.length ? `removes ${plural(goneEls.length, 'unchanged element')} (${names})` : '', goneRels.length ? `${goneEls.length ? '' : 'removes '}${plural(goneRels.length, 'unchanged line')}` : ''].filter(Boolean).join(' and ');
+        : [goneEls.length ? `removes ${plural(goneEls.length, `${goneEls.every((e) => e.status === 'affected') ? 'affected' : goneEls.some((e) => e.status === 'affected') ? 'unchanged or affected' : 'unchanged'} element`)} (${names})` : '',
+          goneRels.length ? `${goneEls.length ? '' : 'removes '}${plural(goneRels.length, `${goneRels.every((r) => r.status === 'affected') ? 'affected' : goneRels.some((r) => r.status === 'affected') ? 'unchanged or affected' : 'unchanged'} line`)}` : ''].filter(Boolean).join(' and ');
       tries.push({ command, specs, opts: o, removes });
     } catch { /* the filter does not apply to this spec */ }
   };
@@ -79,6 +84,12 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
       () => ({ ...spec, elements: spec.elements.map((e) => (long.includes(e) ? { ...e, name: [...e.name].slice(0, GROUP_NAME_MAX).join('') } : e)) }));
   }
   if (chosen?.labels === 'text' && spec.type !== 'dynamic' && (opts.labels ?? spec.labels ?? 'auto') !== 'auto') add('--labels auto', () => spec, { ...opts, labels: 'auto' });
+  // Words on the lines that make the drawing too tall or too wide go in a table under it.
+  const worded = spec.relationships.some((r) => r.label?.trim());
+  if (chosen?.labels === 'text' && worded && spec.type !== 'code' && (opts.labels ?? spec.labels) !== 'text') add('--labels numbered', () => spec, { ...opts, labels: 'numbered' });
+  if (opts.labels === 'numbered') add('no --labels numbered', () => spec, { ...opts, labels: undefined });
+  // Elements the change only reaches can go, and the elements it changed stay.
+  if (spec.elements.some((e) => e.status === 'affected')) add('graph drop --status affected', () => drop(spec, { status: ['affected'] }));
   // A direction that was named is never overridden, so leaving it off is a fix like any other.
   if (opts.direction) add(`no --direction ${opts.direction.toLowerCase()}`, () => spec, { ...opts, direction: undefined });
   else if (spec.direction) add('graph set --direction ""', () => { const { direction: _direction, ...rest } = spec; return rest; });
@@ -93,9 +104,13 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
         const out = await render(s, t.opts);
         const fix: Fix = { command: t.command, width: out.width, height: out.height, warnings: out.report.warnings, elements: s.elements.length, removes: t.removes };
         passes &&= out.report.passed;
+        // A fix that makes the picture wider, or adds crossings, is not a fix.
+        const next = out.report.candidates.find((c) => c.chosen)!;
+        if (chosen && (out.width > chosen.width || next.crossings > chosen.crossings)) { worst = undefined; break; }
         if (!worst || fix.warnings.length > worst.warnings.length || (fix.warnings.length === worst.warnings.length && fix.height > worst.height)) worst = fix;
       }
     } catch { continue; }
+    if (t.specs.length && !worst) continue;
     // A fix leaves fewer warnings. One that leaves as many still counts when the drawing failed a gate and now passes them all.
     if (!worst || worst.warnings.length > report.warnings.length || (worst.warnings.length === report.warnings.length && (report.passed || !passes))) continue;
     fixes.push({ ...worst, ...(t.specs.length > 1 ? { command: `${t.command} gives ${t.specs.length} diagrams, the largest` } : {}), score: worst.height });
@@ -105,3 +120,5 @@ export async function advise(spec: DiagramSpec, opts: FitOptions, report: Report
 }
 
 const kids = (spec: DiagramSpec): Set<string | undefined> => new Set(spec.elements.map((e) => e.parent));
+/** The marks of the change itself. `affected` is what it reaches, which a fix may leave out. */
+const changes = (status: string | undefined): boolean => status === 'added' || status === 'changed' || status === 'removed';

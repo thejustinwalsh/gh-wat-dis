@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { dirname, resolve as resolvePath } from 'node:path';
 import { UsageError, parseArgs } from '../cli/util.ts';
 import type { Command } from '../cli/util.ts';
 import type { DiagramSpec } from '../spec.ts';
@@ -43,7 +44,8 @@ first relationship in the spec, top down or left to right. The order of the rela
 order: in a cycle, the line that returns to an element already drawn is the one drawn backwards.
 
 A layout must pass every gate: each relationship drawn from end to end on its own element or row, no line
-through text, nothing on top of anything else, and the whole image no wider than --max-width and no taller
+through text, nothing on top of anything else, calm lines (none runs more than twice as far as it needs to,
+and at most one crossing for every four lines), and the whole image no wider than --max-width and no taller
 than 1.6 times that. The form is loosened one rung at a time until a layout passes: numbers on the lines or a
 long chain wrapped, then both, then compact cards. A code diagram is never wrapped. The first rung that
 passes is drawn. On one rung, the layout with the fewest crossings wins, then the least detour, then the
@@ -96,6 +98,14 @@ export const main: Command = async (argv) => {
     throw err;
   }
 
+  if (args['lint-only'] && (args['no-lint'] || args.png || args.report || args.mermaid)) throw new UsageError('--lint-only checks the spec and draws nothing: do not combine it with --no-lint, --png, --report or --mermaid');
+  if (args.png && args.png === (args.output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : undefined))) throw new UsageError('--png and the SVG would be the same file: give the PNG a name of its own');
+  // A code diagram's lines are imports with no words, so there is nothing to number.
+  if (labels === 'numbered' && spec.type === 'code') throw new UsageError('a code diagram has no words on its lines to number: leave off --labels numbered');
+  if (args.png) {
+    const folder = dirname(resolvePath(args.png));
+    if (!existsSync(folder)) throw new UsageError(`cannot write "${args.png}": its folder does not exist`);
+  }
   if (!args['no-lint']) {
     const { errors, warnings } = lintSpec(spec);
     for (const w of warnings) console.error(`warning: ${w}`);
@@ -142,7 +152,7 @@ export const main: Command = async (argv) => {
     fixes = advice.fixes;
     for (const f of fixes) {
       const gives = f.command.endsWith('the largest') ? '' : ' gives';
-      console.error(`fix: ${f.command}${gives} ${f.width} x ${f.height}px with ${f.warnings.length ? `${f.warnings.length} of these ${warnings.length} warnings left` : 'no warning'}.${f.removes ? ` It ${f.removes}.` : ''}`);
+      console.error(`fix: ${f.command}${gives} ${f.width} x ${f.height}px with ${f.warnings.length ? `${f.warnings.length} ${f.warnings.length === 1 ? 'warning' : 'warnings'}, where there ${warnings.length === 1 ? 'was 1' : `were ${warnings.length}`}` : 'no warning'}.${f.removes ? ` It ${f.removes}.` : ''}`);
     }
     // A code diagram is cut by file, or split by group: `graph split` writes one diagram for each.
     const byHand = spec.type === 'code' ? 'Take files out with `graph drop --ids <path,path>`, or draw one diagram for each group with `graph split`.' : 'Cut elements by hand, or draw two diagrams.';
