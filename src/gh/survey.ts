@@ -2,7 +2,7 @@
 // lack, which labels are outside the plan, what the milestones carry. Facts only. Which bodies
 // to rewrite is a person's call, so a body gets a description here and never a rating.
 
-import { byVersion, doneWhen } from './milestone.ts';
+import { byVersion, doneWhen, trackingIn } from './milestone.ts';
 import { issueRows } from './issues.ts';
 import type { IssueRow, RawListIssue } from './issues.ts';
 import { planLabels } from './labels.ts';
@@ -145,7 +145,7 @@ export function survey(input: SurveyInput): Survey {
       // open_issues also counts pull requests and the tracking issue, so the two tools would disagree.
       title: m.title, number: m.number, current: i === 0, open: rows.filter((r) => r.milestone === m.title && !r.tracking).length, dueOn: m.due_on,
       description: Boolean(m.description?.trim()), doneWhen: doneWhen(m.description).length,
-      tracking: Number(m.description?.match(/tracking:\*{0,2}\s*#(\d+)/i)?.[1]) || null,
+      tracking: trackingIn(m.description, input.repo),
     })),
   };
 }

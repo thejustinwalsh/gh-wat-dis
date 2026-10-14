@@ -10,7 +10,7 @@ import type { RawListIssue } from './issues.ts';
 import { planLabels } from './labels.ts';
 import type { LiveLabel } from './labels.ts';
 import { parseRefs } from './links.ts';
-import { byVersion } from './milestone.ts';
+import { byVersion, issueUrl } from './milestone.ts';
 import type { MilestoneStatus } from './milestone.ts';
 
 export const CHECK_IDS = [
@@ -196,7 +196,7 @@ export function audit(input: AuditInput): AuditReport {
     'milestone-description': () => ({
       title: 'Milestone description', finds: 'Open milestones whose description has no Tracking line, and a current milestone with no tracking issue.',
       findings: input.milestones.flatMap((m) => [
-        ...(m.trackingFrom !== 'description' ? [milestone(m, null, null, m.tracking ? `The description has no Tracking line. #${m.tracking} looks like the tracking issue: it has the most sub-issues.` : 'The description has no Tracking line.')] : []),
+        ...(m.trackingFrom !== 'description' ? [milestone(m, null, null, m.tracking ? `The description has no Tracking line. #${m.tracking} looks like the tracking issue: it has the most sub-issues. The line to add: **Tracking:** ${issueUrl(input.repo, m.tracking)}` : 'The description has no Tracking line.')] : []),
         ...(m.milestone.current && m.tracking === null ? [milestone(m, null, null, 'The current milestone has no tracking issue.')] : []),
       ]),
     }),

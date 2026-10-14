@@ -9,7 +9,7 @@ Use the richest element that carries the information in the fewest words. Check 
 | Bold, lists, links, inline code | Yes | Yes on the milestone page. The milestones list prints the source as plain text. |
 | Tables, emoji | Yes | Do not use: not checked |
 | Task lists `- [ ]` | Yes. Progress shows in lists only when they sit in the body. | Do not use: boxes nobody can tick, no progress effect |
-| Issue reference `#12` | Yes, a link | Plain text, no link. A full issue URL becomes a link. |
+| Issue reference | `#12`, a link | The full URL, `https://github.com/<owner>/<repo>/issues/12`: GitHub turns it into a link. `#12` stays plain text. |
 | Alerts `> [!NOTE]` `[!TIP]` `[!IMPORTANT]` `[!WARNING]` `[!CAUTION]` | Yes. Cannot nest inside lists or tables. | Do not use |
 | `<details><summary>` | Yes. Leave a blank line after `</summary>`. | Do not use |
 | Attached SVG / PNG (`gh --attach`) | Yes | No |

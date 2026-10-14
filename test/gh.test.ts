@@ -168,12 +168,17 @@ test('lint catches what GitHub would break', () => {
 test('lint milestone: the format passes, and each element the milestones list would garble is named', () => {
   const format = [
     'Anyone can run `npx gh-wat-dis install` and have an agent write issues in the format.', '',
-    '**Done when**', '- `npx gh-wat-dis doctor` prints nothing to fix (#3)', '- #17 is closed', '- https://tjw.dev/gh-wat-dis/ returns 200', '',
-    '**Tracking:** #1', '**In scope:** the ten wat skills', '**Out of scope:** [Enterprise Server](https://docs.github.com/enterprise-server)', '',
+    '**Done when**', '- `npx gh-wat-dis doctor` prints nothing to fix (https://github.com/thejustinwalsh/gh-wat-dis/issues/3)', '- https://github.com/thejustinwalsh/gh-wat-dis/issues/17 is closed', '- https://tjw.dev/gh-wat-dis/ returns 200', '',
+    '**Tracking:** https://github.com/thejustinwalsh/gh-wat-dis/issues/1', '**In scope:** the ten wat skills', '**Out of scope:** [Enterprise Server](https://docs.github.com/enterprise-server)', '',
   ].join('\n');
   assert.deepEqual(lintBody(format, { kind: 'milestone' }), { errors: [], warnings: [] });
 
   const of = (text: string) => lintBody(`Goal.\n\n${text}\n`, { kind: 'milestone' });
+  const bare = of('**Done when**\n- #17 is closed\n- `tool #3` prints https://example.com/page#4 and https://github.com/o/r/issues/5\n\n**Tracking:** #1');
+  assert.deepEqual(bare.errors, []);
+  assert.deepEqual(bare.warnings.map((w) => w.line), [4, 7], 'a bare #n is named; inline code, a URL fragment and a full URL are not');
+  assert.equal(bare.warnings[0]!.msg, 'GitHub does not link #17 in a milestone description: it stays plain text. Write the full URL (https://github.com/<owner>/<repo>/issues/17): GitHub turns it into a link.');
+  assert.deepEqual(lintBody('Fix.\n\nRefs #17\n', { kind: 'issue' }).warnings, [], 'only a milestone description needs the URL');
   const errors: [string, RegExp][] = [
     ['> [!WARNING]\n> Breaks the config.', /an alert shows there as "> \[!NOTE\]"/],
     ['<details>\n<summary>More</summary>\n\nx\n\n</details>', /an HTML block shows there as its tags/],
@@ -296,7 +301,8 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   const now = new Date('2026-10-13T12:00:00Z');
   const issue = (number: number, state: string, closed?: string, subs = 0) => ({ number, title: `t${number}`, state, closed_at: closed ?? null, updated_at: closed ?? '2026-10-01T00:00:00Z', sub_issues_summary: { total: subs } });
   const base = {
-    milestone: { title: 'v0.2.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- first thing\n- second thing\n\n**In scope:** x\n**Tracking:** #1' },
+    milestone: { title: 'v0.2.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- first thing\n- second thing\n\n**In scope:** x\n**Tracking:** https://github.com/o/r/issues/1' },
+    repo: 'o/r',
     openMilestones: ['v0.10.0', 'v0.2.0', 'v1.0.0'],
     items: [issue(1, 'open', undefined, 4), issue(2, 'closed', '2026-10-12T00:00:00Z'), issue(3, 'open'), issue(4, 'open'), { ...issue(9, 'closed', '2026-10-12T00:00:00Z'), pull_request: {} }],
     blockedBy: new Map([[4, [{ number: 3, title: 't3', state: 'open' }]]]),
@@ -327,6 +333,35 @@ test('milestone: counts issues only, finds what is in review and blocked, and ra
   assert.ok(!('dueOn' in s.milestone) && !JSON.stringify(s).includes('due'), 'a status carries no date');
 });
 
+test('milestone: an issue is named by its full URL or by #n, and a URL into another repository is not counted', async () => {
+  const { milestoneStatus, issueRefs, trackingIn, issueUrl } = await import('../src/gh/milestone.ts');
+  const url = (n: number) => issueUrl('o/r', n);
+  assert.equal(url(3), 'https://github.com/o/r/issues/3');
+  assert.deepEqual(issueRefs(`${url(3)} and https://github.com/O/R/pull/4#issuecomment-9, then (#5), o/r#6.`, 'o/r'), [3, 4, 5, 6], 'URL, pull request URL with a fragment, #n and owner/name#n');
+  assert.deepEqual(issueRefs('https://github.com/other/r/issues/3 other/r#4 https://example.com/o/r/issues/5 https://example.com/page#6 https://github.com/o/r/issues/7x', 'o/r'), [], 'another repository, another host and a URL fragment name no issue here');
+  assert.deepEqual(issueRefs(null, 'o/r'), []);
+
+  assert.equal(trackingIn(`Goal.\n**Tracking:** ${url(1)}`, 'o/r'), 1);
+  assert.equal(trackingIn('Goal.\n**Tracking:** #1', 'o/r'), 1, 'a description written before the URL rule keeps working');
+  assert.equal(trackingIn('Goal.\nTracking: <https://github.com/o/r/issues/1>', 'o/r'), 1);
+  assert.equal(trackingIn('Goal.\n**Tracking:** https://github.com/other/r/issues/1', 'o/r'), null);
+  assert.equal(trackingIn('Goal.\n**Tracking:**\n\n#1 is elsewhere', 'o/r'), null, 'the issue is on the Tracking line itself');
+  assert.equal(trackingIn(null, 'o/r'), null);
+
+  const issue = (number: number, state: string, subs = 0) => ({ number, title: `t${number}`, state, closed_at: state === 'closed' ? '2026-10-12T00:00:00Z' : null, updated_at: '2026-10-01T00:00:00Z', sub_issues_summary: { total: subs } });
+  const status = (description: string) => milestoneStatus({
+    repo: 'o/r', milestone: { title: 'v1', number: 1, state: 'open', description }, openMilestones: ['v1'],
+    items: [issue(1, 'open'), issue(2, 'closed'), issue(3, 'closed'), issue(4, 'open'), issue(8, 'open', 3)], blockedBy: new Map(), openPrs: [], now: new Date('2026-10-13T12:00:00Z'),
+  });
+  const conditions = (s: ReturnType<typeof status>) => s.signals.find((x) => x.name === 'conditionsClosed')!.value;
+  const byUrl = status(`Goal.\n\n**Done when**\n- the flag is listed (${url(2)})\n- ${url(3)} and ${url(4)} are closed\n- \`https://example.com/\` returns 200\n\n**Tracking:** ${url(1)}`);
+  assert.deepEqual([byUrl.tracking, byUrl.trackingFrom, conditions(byUrl)], [1, 'description', 1]);
+  const byNumber = status('Goal.\n\n**Done when**\n- the flag is listed (#2)\n- #3 and #4 are closed\n\n**Tracking:** #1');
+  assert.deepEqual([byNumber.tracking, byNumber.trackingFrom, conditions(byNumber)], [1, 'description', 1]);
+  const elsewhere = status('Goal.\n\n**Done when**\n- https://github.com/other/r/issues/2 is closed\n\n**Tracking:** https://github.com/other/r/issues/1');
+  assert.deepEqual([elsewhere.tracking, elsewhere.trackingFrom, conditions(elsewhere)], [8, 'sub-issues', null], 'an issue of another repository is neither the tracking issue nor a named condition');
+});
+
 test('milestone: the rating follows the rules in order and prints the signals that decided it', async () => {
   const { milestoneStatus } = await import('../src/gh/milestone.ts');
   const { readFileSync } = await import('node:fs');
@@ -341,7 +376,7 @@ test('milestone: the rating follows the rules in order and prints the signals th
   const keyed = <T>(o: Record<string, T>): Map<number, T> => new Map(Object.entries(o).map(([k, v]) => [Number(k), v]));
   for (const c of fixture.cases) {
     const s = milestoneStatus({
-      milestone: c.milestone, openMilestones: c.openMilestones, items: c.items, blockedBy: keyed(c.blockedBy), openPrs: c.openPrs,
+      repo: 'o/r', milestone: c.milestone, openMilestones: c.openMilestones, items: c.items, blockedBy: keyed(c.blockedBy), openPrs: c.openPrs,
       events: c.events ? keyed(c.events) : undefined, now: new Date(fixture.now),
     });
     assert.equal(s.rating, c.want.rating, c.name);
@@ -351,7 +386,7 @@ test('milestone: the rating follows the rules in order and prints the signals th
     assert.equal(s.signals.length, 12, 'every signal prints, whatever the rating');
     assert.ok(!JSON.stringify(s).includes('due'), 'a rating carries no due date');
   }
-  const growing = milestoneStatus({ ...fixture.cases[0]!, blockedBy: new Map(), events: keyed(fixture.cases[0]!.events!), now: new Date(fixture.now) });
+  const growing = milestoneStatus({ ...fixture.cases[0]!, repo: 'o/r', blockedBy: new Map(), events: keyed(fixture.cases[0]!.events!), now: new Date(fixture.now) });
   assert.equal(growing.reason, '57% of the issues are closed, and in the last 7 days 3 issues joined while 1 closed.');
   assert.equal(growing.signals.find((x) => x.name === 'addedAfterStart')!.text, '4 issues joined after the first close.');
 });
@@ -411,7 +446,7 @@ test('survey: counts what open issues lack and describes bodies without rating t
       { name: 'enhancement', description: 'e', color: 'a2eeef' }, { name: 'needs-repro', description: '', color: '000000' },
     ],
     milestones: [
-      { title: 'v0.10.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- a\n\n**Tracking:** #4', due_on: null, open_issues: 1, closed_issues: 0 },
+      { title: 'v0.10.0', number: 2, state: 'open', description: 'Goal.\n\n**Done when**\n- a\n\n**Tracking:** https://github.com/o/r/issues/4', due_on: null, open_issues: 1, closed_issues: 0 },
       { title: 'v0.2.0', number: 1, state: 'open', description: '', due_on: '2026-12-01T08:00:00Z', open_issues: 1, closed_issues: 3 },
     ],
   };
@@ -493,10 +528,10 @@ test('audit: one group for each check, one finding for each item, and the readin
     raw(7, '2026-01-01', full, { pull_request: {} }),
   ];
   const statusOf = (title: string, number: number, description: string, items: object[]) => milestoneStatus({
-    milestone: { title, number, state: 'open', description }, openMilestones: ['v1', 'v2'], items: items as never, blockedBy: new Map(), openPrs: [], now,
+    repo: 'o/r', milestone: { title, number, state: 'open', description }, openMilestones: ['v1', 'v2'], items: items as never, blockedBy: new Map(), openPrs: [], now,
   });
   const milestones = [
-    statusOf('v1', 1, 'Goal.\n\n**Tracking:** #1', [...issues.filter((i) => i.milestone), { ...raw(20, '2026-09-01'), state: 'closed', closed_at: '2026-09-20T00:00:00Z' }]),
+    statusOf('v1', 1, 'Goal.\n\n**Tracking:** https://github.com/o/r/issues/1', [...issues.filter((i) => i.milestone), { ...raw(20, '2026-09-01'), state: 'closed', closed_at: '2026-09-20T00:00:00Z' }]),
     statusOf('v2', 2, 'Later.', [{ ...raw(30, '2026-09-01'), state: 'closed', closed_at: '2026-09-01T00:00:00Z' }]),
   ];
   const input = {
@@ -533,12 +568,12 @@ test('audit: one group for each check, one finding for each item, and the readin
   assert.match(of('milestone-status')[0]!.reason, /^Stalled\. No issue closed in 23 days.* Signals: The last issue closed 23 days ago\. 0 open issues have an open pull request/);
   const rated = (ms: object[]) => audit({ ...input, milestones: ms as never, checks: selectChecks('milestone-status') }).checks[0]!.findings.map((f) => [f.item, f.value, f.unit, f.reason.split('.')[0]]);
   const unstarted = (title: string, number: number, open: string[]) => milestoneStatus({
-    milestone: { title, number, state: 'open', description: null }, openMilestones: open, items: [raw(60, '2026-10-01'), raw(61, '2026-10-01')] as never, blockedBy: new Map(), openPrs: [], now,
+    repo: 'o/r', milestone: { title, number, state: 'open', description: null }, openMilestones: open, items: [raw(60, '2026-10-01'), raw(61, '2026-10-01')] as never, blockedBy: new Map(), openPrs: [], now,
   });
   assert.deepEqual(rated([unstarted('v1', 1, ['v1', 'v2']), unstarted('v2', 2, ['v1', 'v2'])]), [['v1', 2, 'issues', 'Not started']], 'the current milestone is due now, so not started is a finding for it and not for a later one');
   const closedOn = (n: number, at: string) => ({ ...raw(n, '2026-09-01'), state: 'closed', closed_at: `${at}T00:00:00Z` });
   const growing = milestoneStatus({
-    milestone: { title: 'v1', number: 1, state: 'open', description: null }, openMilestones: ['v1'], blockedBy: new Map(), openPrs: [], now,
+    repo: 'o/r', milestone: { title: 'v1', number: 1, state: 'open', description: null }, openMilestones: ['v1'], blockedBy: new Map(), openPrs: [], now,
     items: [closedOn(70, '2026-10-01'), closedOn(71, '2026-10-10'), raw(72, '2026-10-11'), raw(73, '2026-10-11')] as never,
     events: new Map([72, 73].map((n) => [n, { joinedAt: '2026-10-11T00:00:00Z', reopened: 0 }])),
   });
@@ -558,6 +593,9 @@ test('audit: one group for each check, one finding for each item, and the readin
     ['#4', 'Blocked by #20, which is closed.'],
   ], 'an open blocker that moves is not a finding');
   assert.deepEqual(pairs('milestone-description'), [['v2', 'The description has no Tracking line.']]);
+  const guessed = statusOf('v1', 1, 'Goal.', issues.filter((i) => i.milestone));
+  assert.deepEqual(audit({ ...input, milestones: [guessed], checks: selectChecks('milestone-description') }).checks[0]!.findings.map((f) => f.reason),
+    ['The description has no Tracking line. #1 looks like the tracking issue: it has the most sub-issues. The line to add: **Tracking:** https://github.com/o/r/issues/1'], 'the proposed line holds the full URL');
   assert.equal(report.count, report.checks.reduce((n, c) => n + c.findings.length, 0));
   assert.deepEqual(report.leftToAgent.map((a) => a.check), ['awaiting-author', 'format-drift', 'out-of-date-facts', 'done-when', 'refs-finished']);
 

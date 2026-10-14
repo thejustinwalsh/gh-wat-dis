@@ -106,6 +106,9 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       if (/!\[[^\]]*\]\(/.test(l.t)) err(l.n, `${LIST}, and gh uploads no attachment for a milestone. Put the diagram in the tracking issue.`);
       if (l.kind === 'heading') warn(l.n, `${LIST}, so a heading shows there as "${l.t.match(/^#+/)![0]} ...". Use a bold label on its own line: **Done when**.`);
       if (/^[-*+]\s+\[[ xX]\]\s/.test(l.t)) warn(l.n, 'a task list in a milestone description renders as boxes nobody can tick, and counts toward no progress. Use a plain list: progress comes from the issues in the milestone.');
+      // GitHub links a full issue URL in a milestone description and leaves #12 as plain text. Inline code and URL fragments are not references.
+      const bare = l.t.replace(/`[^`]*`/g, '').replace(/https?:\/\/\S+/g, '').match(/(?<![\w/.-])#(\d+)\b/);
+      if (bare) warn(l.n, `GitHub does not link #${bare[1]} in a milestone description: it stays plain text. Write the full URL (https://github.com/<owner>/<repo>/issues/${bare[1]}): GitHub turns it into a link.`);
       if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(l.t) && l.t.includes('|')) warn(l.n, `${LIST}, so a table shows there as pipes and dashes. Use a list, or put the table in the tracking issue.`);
     }
   } else {

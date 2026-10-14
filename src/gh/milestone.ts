@@ -35,6 +35,8 @@ export interface MilestoneStatus {
 }
 
 export interface MilestoneInput {
+  /** `owner/name`. An issue URL in the description counts only when it points into this repository. */
+  repo: string;
   milestone: { title: string; number: number; state: string; description: string | null };
   /** Titles of every open milestone, to decide which one is current. */
   openMilestones: string[];
@@ -69,6 +71,34 @@ export function doneWhen(description: string | null): string[] {
   return out;
 }
 
+/** The address of an issue: the form a milestone description names it in. */
+export const issueUrl = (repo: string, n: number): string => `https://github.com/${repo}/issues/${n}`;
+
+const REF = /https?:\/\/[^\s<>()\[\]]+|(?<![\w/.-])([\w.-]+\/[\w.-]+)?#(\d+)\b/g;
+const ISSUE_URL = /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/(\d+)(?![\w-])/i;
+/**
+ * The issues and pull requests of this repository that a text names, in the order it names them.
+ * The format writes each one as its full URL, because GitHub links no `#n` in a milestone description.
+ * `#n` and `owner/name#n` are read too, so a description written before that rule keeps working.
+ * A reference into another repository is not counted.
+ */
+export function issueRefs(text: string | null, repo: string): number[] {
+  const here = repo.toLowerCase();
+  const out: number[] = [];
+  for (const m of (text ?? '').matchAll(REF)) {
+    if (m[2]) { if (!m[1] || m[1].toLowerCase() === here) out.push(Number(m[2])); continue; }
+    const u = m[0].match(ISSUE_URL);
+    if (u && u[1]!.toLowerCase() === here) out.push(Number(u[2]));
+  }
+  return out;
+}
+
+/** The issue a description names on its Tracking line, or null. */
+export function trackingIn(description: string | null, repo: string): number | null {
+  const line = description?.match(/tracking:\*{0,2}[ \t]*(\S+)/i)?.[1];
+  return line ? issueRefs(line, repo)[0] ?? null : null;
+}
+
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 const ago = (days: number): string => (days === 0 ? 'today' : `${plural(days, 'day')} ago`);
 
@@ -76,7 +106,7 @@ export function milestoneStatus(input: MilestoneInput): MilestoneStatus {
   const { milestone, items, blockedBy, openPrs, now } = input;
   const stalledAfter = input.stalledAfterDays ?? 7;
   const issues = items.filter((i) => !i.pull_request);
-  const named = Number(milestone.description?.match(/tracking:\*{0,2}\s*#(\d+)/i)?.[1]);
+  const named = trackingIn(milestone.description, input.repo);
   const fromLine = named && issues.some((i) => i.number === named) ? named : undefined;
   const tracking = fromLine
     ?? issues.filter((i) => (i.sub_issues_summary?.total ?? 0) > 0).sort((a, b) => b.sub_issues_summary!.total - a.sub_issues_summary!.total)[0]?.number
@@ -119,7 +149,7 @@ export function milestoneStatus(input: MilestoneInput): MilestoneStatus {
   // A done-when condition that names issues: are those issues closed? An indirect fact, not a check of the condition.
   const conditions = doneWhen(milestone.description);
   const state = new Map(issues.map((i) => [i.number, i.state]));
-  const naming = conditions.map((c) => [...c.matchAll(/#(\d+)/g)].map((m) => Number(m[1]))).filter((ns) => ns.length);
+  const naming = conditions.map((c) => issueRefs(c, input.repo)).filter((ns) => ns.length);
   const conditionsClosed = naming.filter((ns) => ns.every((n) => state.get(n) === 'closed')).length;
 
   let rating: Rating, reason: string, decides: string[];

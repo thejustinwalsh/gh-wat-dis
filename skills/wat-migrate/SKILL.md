@@ -83,6 +83,7 @@ Triage matches issues to milestones by their done-when conditions, so the milest
 | `dueOn` is set | Remove the date: `gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -F due_on=null`. Milestones here run in sequence with no dates. |
 | `description` is false, or `doneWhen` is 0 | Write the goal and the done-when conditions with the user ("Create", steps 2 to 4), then edit the description. |
 | `tracking` is null | Offer a tracking issue ("Create", step 6). It is a new issue, so it is the user's choice. |
+| The description names an issue as `#<n>` | Rewrite each one as its full URL, `https://github.com/<owner>/<repo>/issues/<n>`: the `Tracking` line and the done-when conditions. GitHub links the URL and does not link `#<n>` in a milestone description. `npx gh-wat-dis lint <file> --kind milestone` names each one. |
 | A title holds no version number | Ask which open milestone comes first. The tools take the lowest version as the current one. Rename only if the user asks. |
 | No open milestone | Nothing to do. A backlog with no milestone is valid. Offer "Create" once and accept a no. |
 
