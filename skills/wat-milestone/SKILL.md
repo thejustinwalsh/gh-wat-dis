@@ -14,13 +14,13 @@ A milestone has two parts. The **description** is 15 lines of plain Markdown: go
 
 1. **Read the defaults** in `.agents/gh-wat-dis/config.json` → `milestones` (naming, capacity). List open milestones to avoid a clash. Milestones run in sequence: the new one is the next version after the highest that exists. Do not set a due date.
 2. **Get the goal** in one sentence. If the user gives a list of features, ask what a user or the system can do when it ships.
-3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it, written as its full URL (`https://github.com/<owner>/<repo>/issues/<n>`): GitHub links a full URL in a milestone description and does not link `#<n>`. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
+3. **Write done-when conditions.** 3 at most. Each one names its own check, so that anyone can run it later: the command and what it prints, the URL and the status it returns, or the issue or pull request that shows it, written as its full URL (`https://github.com/<owner>/<repo>/issues/<n>`). An issue filed for the new milestone has no URL yet: name it in words now, and put its URL in when you add the `Tracking` line in step 6. GitHub links a full URL in a milestone description and does not link `#<n>`. "The site is live" is not checkable. "`https://example.com/` returns 200" is.
 4. **Draft** `.wat-tmp/milestone.md` in the Milestone format. Run the backstop: `npx gh-wat-dis lint .wat-tmp/milestone.md --kind milestone`. It catches the elements that break on the milestone page or in the milestones list, and each issue written as `#<n>` where the full URL belongs.
 5. **Show the draft**, wait for a yes, then create:
    ```bash
    gh api repos/{owner}/{repo}/milestones -f title="<title>" -F description=@.wat-tmp/milestone.md
    ```
-6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a container diagram with status `added` / `changed` for what the milestone delivers. Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then put its full URL in the description's `Tracking` line: `**Tracking:** https://github.com/<owner>/<repo>/issues/<n>`.
+6. **Create the tracking issue** with the `wat-issue` skill, in the new milestone. Its `System` section holds a diagram with status `added` / `changed` for what the milestone delivers, at the level where those changes sit: a container diagram when containers change, a component diagram when the changes are inside one container (see "When a diagram is needed" in `wat-architecture`). Make each member issue a sub-issue of it: `npx gh-wat-dis relate <n> --parent <tracking>`. Then edit the description: put the full URL of each issue its conditions name, and the tracking issue's full URL in the `Tracking` line: `**Tracking:** https://github.com/<owner>/<repo>/issues/<n>`.
 
 ## Plan scope
 

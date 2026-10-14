@@ -72,7 +72,7 @@ Priority is a label, and the user's decision. Propose one for every issue, say w
 
 The colours carry the order: `critical` is red, `nit` is yellow, with even steps between. Size labels share one teal hue, dim for `s` and brightest for `xl`. `npx gh-wat-dis labels apply` creates both sets with those colours. Do not pick colours by hand.
 
-Rate by what is true now. A product with no users yet has no "main path down for many users": rate by what the issue blocks. Rate an issue against the milestone it is in or proposed for: a feature that a later milestone's done-when condition needs is P1 for that milestone.
+Rate by what is true now. A product with no users yet has no "main path down for many users": rate by what the issue blocks. Rate an issue against the milestone it is in or proposed for. "A done-when condition needs it" makes an issue `major` only in the current milestone. In a later milestone, where every issue is named by a condition, rate by the Bug and Feature column.
 
 Evidence raises priority: reproduction, several reporters, reactions, a regression from a named release. Volume of words does not.
 

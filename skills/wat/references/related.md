@@ -29,7 +29,7 @@ A package runner with its package (`npx <package>`) and common flags such as `--
 |---|---|---|
 | **Duplicate** | Same root cause in the same element. Fixing one fixes the other. | Do not file. Show the original. Offer a comment there with the new evidence. If it is closed and the problem is back, ask: reopen, or file new with a `Refs #n` line. |
 | **Same symptom, cause not known** | Same error or behaviour, and neither issue names a cause | Ask the user. Default: comment on the existing issue. |
-| **Related** | Same element or same feature, a different problem | File new. If one must wait for the other, set blocked by. If both are parts of one piece of work, give them the same parent. Otherwise add a `Refs #n` line at the end of the body. |
+| **Related** | Same element or same feature, a different problem | File new. If one must wait for the other, set blocked by. If both are parts of one piece of work, give them the same parent. Otherwise add a `Refs #n` line at the end of the body. When the related item is a pull request that this issue follows up, write `Follow-up to #<pr>` in `Evidence` instead. |
 | **Already fixed** | A merged PR or a closed issue covers it | Tell the user which one and in which release, if known. File only if it still reproduces. |
 | **No match** | Nothing above 30 points, or the matches share only common words | File new. |
 
