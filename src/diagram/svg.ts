@@ -9,7 +9,7 @@ import { escapeXml, monoWidth, textWidth, wrap } from './measure.ts';
 import { FONT, MONO, applyTheme } from './theme.ts';
 import { judge } from './fit.ts';
 import type { FitOptions, Report } from './fit.ts';
-import type { ThemeName } from './theme.ts';
+import type { Background, PaletteName, ThemeName } from './theme.ts';
 import { STATUS_BADGE, STATUS_MARK, STATUS_WORD, TYPE_LABEL, active, kindLine, relText } from './vocab.ts';
 
 const MARGIN = 24;
@@ -277,7 +277,7 @@ function describe(spec: DiagramSpec, subtitle: string): string {
   return `${subtitle}. ${els.length} elements: ${els.join(', ')}. ${rels.length} relationships: ${rels.join('; ')}.`;
 }
 
-export interface RenderOptions extends FitOptions { theme?: ThemeName }
+export interface RenderOptions extends FitOptions { theme?: ThemeName; palette?: PaletteName; background?: Background }
 export interface Rendered {
   svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean; report: Report;
   /** The layout that was drawn, in the coordinates of the drawing: the title and the key are not part of it. */
@@ -327,7 +327,7 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
     + `<title id="dg-title">${escapeXml(`${spec.title}: ${subtitle}`)}</title>`
     + `<desc id="dg-desc">${escapeXml(describe(spec, subtitle))}</desc>`
-    + `<style>${applyTheme(CSS, opts.theme ?? 'auto')}</style>`
+    + `<style>${applyTheme(CSS, opts.theme ?? 'auto', opts.palette, opts.background)}</style>`
     + `<rect class="bg" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="12"/>`
     + titleLines.map((l, i) => `<text class="title" x="${MARGIN}" y="${MARGIN + 20 + i * 24}">${escapeXml(l)}</text>`).join('')
     + subLines.map((l, i) => `<text class="sub" x="${MARGIN}" y="${MARGIN + 40 + subTop + i * 17}">${escapeXml(l)}</text>`).join('')
