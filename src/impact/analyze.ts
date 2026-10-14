@@ -7,6 +7,9 @@ import { buildElements } from './elements.ts';
 import { diffEntries, history, readBlobs, resolveRange, tryGit, webUrl } from './git.ts';
 import type { DiffEntry } from './git.ts';
 import { complexityFacts } from './complexity.ts';
+import { decideDiagram } from './decide.ts';
+import { diffParts, fileParts, isWorkflow, manifestParts, reordered, sourceParts, workflowParts } from './parts.ts';
+import type { Declared } from './parts.ts';
 import type { Side } from './complexity.ts';
 import { buildGraph, reverseReach } from './graph.ts';
 import { diffManifest, isManifest, packageName } from './manifests.ts';
@@ -18,7 +21,7 @@ import { commitTree, repoTop, workingTree } from './tree.ts';
 import type { Tree } from './tree.ts';
 import type {
   AnalyzeOptions, ComplexityFact, CoChangeFact, ContractFact, DependencyFact, DirectDependent, EdgeFact, ElementFact, Facts, FileFact, FileKind, ImportFact,
-  OwnerFact, Provenance, SymbolDependent, SymbolFact, TransitiveRollup,
+  OwnerFact, PartFact, Provenance, SymbolDependent, SymbolFact, TransitiveRollup,
 } from './types.ts';
 
 export const DEFAULT_DEPTH = 3;
@@ -129,7 +132,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const co = loadCodeowners((p) => tree.read(p));
 
   const basePath = (e: DiffEntry): string => e.oldPath ?? e.path;
-  const needBase = entries.filter((e) => e.status !== 'added' && (languageOf(basePath(e)) || isManifest(basePath(e)))).map(basePath);
+  const needBase = entries.filter((e) => e.status !== 'added' && (languageOf(basePath(e)) || isManifest(basePath(e)) || isWorkflow(basePath(e)))).map(basePath);
   const [baseBlobs, commits] = await Promise.all([
     readBlobs(root, range.base, needBase),
     history(root, range.head ?? 'HEAD', new Date(now.getTime() - 90 * DAY), now),
@@ -208,9 +211,12 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     for (const c of diffSymbols(base?.syms ?? null, head?.syms ?? null)) {
       const { container: _container, ...fact } = c;
       void _container;
+      const was = c.change === 'modified' && /function|method/.test(c.kind) ? base?.syms.find((x) => x.name === (c.renamedFrom ?? c.name)) : undefined;
+      const is = was ? head?.syms.find((x) => x.name === c.name) : undefined;
       symbols.push({
         ...fact, file: e.path, element,
         dependents: c.exported ? symbolDependents(graph, els, e.path, c, (f) => changed.has(f)) : [],
+        ...(was && is && reordered(c.name, was.text, is.text) ? { callsReordered: true as const } : {}),
         provenance: 'resolved', source: 'ast-grep',
       });
       if (c.exported) (changedNames.get(e.path) ?? changedNames.set(e.path, new Set()).get(e.path)!).add(c.name);
@@ -394,6 +400,9 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     return { ...rest, status, filesChanged: row.changed, dependentsAffected };
   });
 
+  // Parts: what a user or another program calls by name, added or removed.
+  const parts = partFacts(entries, (e) => (e.status === 'added' ? undefined : baseBlobs.get(basePath(e))), (p) => tree.read(p), (p) => tree.has(p) || baseOnly.has(p), els);
+
   // Contracts.
   const contracts: ContractFact[] = [];
   const entryOwners = new Map<string, string>();
@@ -453,12 +462,13 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     ...(graph.packages.length || dependencies.length ? ['manifest'] : []), ...(els.mapping === 'config' ? ['config'] : []), ...(measured ? ['cccc'] : [])];
 
   const repository = webUrl(await tryGit(root, ['remote', 'get-url', 'origin']));
-  return {
+  const facts: Facts = {
     schema: 1,
     base: range.base,
     head: range.head ?? 'WORKING_TREE',
     range: { baseRef: range.baseRef, headRef: range.head ? range.headRef : 'working tree', workingTree: !range.head, depth },
     ...(repository ? { repository } : {}),
+    diagram: { draw: false, level: null, reasons: [], skip: null, provenance: 'exact' },
     tiers: { ran, languages: graph.languages, unavailable: graph.unavailable },
     summary: {
       filesChanged: files.length,
@@ -486,8 +496,74 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     tests: { changed: files.filter((f) => f.kind === 'test').map((f) => f.path), importingChanged: directList.filter((d) => d.isTest).map((d) => d.file) },
     coChange: hist.pairs,
     dependencies,
+    parts,
     complexity,
     owners: [...owners.values()].sort((a, b) => b.files.length - a.files.length || a.owner.localeCompare(b.owner)),
     caveats,
   };
+  facts.diagram = decideDiagram(facts);
+  return facts;
+}
+
+const VERB: Record<PartFact['kind'], string> = { command: 'Runs', tool: 'Runs', bin: 'Runs', option: 'Runs', skill: 'Loads', route: 'Calls', export: 'Imports', job: 'Schedules' };
+
+/**
+ * The parts each changed file declares on base and on head, compared. A part that leaves one file and appears in
+ * another moved: it is neither added nor removed. A registry entry whose handler loads a module of this repository is
+ * held by that module's element, which the import proves.
+ */
+function partFacts(entries: DiffEntry[], baseText: (e: DiffEntry) => string | undefined, headText: (p: string) => string | undefined,
+  exists: (p: string) => boolean, els: ElementMap): PartFact[] {
+  const out: { d: Declared; change: 'added' | 'removed'; file: string }[] = [];
+  for (const e of entries) {
+    const old = e.oldPath ?? e.path;
+    const read = (path: string, text: string | undefined): Declared[] =>
+      isManifest(path) ? manifestParts(path, text) : isWorkflow(path) ? workflowParts(path, text) : sourceParts(path, text);
+    const a = e.status === 'added' ? [] : read(old, baseText(e));
+    const b = e.status === 'deleted' ? [] : read(e.path, headText(e.path));
+    // A file that is a part by itself counts when it comes or goes. Moved, it is the same part.
+    if (e.status === 'added') b.push(...fileParts(e.path));
+    if (e.status === 'deleted') a.push(...fileParts(e.path));
+    const { added, removed } = diffParts(a, b);
+    for (const d of added) out.push({ d, change: 'added', file: e.path });
+    for (const d of removed) out.push({ d, change: 'removed', file: e.path });
+  }
+  const key = (x: { d: Declared }): string => `${x.d.kind}\0${x.d.name}`;
+  const both = new Set(out.filter((x) => x.change === 'added').map(key).filter((k) => out.some((y) => y.change === 'removed' && key(y) === k)));
+  const parentOf = new Map(els.defs.map((d) => [d.id, d.parent]));
+  const lineage = (id: string): string[] => { const seen: string[] = []; for (let p: string | undefined = id; p && !seen.includes(p); p = parentOf.get(p)) seen.push(p); return seen; };
+  const facts: PartFact[] = [];
+  for (const { d, change, file } of out) {
+    if (both.has(key({ d }))) continue;
+    // Where the handler lives: the module a registry entry loads, or the file a bin entry runs.
+    let impl: string | undefined;
+    if (d.target) {
+      const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
+      const at = d.target.startsWith('.') ? normalize(`${dir}${d.target}`) : d.kind === 'bin' ? normalize(`${dir}${d.target}`) : '';
+      const tries = at ? [at, at.replace(/\.js$/, '.ts'), at.replace(/^dist\//, 'src/').replace(/\.js$/, '.ts'), `${at}.ts`, `${at}/index.ts`] : [];
+      impl = tries.find((p) => exists(p));
+    }
+    const element = els.of(impl ?? file);
+    const registry = els.of(file);
+    const mine = lineage(element);
+    let calledBy: PartFact['calledBy'];
+    if (impl && d.source === 'ast-grep' && !mine.includes(registry)) calledBy = { element: registry, label: VERB[d.kind], provenance: 'resolved', source: 'ast-grep' };
+    else {
+      const r = els.relationships.find((x) => x.from && x.to && mine.includes(x.to) && !mine.includes(x.from) && parentOf.has(x.from));
+      if (r) calledBy = { element: r.from, label: VERB[d.kind], ...(r.technology ? { technology: r.technology } : {}), provenance: 'exact', source: 'config' };
+    }
+    facts.push({
+      name: d.name, kind: d.kind, change, element, file, line: d.line, basis: impl && d.source === 'ast-grep' ? `${d.basis}, handler in ${impl}` : d.basis,
+      ...(calledBy ? { calledBy } : {}),
+      provenance: impl && d.provenance === 'heuristic' && d.source === 'ast-grep' ? 'resolved' : d.provenance, source: d.source,
+    });
+  }
+  return facts.sort((a, b) => a.element.localeCompare(b.element) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+}
+
+/** A path with `.` and `..` segments folded. */
+function normalize(path: string): string {
+  const out: string[] = [];
+  for (const s of path.split('/')) { if (s === '..') out.pop(); else if (s && s !== '.') out.push(s); }
+  return out.join('/');
 }

@@ -1,3 +1,4 @@
+import { decideDiagram, decisionLine, drawCommand } from './decide.ts';
 import type { ElementFact, Facts, MarkdownOptions, Provenance, SymbolDependent } from './types.ts';
 
 const LANGUAGE_NAMES: Record<string, string> = { typescript: 'TypeScript', javascript: 'JavaScript', rust: 'Rust' };
@@ -43,6 +44,9 @@ export function toMarkdown(facts: Facts, opts: MarkdownOptions = {}): string {
   const file = linker(facts, opts.links !== false);
   const out: string[] = [];
   const heading = opts.heading === undefined ? '## Blast radius' : opts.heading;
+  // The diagram decision comes first, where an agent reads it. GitHub does not show a comment, so a pasted section can keep it.
+  const d = facts.diagram ?? decideDiagram(facts);
+  out.push(`<!-- diagram: ${decisionLine(d)}${d.draw ? `. Draw it: ${drawCommand(d.level)}` : ''} -->`);
   if (heading) out.push(heading, '');
 
   const parts = [`${plural(s.filesChanged, 'file')} changed in ${plural(s.elementsChanged, 'element')}`, plural(s.directDependents, 'direct dependent')];

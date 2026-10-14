@@ -59,7 +59,7 @@ Ask in plain words. The skills trigger on the task.
 Every issue and PR:
 
 - opens with the problem and how it is solved, in a plain sentence
-- states what changes in the system, with one diagram when structure changes
+- states what changes in the system, with a diagram whenever code changes, unless the facts show it would add nothing
 - takes its claims about code from tools, each fact labeled with its source
 - lists risks, evidence and what is still unknown
 - keeps long data for agents in one collapsed block at the end, as a code block you can copy into any agent

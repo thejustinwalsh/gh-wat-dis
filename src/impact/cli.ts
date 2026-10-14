@@ -42,6 +42,14 @@ Collect facts about a change: files, changed symbols, dependents, elements, owne
   --no-complexity   do not run cccc
   --cwd dir         repository to read (default: current directory)
 
+diagram says whether the change needs a diagram: { draw, level, reasons, skip, provenance }. Draw is the
+default when source changed. skip names the reason when it is not: only text, only dependency or version
+changes, only CI or config, only tests, only renames, or no function and no relationship moved.
+level is element, code or dynamic; reasons name what makes it worth drawing, most specific first.
+
+parts[] lists the commands, tools, skills, routes, scheduled jobs, bin and exports entries, and command
+options the change added or removed, each with the element that holds it and what calls it when known.
+
 With cccc installed (npx gh-wat-dis doctor --tools install), complexity[] lists each function whose
 cognitive or cyclomatic complexity the change moved, with the score before and after.
 Every fact has a provenance label (exact, resolved, measured, heuristic) and a source.
@@ -63,6 +71,8 @@ export const impact: Command = async (argv) => {
 const BLAST_HELP = `Usage: gh-wat-dis blast [facts.json|-] [--max-items 5] [--heading "<text>"] [--no-heading] [--no-links]
 
 Format impact facts as a Markdown "Blast radius" section. Reads Facts JSON from a file or stdin.
+The first line is the diagram decision as an HTML comment, which GitHub does not show:
+draw or not, at which level, why, and the command that draws it.
 
   --max-items N     entries per list before "+N more" (default 5)
   --heading <text>  heading line (default "## Blast radius")
@@ -146,6 +156,9 @@ Turn impact facts into a diagram spec. Reads Facts JSON from a file or stdin, pr
 
   --title <t>   diagram title
   --level <l>   element (default): the architecture elements the change touches and reaches.
+                Each part the change added or removed (a command, skill, route, job, bin or
+                exports entry: parts[] in the facts) is a component inside the element that
+                holds it, with a line from what calls it when the facts know.
                 file: a code diagram. One card for each changed source file, a row for each symbol
                 the change added, changed or removed, and a line for every import the source proves
                 between two drawn files. A line ends on a symbol row when the import names a symbol
@@ -156,7 +169,7 @@ Turn impact facts into a diagram spec. Reads Facts JSON from a file or stdin, pr
                 files come first. Two slots are kept for files outside the diff that import a
                 changed symbol or that a changed file starts to import. The largest files left
                 out are named in the scope line, and all of them on stderr.
-  --all         every element and edge in the facts
+  --all        every element and edge in the facts
                 (default: the changed, added, removed and affected elements, both ends of
                 each added or removed relationship, and their ancestors. Past 12 elements
                 the affected ones are cut to the most reached, and the scope line counts the rest.)

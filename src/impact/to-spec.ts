@@ -1,6 +1,6 @@
 import type { DiagramSpec, SpecElement, SpecRelationship } from '../spec.ts';
 import { BUDGET } from '../diagram/budget.ts';
-import type { EdgeFact, Facts, SpecOptions } from './types.ts';
+import type { EdgeFact, Facts, PartFact, SpecOptions } from './types.ts';
 
 /**
  * A generated line says what moves across it as far as the tools saw it: the names one element imports from the
@@ -17,6 +17,11 @@ function label(e: EdgeFact, names: string[]): string {
 }
 /** How many files import across the relationship, where the map names no technology. */
 const technology = (e: EdgeFact): string | undefined => e.technology ?? (e.label ? undefined : e.weight > 0 ? `${e.weight} ${e.weight === 1 ? 'import' : 'imports'}` : e.source === 'manifest' ? 'package manifest' : undefined);
+
+/** A part the change added or removed is a box of its own; past this many, the scope line counts the rest. */
+const MAX_PARTS = 6;
+const PART_WORDS: Record<PartFact['kind'], string> = { command: 'Command', tool: 'Tool', skill: 'Agent skill', route: 'HTTP route', job: 'Scheduled job', bin: 'Executable', export: 'Package entry', option: 'Option' };
+const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /** Past its budget an element diagram is a hairball: the affected elements are cut to the most reached, and the unchanged lines to the heaviest. */
 const MAX_ELEMENTS = BUDGET.container.boxes;
@@ -68,6 +73,14 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
       cut = reached.length - room;
     }
   }
+  // Each part the change added or removed is drawn inside the element that holds it, with a line from what calls it.
+  // An option is not a box: it is drawn as the code of its command, at the file level.
+  const parts = (facts.parts ?? []).filter((p) => p.kind !== 'option' && byId.has(p.element));
+  const shownParts = parts.slice(0, MAX_PARTS);
+  for (const p of shownParts) {
+    keep.add(p.element);
+    if (p.calledBy && byId.has(p.calledBy.element)) keep.add(p.calledBy.element);
+  }
   for (const id of [...keep]) {
     for (let p = byId.get(id)?.parent; p && byId.has(p) && !keep.has(p); p = byId.get(p)?.parent) keep.add(p);
   }
@@ -116,7 +129,25 @@ export function toDiagramSpec(facts: Facts, opts: SpecOptions = {}): DiagramSpec
     status: e.status,
     meta: { weight: e.weight, provenance: e.provenance, source: e.source },
   }));
+  const partIds = new Map(shownParts.map((p) => [p, `part-${p.kind}-${slug(p.name)}`]));
+  for (const [p, id] of partIds) {
+    elements.push({
+      id, type: 'component', name: p.name, technology: PART_WORDS[p.kind],
+      description: `Found in ${p.basis}`,
+      parent: p.element, status: p.change,
+      meta: { files: 0, filesChanged: 0, dependentsAffected: 0, provenance: p.provenance, source: p.source, part: p.kind },
+    });
+    const by = p.calledBy;
+    if (by && keep.has(by.element) && !inside(by.element, p.element) && by.element !== p.element) {
+      relationships.push({
+        from: by.element, to: id, label: `${by.label} ${p.name}`, ...(by.technology ? { technology: by.technology } : {}), status: p.change,
+        meta: { weight: 0, provenance: by.provenance, source: by.source },
+      });
+    }
+  }
+  const partsLeft = parts.length - shownParts.length;
   const left = [
+    ...(partsLeft ? [`${partsLeft} more added or removed ${partsLeft === 1 ? 'part is' : 'parts are'} not drawn`] : []),
     ...(cut ? [`${cut} more affected ${cut === 1 ? 'element is' : 'elements are'} not drawn`] : []),
     ...(cutLines ? [`${cutLines} unchanged ${cutLines === 1 ? 'relationship is' : 'relationships are'} not drawn`] : []),
   ];

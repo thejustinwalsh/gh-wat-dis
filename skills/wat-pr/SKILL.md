@@ -1,6 +1,6 @@
 ---
 name: wat-pr
-description: Open or rewrite a GitHub pull request whose description states the design decision, the measured blast radius, how to verify it and what can go wrong, with a change-impact diagram when structure changes. Use when the user asks to open, create, draft, write up, describe or improve a PR, or says "ship this" or "put this up for review".
+description: Open or rewrite a GitHub pull request whose description states the design decision, the measured blast radius, how to verify it and what can go wrong, with the change-impact diagram the facts call for. Use when the user asks to open, create, draft, write up, describe or improve a PR, or says "ship this" or "put this up for review".
 license: MIT
 ---
 
@@ -18,24 +18,21 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    ```
    Read the facts. Each one carries a provenance label and a source tool. The label sets your wording: see the `wat-architecture` skill.
 3. **Read the diff and the linked issue** for what the tools cannot see: the problem this solves, the design decision, the rejected option, the behaviour change. State the problem and the solution in two sentences before you draft. If you cannot state the problem, ask the user. Do not infer it from the diff alone.
-4. **Decide on a diagram.** Apply the test under "When a diagram is needed" in [../wat-architecture/SKILL.md](../wat-architecture/SKILL.md): it asks how hard the change is to follow, not how many files it touches. The facts give the first signals (an element or edge with status `added` or `removed`, a changed exported signature with dependents, a changed contract), and the diff gives the rest: a new order of steps, new state, rewired parts inside one module. State the decision and its reason in one line when you show the draft. When the facts mark an element or a relationship `added` or `removed`, start from the facts:
+4. **Draw the diagram the facts decide.** Read `diagram` in `.wat-tmp/facts.json`; the first line of `blast.md` says the same. When `draw` is `true`, draw at its `level`:
    ```bash
-   npx gh-wat-dis graph from-facts .wat-tmp/facts.json > .wat-tmp/change.json
+   npx gh-wat-dis graph from-facts .wat-tmp/facts.json > .wat-tmp/change.json               # level element
+   npx gh-wat-dis graph from-facts .wat-tmp/facts.json --level file > .wat-tmp/code.json    # level code
    ```
-   The spec is scoped to the change already: the elements it touched, the ones it reaches, and both ends of a relationship it added or removed. Edit it: a generated line says only what the tools saw, the names one element imports from the other ("Imports toCodeSpec and 2 more from", "3 imports"), or "Imports code from" when no file near the change imports across it. Relabel each line with what it does ("publishes OrderPlaced") and its technology. Render it with the `wat-diagram` skill, and reshape it only when the renderer prints a warning. When every element is only `changed` and no relationship is new, the element diagram has no news: skip it. For a hard change inside one element or a few files, or a change whose point is which functions moved, draw the code level from the same facts:
-   ```bash
-   npx gh-wat-dis graph from-facts .wat-tmp/facts.json --level file > .wat-tmp/code.json
-   ```
-   Files are cards, each changed symbol is a row, and a line ends on the symbol a file imports. See "Code level" in the `wat-diagram` skill. For a change in the order of steps, write a dynamic spec by hand. A mechanical change gets no diagram, however wide it is.
+   For `dynamic`, write the spec by hand from the functions the reason names. The element spec is scoped to the change already: the elements it touched, the ones it reaches, both ends of a relationship it added or removed, and each part in `parts` (a command, a skill, a route) inside the element that holds it, with a line from what calls it. Edit it: a generated line says only what the tools saw ("Imports toCodeSpec and 2 more from", "Runs audit"). Relabel each line with what it does ("publishes OrderPlaced") and its technology. Render it with the `wat-diagram` skill, and reshape it only when the renderer prints a warning. See "When a diagram is needed" in the `wat-architecture` skill for each level, and for a change that earns a second diagram. When `draw` is `false`, draw nothing. Show the first reason, or the `skip` reason, in one line with the draft.
 5. **Draft** `.wat-tmp/pr.md` in the Pull request format.
-   - `Blast radius`: optional, by the same measure as the diagram: how hard the change is to follow, not how much it touches. The diff already shows the changed files, so the section earns its place only when it says what the diff does not: code outside the diff that depends on the change, a changed exported signature or contract, tests that import the changed modules, files that usually change with these and are missing. When `blast.md` holds none of that, leave the section out. When it does, paste it and cut every line a reviewer would not act on. Do not add claims the facts do not hold. The file links point at the head commit, so push the branch before you post.
+   - `Blast radius`: optional. The measure is how hard the change is to follow, not how much it touches. The diff already shows the changed files, so the section earns its place only when it says what the diff does not: code outside the diff that depends on the change, a changed exported signature or contract, tests that import the changed modules, files that usually change with these and are missing. When `blast.md` holds none of that, leave the section out. When it does, paste it and cut every line a reviewer would not act on. Do not add claims the facts do not hold. The file links point at the head commit, so push the branch before you post.
    - `Verify`: list the checks you ran with command and result. Then list what the reviewer runs. If you ran nothing, say so.
    - `Evidence`: pick the evidence that shows this change best. When the change can be seen (a screen, a rendered artifact, what a command prints) and seeing it would help the reviewer, a before and after pair is a good choice: "Before and after" in the formats says when it fits, what makes a good pair, and how to lay it out. It is never required. If you plan to use one, capture the `before` side from the base branch early, while you still can.
    - `Risks`: start from the facts. A changed exported signature with dependents → name the callers. A migration or schema → state the deploy order. Risks describe what the change does to the system. They do not grade the code.
    - `Unknowns`: `coChange` lists files that changed with these in the last 90 days and are not in this diff. Check each one, then drop it or list it.
    - `Agent context`: one `text` code block that starts with the leading prompt, then the facts JSON, commands run and follow-ups. See "Agent context" in the formats.
 6. **Set the links.** See "Links and auto-close" below. Decide with the user which issues this PR finishes. Write one `Closes #n` line for each, and `Refs #n` for every other issue the PR touches. No issue at all: ask whether to file one, or state "No linked issue" under `Unknowns`.
-7. **Read it as the reviewer.** Can a person who has not seen the diff say what the system does differently and where to look first? If not, add what is missing. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/pr.md --kind pr`.
+7. **Read it as the reviewer.** Can a person who has not seen the diff say what the system does differently and where to look first? If not, add what is missing. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/pr.md --kind pr --facts .wat-tmp/facts.json`. A warning that the facts say draw is answered by the diagram, or by a mechanical opening.
 8. **Show the draft.** Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
 9. **Post.**
    ```bash
@@ -85,8 +82,8 @@ Use this when the PR can merge and work remains: a cleanup after a release, a se
 
 ## Mechanical changes
 
-For a rename, a format pass or a codemod, say "mechanical" in the opening and give the command that reproduces it.
+For a rename, a format pass or a codemod, say "mechanical" in the opening and give the command that reproduces it. Draw no diagram for it.
 
 ## Update after review
 
-When commits change the design, re-run `npx gh-wat-dis impact`, update `Change`, `Blast radius` and the diagram, and edit the body with `gh pr edit <n> --body-file`. Add one comment that lists what changed since the last review. Do not rewrite history in the description: move settled questions out of `Unknowns`.
+When commits change the design, re-run `npx gh-wat-dis impact`, update `Change`, `Blast radius` and the diagram the new `diagram` fact names, and edit the body with `gh pr edit <n> --body-file`. Add one comment that lists what changed since the last review. Do not rewrite history in the description: move settled questions out of `Unknowns`.

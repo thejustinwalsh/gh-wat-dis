@@ -80,15 +80,17 @@ Read the facts in this order:
 | `contracts` | Schemas, migrations, API specs, manifests touched | `Risks`, the alert |
 | `tests.importingChanged` | Test files that import the changed modules | `Verify` |
 | `coChange` | Files that changed with these before and are not in this diff | `Unknowns` |
-| `complexity` | Functions whose complexity the change moved, with the score before and after. Empty when cccc is not installed | The diagram and `Blast radius` decisions. Not the body |
+| `diagram` | Whether to draw a diagram, at which level, and why: see "When a diagram is needed" | The diagram, and the line you show with the draft |
+| `parts` | Commands, tools, skills, routes, jobs, `bin` and `exports` entries and options the change added or removed, with the element that holds each | `Change`, the diagram |
+| `complexity` | Functions whose complexity the change moved, with the score before and after. Empty when cccc is not installed | The `diagram` decision and `Blast radius`. Not the body |
 | `owners` | Who owns the touched paths | reviewers |
 | `tiers`, `caveats` | Which tools ran and what they could not see | wording |
 
 **`coChange`: which pairs to keep.** Most pairs are history noise. Keep one only when the missing file describes, tests or configures the changed file it is paired with: the README for a command, the schema for a query, the test for a module. Open that file and check. Then drop the pair, or list it under `Unknowns` with what you found.
 
-**An element that is not in the map.** An element whose `source` is `git` (a `test` directory, `(root)`, any folder when there is no map and no workspace) is a directory fallback. It counts in the rules below like any element: a fallback that is `added` draws a diagram as an added element does. Report it as "not in the architecture map". Propose a map entry only when it holds product code.
+**An element that is not in the map.** An element whose `source` is `git` (a `test` directory, `(root)`, any folder when there is no map and no workspace) is a directory fallback. A fallback that is `added` and holds code draws a diagram as an added element does. Report it as "not in the architecture map". Propose a map entry only when it holds product code.
 
-**`complexity` is an input, not a grade.** Never print a score in an issue or PR, and never call code complex. Use the numbers to decide what the reader needs: see "When a diagram is needed". When `tiers.unavailable` lists cccc, the numbers are absent: say so only if the user asks, and offer `npx gh-wat-dis doctor --tools install`.
+**`complexity` is an input, not a grade.** Never print a score in an issue or PR, and never call code complex. `impact` uses the numbers in the `diagram` decision: see "When a diagram is needed". When `tiers.unavailable` lists cccc, the numbers are absent: say so only if the user asks, and offer `npx gh-wat-dis doctor --tools install`.
 
 ### Answering a question in chat
 
@@ -98,7 +100,7 @@ When the user asks what a change affects and wants no issue or PR, answer in thi
 2. What it reaches outside the diff: dependents, changed exported signatures, contracts. "Nothing" is an answer.
 3. Unknowns: what the tools could not see, and any `coChange` pair you kept.
 
-Use prose and short lists. Do not borrow the sections of a PR body. State an added or removed relationship in a sentence. Draw a diagram for a chat answer only when the user asks for one, or when the test under "When a diagram is needed" says the change cannot be followed without it.
+Use prose and short lists. Do not borrow the sections of a PR body. State an added or removed relationship in a sentence. Draw a diagram for a chat answer only when the user asks for one.
 
 Name the mapped elements first. Then name the ones that are not in the architecture map in one clause, such as "plus tests and root config, which the map does not name".
 
@@ -129,36 +131,43 @@ A yes goes in `Risks` with what the change does about it, or in `Unknowns` with 
 
 ## When a diagram is needed
 
-The measure is how hard the change is to follow, not how much it touches. A change inside one file can need a diagram. A change across twenty modules can need none.
+A change to code draws a diagram. A reviewer sees which parts changed and how they connect faster in a picture than in a table, so the diagram is the default and leaving it out needs a reason. `impact` decides from the facts and writes the decision as the fact `diagram`. `blast` prints it on its first line too.
 
-**Draw one** when the change alters how parts relate, at any level, down to the functions of one module:
-- Parts are added, removed or rewired: what calls, owns or depends on what.
-- The order of steps changes, or steps become async, retried or conditional.
-- State is added or moves: a new state, a new owner, new transitions.
-- The shape of data that crosses a boundary changes: a contract, a message, a stored format.
-
-**Do not draw one**, however many files or elements change, when the parts relate as they did before: formatting, a rename, a codemod, a dependency bump, text and documentation, the same small edit repeated in many places, new values in an unchanged flow.
-
-**With complexity facts** (`complexity` and `summary.complexity` from `impact`, present when cccc is installed), start from the numbers:
-
-| The facts show | Then |
+| Field | Says |
 |---|---|
-| An element or a relationship has status `added` or `removed` (`elements`, `edges`) | Draw one, whatever the complexity numbers say. A new part or a new connection is a change to the structure, and small functions can make it. Check this row first. |
-| The change adds or removes something a user or another program calls by name, inside an element that already exists: a command, a tool, a skill, an endpoint, a scheduled job | Treat it as an added or removed element: draw one. The facts mark the holding element `changed`, because the map has no entry for the part. Add the part to the spec by hand as a `component` whose `parent` is the element that holds it, with status `added` or `removed`, and one relationship from what calls it. Offer to add it to the map. A new option on a command that exists, or a new check inside one, is not a new part: go on to the next rows. |
-| No function moved (`functions` is 0) | No function gained or lost a branch. No diagram for the logic, however many files changed: a sentence says what the changed bodies now do. |
-| Every rise in cognitive complexity is under 5, and the first two rows do not apply | Small edits to existing flows. A sentence covers it. |
-| One function rose by 15 or more, or the listed functions together gained 40 or more | The change is hard to follow from the diff. Open the functions at the top of `complexity` and apply the test below to them: this is where a code diagram earns its place, or a dynamic diagram when the difficulty is the order of steps. |
-| Between those | Apply the test below. |
+| `draw` | `true`: draw one. `false`: leave it out |
+| `level` | Which diagram fits: `element`, `code` or `dynamic`. `null` when `draw` is `false` |
+| `reasons` | What makes the diagram worth drawing, most specific first: an element or a relationship added or removed, a part added or removed, logic that moved more than a sentence can carry, a changed signature that other files import, calls in a new order. Otherwise "changes code in N elements" |
+| `skip` | When `draw` is `false`: why a diagram adds nothing |
+| `provenance` | The label of the weakest fact behind the decision. Word the first reason by it, as for any fact |
 
-A rise is `after.cognitive` minus `before.cognitive`. A function the change added has no `before`: its rise is its whole `after.cognitive`, so a new function that scores 15 counts as a rise of 15. A function renamed with the same body is not new: `impact` pairs it with its old name (`renamedFrom` on the symbol), so its rise is what its body gained. A package that moved or was renamed is `changed` with `renamedFrom`, not `added`, and its relationships keep their status. A function the change removed counts as 0 in these rows. A removed file or a removed command is structure: the second row covers it.
+**When `draw` is `true`**, draw at `level` with the `wat-diagram` skill:
 
-The numbers point at where to look. The test decides.
+- `element`: `npx gh-wat-dis graph from-facts .wat-tmp/facts.json > .wat-tmp/change.json`. The spec holds the changed and reached elements, both ends of each relationship the change added or removed, and each part from `parts` as a `component` inside the element that holds it, with a line from what calls it. Relabel each generated line with what it does and its technology.
+- `code`: `npx gh-wat-dis graph from-facts .wat-tmp/facts.json --level file > .wat-tmp/code.json`. Files are cards, each changed symbol is a row, and a line ends on the symbol a file imports. See "Code level" in the `wat-diagram` skill.
+- `dynamic`: write a dynamic spec by hand. The functions the reason names are where the steps are; read them and number the calls in their new order.
 
-**The test:** say what is different in the structure or the flow. If the answer names three or more parts and how they connect, or an order of steps, draw it. If one plain sentence covers it ("adds a flag to `lint`", "renames the field everywhere"), write the sentence and skip the diagram.
+State the first reason in one line when you show the draft.
 
-Draw at the level where the difficulty sits. For a hard change inside one module or a few, that is a code diagram: the files as cards, each with the symbols the change added, changed or removed, and lines from the files that import them. One command writes it from the facts: `npx gh-wat-dis impact | npx gh-wat-dis graph from-facts --level file > .wat-tmp/code.json`. A container diagram with one changed box tells the reviewer nothing.
+**When `draw` is `false`**, leave the diagram out and state the `skip` reason in one line when you show the draft. The tool skips only the changes a diagram adds nothing to, each measured from the facts:
 
-Build-time relationships are relationships. An import that exists only for types, a generator that reads a list, or a test that checks a page all count for the rule above when the change adds or removes them, and `impact` reports them. In an element diagram, draw one only when the change is about it, and name the mechanism in `technology` ("import type", "npm script"). In a code diagram every import the source proves between two drawn files is a line, type-only ones included.
+| `skip` | The facts show |
+|---|---|
+| only text and documentation changed | Every changed file is docs, prose or generated |
+| only dependency and version changes | The other files are manifests and lockfiles |
+| only CI, config and text files changed, and no relationship changed | No source changed, and no element, relationship or part came or went |
+| only tests changed | Every changed code file is a test |
+| only renames | Every changed declaration is one the base had under another name |
+| no declaration changed outside comments and layout | The parsed files changed, and no declaration in them did |
+| no function gained or lost a branch, no declaration was added or removed, and no relationship changed | Complexity facts are present and list no function |
+
+**A mechanical change** (a codemod, a rename the tools could not pair, the same small edit repeated in many files) can come out as `draw: true`, because its functions moved. Leave the diagram out, write "mechanical" in the opening with the command that reproduces it, and give that as the reason in the line you show with the draft. `lint --facts` warns on a body with no image; for a mechanical change the opening answers it.
+
+**A part** is something a user or another program calls by name: a command, a tool, a skill, an HTTP route, a scheduled job, a `bin` or `exports` entry, or a command's option. `parts` lists each one the change added or removed, with the element that holds it, what calls it when the facts know, and `basis`: where the tools read it (a registry such as `COMMANDS in src/main.ts`, a `SKILL.md`, a manifest field, a route call). A part found by the name of a list or a call is `heuristic`, and `resolved` when the tools followed its handler to a file. An option is not a box in an element diagram: it is a reason, and the code diagram shows it. Offer to add a new part to the map when it will change again.
+
+**Complexity**, when cccc is installed, sets one reason: a function whose cognitive complexity rose by 15 or more, or the listed functions together gaining 40 or more, makes "the logic of ... changed more than a sentence can carry" and the level `code`. A rise is `after.cognitive` minus `before.cognitive`; a new function rises by its whole score; a function renamed with the same body (`renamedFrom`) rises by what its body gained; a removed one counts 0. The reason names the functions, never the score.
+
+Build-time relationships are relationships. An import that exists only for types, a generator that reads a list, or a test that checks a page all count when the change adds or removes them, and `impact` reports them. In an element diagram, draw one only when the change is about it, and name the mechanism in `technology` ("import type", "npm script"). In a code diagram every import the source proves between two drawn files is a line, type-only ones included.
 
 ## Choose what to show
 
@@ -170,10 +179,10 @@ Build-time relationships are relationships. An import that exists only for types
 | Moves work across a thread, worker or WASM boundary, or changes an ABI or message format | Component, with the execution contexts as nested boundaries |
 | Changes the order of calls, adds async steps or retries | Dynamic, numbered steps |
 | Changes where things run: regions, nodes, scaling | Deployment |
-| A hard change inside one module or a few, or a change whose point is which functions moved, split, appeared or went away | Code: `graph from-facts --level file`. Files as cards, changed symbols as rows |
-| Removes or reorders a parameter of an exported symbol, or changes what it returns, and a file that is not a test imports it | Code: the lines show who imports the symbol. An added optional parameter needs no diagram. |
+| A hard change inside one module or a few, or a change whose point is which functions moved, split, appeared or went away (`diagram.level` is `code`) | Code: `graph from-facts --level file`. Files as cards, changed symbols as rows |
+| Removes or reorders a parameter of an exported symbol, or changes what it returns, and a file that is not a test imports it | Code: the lines show who imports the symbol. |
 | Reworks the order of steps or the state inside one component or file | Dynamic, with that component's own parts as the boxes |
-| Passes none of the tests above, whatever its size | None. Use a sentence, a `diff` block or a table. |
+| `diagram.draw` is `false` | None. State the `skip` reason; use a sentence, a `diff` block or a table. |
 
 Show the changed elements and what the change reaches. `graph from-facts` scopes the spec that way, so it needs no `focus` step. Past 8 boxes, use an overview plus a scoped view: see the `wat-diagram` skill.
 

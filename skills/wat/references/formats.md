@@ -137,6 +137,7 @@ Closes #<n>
 Refs #<m>
 ````
 
+- **Draw the diagram.** A PR that changes code carries one, at the level `diagram.level` in `npx gh-wat-dis impact` names. Leave it out only when `diagram.skip` gives the reason, or the opening says the change is mechanical. Never let the `Change` table stand in for it.
 - Write an image as `![Title](./file.svg)` with the local path. `gh --attach` uploads the file and puts its GitHub URL in place of the path.
 - **Centre every diagram.** Put the image line inside `<div align="center">` and `</div>`, with a blank line after the opening tag and before the closing one, as the template shows. GitHub then centres it in the body. Without the blank lines the image does not render. An image inside a table cell, such as a before and after pair, stays as it is.
 - A before and after pair is one good way to show a change a person can see. It is a choice, not a rule: see "Before and after" below.

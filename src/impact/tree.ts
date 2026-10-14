@@ -12,7 +12,7 @@ export interface Tree {
   size(path: string): number;
 }
 
-const NEEDED = /(^|\/)(package\.json|Cargo\.toml|pnpm-workspace\.yaml|[jt]sconfig[^/]*\.json|CODEOWNERS)$/;
+const NEEDED = /(^|\/)(package\.json|Cargo\.toml|pnpm-workspace\.yaml|[jt]sconfig[^/]*\.json|CODEOWNERS)$|^\.github\/workflows\/[^/]+\.ya?ml$/;
 const wanted = (path: string): boolean => NEEDED.test(path) || (languageOf(path) !== null && !isSkipped(path));
 
 function walk(root: string, dir = '', out: string[] = []): string[] {

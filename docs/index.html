@@ -411,7 +411,7 @@ Links read
       </dl>
       <h3>Collect facts (JSON out)</h3>
       <dl>
-        <div><dt>impact</dt><dd>Facts about a change: files, changed symbols, dependents, elements, contracts, owners, files that usually change together, and complexity moved (when cccc is installed). Each fact names its source.</dd></div>
+        <div><dt>impact</dt><dd>Facts about a change: files, changed symbols, dependents, elements, contracts, owners, files that usually change together, the commands, skills and routes it added or removed, complexity moved (when cccc is installed), and whether it needs a diagram. Each fact names its source.</dd></div>
         <div><dt>reach</dt><dd>Who depends on a file or an exported symbol. Needs no diff.</dd></div>
         <div><dt>owners</dt><dd>CODEOWNERS for paths, with the rule that matched.</dd></div>
         <div><dt>elements</dt><dd>The architecture elements and the files each one maps, from the config or from the workspace layout.</dd></div>
@@ -431,7 +431,7 @@ Links read
       </dl>
       <h3>Shape a graph (diagram spec in, diagram spec out)</h3>
       <dl>
-        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status. --level file gives a code diagram: files as cards, changed symbols as rows.</dd></div>
+        <div><dt>graph from-facts</dt><dd>A diagram spec from impact facts: the changed and reached elements with their status, and each command, skill or route the change added or removed inside the element that holds it. --level file gives a code diagram: files as cards, changed symbols as rows.</dd></div>
         <div><dt>graph from-config</dt><dd>A diagram spec of the whole architecture map in the repository's config.</dd></div>
         <div><dt>graph focus</dt><dd>Keep some elements, their neighbours within N hops, and every ancestor.</dd></div>
         <div><dt>graph collapse</dt><dd>Fold everything inside an element into it and merge the relationships.</dd></div>
@@ -448,11 +448,11 @@ Links read
       <dl>
         <div><dt>diagram</dt><dd>Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON. <i>writes local files</i></dd></div>
         <div><dt>legend</dt><dd>A spec's relationships as a Markdown table, to sit under a diagram with numbered lines.</dd></div>
-        <div><dt>blast</dt><dd>Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links.</dd></div>
+        <div><dt>blast</dt><dd>Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links. The first line is the diagram decision, as a comment GitHub does not show.</dd></div>
       </dl>
       <h3>Check</h3>
       <dl>
-        <div><dt>lint</dt><dd>Backstop check of a body before it is posted: what GitHub would break, and gross shape errors. It does not judge wording.</dd></div>
+        <div><dt>lint</dt><dd>Backstop check of a body before it is posted: what GitHub would break, and gross shape errors. With --facts, a warning when the facts say draw a diagram and the body has none. It does not judge wording.</dd></div>
       </dl>
       <!-- /commands:all -->
     </details>
