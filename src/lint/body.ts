@@ -126,6 +126,13 @@ export function lintBody(text: string, { kind = 'issue', exists }: { kind?: Kind
       if (start >= 0 && close >= 0 && !L.slice(start, close).some((l) => l.kind === 'fence')) {
         warn(first0.n, '"Agent context" holds no code block. GitHub shows a copy button only on a code block: put the content in one fenced block.');
       }
+      if (start >= 0 && close >= 0) {
+        const inner = L.slice(openIdx + 1, close);
+        const fences = inner.filter((l) => l.kind === 'fence').length;
+        const loose = inner.find((l) => l.kind === 'text' || l.kind === 'heading');
+        if (fences > 2) warn(first0.n, '"Agent context" holds more than one code block. An agent copies one block: merge them into one fenced `text` block.');
+        else if (fences && loose) warn(loose.n, '"Agent context" has text outside its code block. That text is not copied with the block: move it inside.');
+      }
       const next = L[openIdx + 1];
       if (next && next.kind !== 'blank' && !/<\/details>/i.test(next.t)) {
         warn(next.n, 'leave a blank line after </summary> so Markdown inside the block renders');

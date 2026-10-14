@@ -133,6 +133,14 @@ test('lint: a diagram on its own line is centred, with blank lines inside the di
   assert.deepEqual(inTable.warnings, []);
 });
 
+test('lint warns when the agent context is more than one code block', () => {
+  const wrap = (inner: string) => `Outcome.\n\n<details>\n<summary>Agent context</summary>\n\n${inner}\n\n</details>\n`;
+  const block = '```text\nprompt\n```';
+  assert.deepEqual(lintBody(wrap(block), { kind: 'issue' }).warnings, []);
+  assert.match(lintBody(wrap(`Files to read:\n\n${block}`), { kind: 'issue' }).warnings[0]!.msg, /text outside its code block/);
+  assert.match(lintBody(wrap(`${block}\n\n${block}`), { kind: 'issue' }).warnings[0]!.msg, /more than one code block/);
+});
+
 test('lint warns when the agent context has no code block to copy', () => {
   const plain = 'Outcome.\n\n<details>\n<summary>Agent context</summary>\n\ndata\n\n</details>\n';
   const { errors, warnings } = lintBody(plain, { kind: 'issue' });
