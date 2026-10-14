@@ -14,7 +14,7 @@ Three jobs: **map** the system once, **measure** each change, **choose** what to
 
 The map gives every issue and PR the same names for the same things. It lives in `.agents/gh-wat-dis/config.json` → `architecture`.
 
-1. **Find the runtime units.** A container is something that must run for the system to work: a web app, an API, a worker, a CLI, a database, a queue, a bucket. Look for entry points and deploy config, not folders:
+1. **Find the runtime units.** A container is something that must run for the system to work: a web app, an API, a worker, a CLI, a database, a queue, a bucket. Files that ship on their own and that another system loads and runs count as one: a plugin, a set of agent skills, CI workflows. Look for entry points and deploy config, not folders:
    - TypeScript: `package.json` workspaces, `bin`, `main`, `exports`, `scripts.start`
    - Rust: `Cargo.toml` workspace members, `[[bin]]` targets, `src/main.rs`, `cdylib` crates that build WebAssembly
    - Any: `Dockerfile`, `docker-compose.yml`, `Procfile`, Kubernetes and Terraform files, serverless config, CI deploy jobs
