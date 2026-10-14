@@ -72,7 +72,7 @@ const GATE_WORDS: Record<Gate, string> = {
 };
 
 /** What one rung of the ladder gives up, next to the spec as written. */
-interface Step { direction: Direction; numbered: boolean; compact: boolean; wrap?: number; whole?: boolean }
+interface Step { direction: Direction; numbered: boolean; compact: boolean; wrap?: number; returns?: boolean; whole?: boolean }
 
 /**
  * Draws the spec the way its type is drawn, and loosens that form one step at a time until a
@@ -109,7 +109,10 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
     for (const numbered of numberings) for (const wrap of [undefined, ...wraps]) for (const direction of directions) {
       if (Number(numbered !== numberings[0]) + Number(wrap !== undefined) !== given) continue;
       // A code diagram tries its knots spread over the layers there are to spare, and each in one layer: both are its form.
-      for (const whole of spec.type === 'code' ? [false, true] : [false]) steps.push({ direction, numbered, compact, ...(wrap ? { wrap } : {}), ...(whole ? { whole } : {}) });
+      for (const whole of spec.type === 'code' ? [false, true] : [false]) {
+        // A wrapped layout is tried with its lines back to the start of a row run between the rows, and run straight back.
+        for (const returns of wrap ? [true, false] : [false]) steps.push({ direction, numbered, compact, ...(wrap ? { wrap, returns } : {}), ...(whole ? { whole } : {}) });
+      }
     }
     if (!steps.length) continue;
     const gives = [...new Set(steps.flatMap((s) => [...(s.numbered !== numberings[0] ? ['numbers on the lines'] : []), ...(s.wrap ? ['wrapped'] : [])]))].join(given === 2 ? ' and ' : ' or ');
@@ -124,7 +127,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
     for (const step of ladder[k]!.steps) {
       const { direction } = step;
       let l: Layout;
-      try { l = await layout(spec, { detail: step.compact ? 'compact' : asked, direction, numbered: step.numbered, wrap: step.wrap, whole: step.whole }); } catch (err) { failure ??= err; continue; }
+      try { l = await layout(spec, { detail: step.compact ? 'compact' : asked, direction, numbered: step.numbered, wrap: step.wrap, returns: step.returns, whole: step.whole }); } catch (err) { failure ??= err; continue; }
       const m = measure(l);
       // A wrap that cut nothing, or a second shape that packs the same, repeats a layout already tried.
       if (tried.some((o) => o.c.direction === direction && o.layout.numbered === l.numbered && o.layout.compact === l.compact && o.layout.width === l.width && o.layout.height === l.height && o.c.length === m.length)) continue;
