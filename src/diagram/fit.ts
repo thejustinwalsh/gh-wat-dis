@@ -155,11 +155,11 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   if (!tried.length) throw new Error(`could not lay out the diagram: ${failure instanceof Error ? failure.message : String(failure ?? 'no layout was tried')}`);
   const passed = best !== undefined;
   // No rung passes: the layout that fails the least is drawn. A missing line is worse than a line through text, and
-  // so on down the gates. Then the lines decide before the size does: a line sent round the drawing, then crossings
-  // counted in steps of a quarter of the lines, so that one crossing more or less does not outweigh the page.
-  // So a clean drawing that is too wide is kept before a narrower one whose lines a reader cannot follow.
-  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Number(c.worst !== undefined) + Number(c.roundabout > 0), Math.floor(c.crossings / Math.max(3, c.lines / 4)),
-    Math.ceil(Math.max(0, c.width - maxWidth) / 100), Math.ceil(Math.max(0, c.height - maxWidth * GOLDEN) / 100)];
+  // so on down the gates. Then a drawing within the page width beats a wider one, since GitHub scales a wide image
+  // down and all its text shrinks. Then calm lines: no line sent round the drawing, then the fewest crossings the calm
+  // gate counts. Then the height, and then the earlier rung, which gives up less.
+  const badness = (c: Candidate): number[] => [...GATES.slice(0, 3).map((g) => Number(c.fails.includes(g))), Math.ceil(Math.max(0, c.width - maxWidth) / 100),
+    Number(c.worst !== undefined) + Number(c.roundabout > 0), Math.max(0, c.calmCrossings - c.calmAllowed), Math.ceil(Math.max(0, c.height - maxWidth * GOLDEN) / 100), c.rung];
   best ??= [...tried].sort((a, b) => compare(badness(a.c), badness(b.c)) || compare(a.order, b.order))[0]!;
   best.c.chosen = true;
 

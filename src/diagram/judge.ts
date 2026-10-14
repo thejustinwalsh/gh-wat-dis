@@ -20,6 +20,13 @@ export interface Metrics {
   crossings: number;
   /** Lines that run more than twice as far as they need to, round the drawing or back on themselves. */
   roundabout: number;
+  /**
+   * The crossings the calm gate counts, and how many it allows. In a code diagram drawn in layers these are only
+   * crossings between two lines that both run from one layer to another, one allowed for every two lines: a line
+   * inside a layer or a loop does not count. Elsewhere they are all the crossings, one allowed for every four lines.
+   */
+  calmCrossings: number;
+  calmAllowed: number;
   /** Lines that pass through an element or a group that holds neither of their ends. */
   through: number;
   /** Lines that run through the name of a group. */
@@ -75,7 +82,7 @@ export function measure(l: Layout): Metrics {
     return false;
   };
   const edges = l.edges.filter((e) => e.points.length > 1);
-  const m: Metrics = { lines: edges.length, broken: l.edges.length - edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, roundabout: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
+  const m: Metrics = { lines: edges.length, broken: l.edges.length - edges.length, length: 0, detour: 0, longest: 0, bends: 0, maxBends: 0, crossings: 0, roundabout: 0, calmCrossings: 0, calmAllowed: Math.ceil(edges.length / (l.layered ? 2 : 4)), through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
   const diagonal = Math.hypot(l.width, l.height) || 1;
   let worst = 0;
   edges.forEach((e, i) => {
@@ -97,7 +104,12 @@ export function measure(l: Layout): Metrics {
         m.worst = { from: e.rel.from, to: e.rel.to, length: Math.round(length), direct: Math.round(direct) };
       }
     }
-    for (const other of edges.slice(i + 1)) m.crossings += crossings(e.points, other.points);
+    const between = (x: EdgePath): boolean => !x.inLayer && x.rel.from !== x.rel.to;
+    for (const other of edges.slice(i + 1)) {
+      const n = crossings(e.points, other.points);
+      m.crossings += n;
+      if (!l.layered || (between(e) && between(other))) m.calmCrossings += n;
+    }
     if (l.nodes.some((b) => b.el.id !== e.rel.from && b.el.id !== e.rel.to
       && !(b.group && (holds(b, e.rel.from) || holds(b, e.rel.to))) && crossesRect(e.points, b, -1.5))) m.through++;
   });
@@ -134,7 +146,7 @@ export function failed(m: Metrics, size: { width: number; height: number }, max:
   if (m.through + m.titles + m.struck > 0) out.push('text');
   if (m.overlaps + m.clipped > 0) out.push('overlap');
   // Calm: no line sent round the drawing, and crossings no more than one for every four lines.
-  if (m.roundabout > 0 || m.crossings > Math.ceil(m.lines / 4)) out.push('calm');
+  if (m.roundabout > 0 || m.calmCrossings > m.calmAllowed) out.push('calm');
   if (size.width > max.width) out.push('width');
   if (size.height > max.height) out.push('height');
   return out;
@@ -172,6 +184,6 @@ export function faults(m: Metrics, name: (id: string) => string): string[] {
   if (m.overlaps > 0) out.push(`${n(m.overlaps, 'place', 'places')} where a label lies on a label or a box, or one line lies on another`);
   if (m.clipped > 0) out.push(`${n(m.clipped, 'group is', 'groups are')} narrower than ${m.clipped === 1 ? 'its' : 'their'} name`);
   if (m.roundabout > 0 && !m.worst) out.push(`${n(m.roundabout, 'line runs', 'lines run')} more than twice as far as ${m.roundabout === 1 ? 'it needs' : 'they need'} to`);
-  if (m.crossings >= 3 || m.crossings > m.lines / 4) out.push(`${m.crossings} line ${m.crossings === 1 ? 'crossing' : 'crossings'} on ${m.lines} lines`);
+  if (m.crossings >= 3 || m.calmCrossings > m.calmAllowed) out.push(`${m.crossings} line ${m.crossings === 1 ? 'crossing' : 'crossings'} on ${m.lines} lines`);
   return out;
 }

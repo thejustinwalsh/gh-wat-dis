@@ -37,10 +37,13 @@ export interface NodeBox {
   light?: boolean;
 }
 export interface EdgeLabel extends Rect { lines: TextLine[] }
-export interface EdgePath { rel: SpecRelationship; points: Pt[]; label?: EdgeLabel }
+/** `inLayer` is set on a line of a code diagram that joins two files of one layer and is drawn beside them. */
+export interface EdgePath { rel: SpecRelationship; points: Pt[]; label?: EdgeLabel; inLayer?: boolean }
 export interface Layout {
   width: number; height: number; nodes: NodeBox[]; edges: EdgePath[];
   direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean;
+  /** True for a code diagram drawn in layers of files. */
+  layered?: boolean;
   /** True when a long chain was cut and continued on a second row or column. */
   wrapped: boolean;
 }
@@ -610,6 +613,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const i = spec.relationships.indexOf(path.rel);
     const half = halves.get(i);
     if (!half) continue;
+    path.inLayer = true;
     if (path.points.length < 2 || half.length < 2) { path.points = []; continue; }
     const p = path.points.at(-1)!, q = half.at(-1)!;
     path.points = Math.abs(p.y - q.y) < 0.5 ? [...path.points.slice(0, -1), ...half.slice(0, -1).reverse()] : [...path.points, ...half.slice().reverse()];
@@ -652,5 +656,5 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     if (a === z || back.has(spec.relationships.indexOf(p.rel))) return false;
     return down ? z.x >= a.x + a.w && z.y < a.y : z.y >= a.y + a.h && z.x < a.x;
   });
-  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped };
+  return { width: done.width ?? 0, height: done.height ?? 0, nodes: [...boxes.values()], edges: paths, direction, numbered, compact, wrapped, ...(shape ? { layered: true } : {}) };
 }

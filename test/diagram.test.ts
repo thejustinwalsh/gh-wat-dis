@@ -449,8 +449,9 @@ test('judge: a direction, a label mode and a level of detail that are named are 
   assert.equal(pinned.report.passed, false);
   assert.match(pinned.report.why, /^no layout passes every check on any of the \d+ rungs\. Drew the nearest: left to right/);
   assert.match(pinned.report.warnings[0]!, /is wider than GitHub's 860px body/);
-  // With nothing passing, the lines decide before the size: the layout drawn has no line sent round the drawing.
-  assert.equal(pinned.report.candidates.find((k) => k.chosen)!.worst, undefined);
+  // With nothing passing, the width decides before the calm: GitHub scales a wide image down, so the narrowest is drawn.
+  const over = (k: { width: number }): number => Math.ceil(Math.max(0, k.width - 860) / 100);
+  assert.equal(over(pinned.report.candidates.find((k) => k.chosen)!), Math.min(...pinned.report.candidates.map(over)));
   // Taking the direction out of the spec is the fix, and it was tried before it is offered.
   const fixes = (await advise(named, {}, pinned.report)).fixes;
   assert.ok(fixes.some((f) => f.command === 'graph set --direction ""' && f.width <= 860), fixes.map((f) => f.command).join('|'));
@@ -468,7 +469,7 @@ test('judge: a direction, a label mode and a level of detail that are named are 
 
 test('judge: the gates, the rank among layouts that pass, and the faults in words', async () => {
   const { compare, failed, faults, rank } = await import('../src/diagram/judge.ts');
-  const calm = { lines: 4, broken: 0, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, roundabout: 0, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
+  const calm = { lines: 4, broken: 0, length: 800, detour: 0, longest: 0.3, bends: 4, maxBends: 2, crossings: 0, roundabout: 0, calmCrossings: 0, calmAllowed: 1, through: 0, titles: 0, struck: 0, overlaps: 0, clipped: 0 };
   const page = { width: 860, height: 1376 };
   assert.deepEqual(failed(calm, { width: 860, height: 1376 }, page), []);
   assert.deepEqual(failed({ ...calm, broken: 1, titles: 1, overlaps: 1 }, { width: 861, height: 1377 }, page), ['lines', 'text', 'overlap', 'width', 'height']);
@@ -497,8 +498,8 @@ test('judge: the gates, the rank among layouts that pass, and the faults in word
   assert.doesNotMatch(poor.join(' '), /graph |--labels/);
   // One crossing for every four lines is calm. More is a fault, and fails the calm gate.
   assert.deepEqual(faults({ ...calm, crossings: 1 }, (id) => id), []);
-  assert.deepEqual(faults({ ...calm, crossings: 2 }, (id) => id), ['2 line crossings on 4 lines']);
-  assert.deepEqual(failed({ ...calm, crossings: 2 }, page, page), ['calm']);
+  assert.deepEqual(faults({ ...calm, crossings: 2, calmCrossings: 2 }, (id) => id), ['2 line crossings on 4 lines']);
+  assert.deepEqual(failed({ ...calm, crossings: 2, calmCrossings: 2 }, page, page), ['calm']);
   assert.deepEqual(failed({ ...calm, roundabout: 1 }, page, page), ['calm']);
 });
 
