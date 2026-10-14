@@ -61,6 +61,12 @@ export function readJson<T = unknown>(path: string): T | null {
   try { return JSON.parse(readFileSync(path, 'utf8')) as T; } catch { return null; }
 }
 
+/** Parses JSON that may hold comments and trailing commas, as OpenCode's opencode.jsonc does. For reading only. */
+export function parseJsonc<T = unknown>(text: string): T {
+  const plain = text.replace(/"(?:[^"\\]|\\.)*"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => (m.startsWith('"') ? m : ''));
+  return JSON.parse(plain.replace(/"(?:[^"\\]|\\.)*"|,(?=\s*[}\]])/g, (m) => (m.startsWith('"') ? m : ''))) as T;
+}
+
 const pause = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 
 /** A pipe written by another Node process can be non-blocking, so a plain read fails with EAGAIN. */

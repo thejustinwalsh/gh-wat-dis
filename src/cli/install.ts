@@ -19,6 +19,9 @@ export interface Target { client: Client; root: string; label: string }
 export type Action = 'install' | 'update' | 'replace' | 'current' | 'skip';
 export interface Step { action: Action; name: string; src: string; dest: string; client: Client; note: string; hash: string }
 
+/** Where this package keeps the skill it ships under that name. */
+export const skillSource = (name: string): string => join(SKILLS_SRC, name);
+
 export function skillNames(): string[] {
   return readdirSync(SKILLS_SRC, { withFileTypes: true })
     .filter((d) => d.isDirectory() && existsSync(join(SKILLS_SRC, d.name, 'SKILL.md')))

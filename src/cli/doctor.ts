@@ -5,10 +5,10 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { validateConfig } from './config.ts';
 import type { Config } from './config.ts';
-import { MANIFEST, hashDir, skillNames, targets } from './install.ts';
+import { MANIFEST, hashDir, skillNames, skillSource, targets } from './install.ts';
 import type { Manifest } from './install.ts';
 import { CCCC, install as installCccc, locate as locateCccc, platformKey } from '../tools/cccc.ts';
-import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, readJson, repoRoot, run } from './util.ts';
+import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, parseJsonc, readJson, repoRoot, run } from './util.ts';
 
 const MIN_GH = '2.99.0';
 const MIN_NODE = '24.0.0';
@@ -83,18 +83,19 @@ export async function offerLogin(checks: Check[]): Promise<boolean> {
   return spawnSync('gh', LOGIN, { stdio: 'inherit' }).status === 0;
 }
 
-function checkSkills(cwd: string): Check[] {
+export function checkSkills(cwd: string, home: string = homedir()): Check[] {
   const names = skillNames();
   const res: Check[] = [];
   for (const scope of [{ project: false, label: 'global' }, { project: true, label: 'project' }]) {
-    for (const t of targets({ project: scope.project, clients: ['agents', 'claude'], cwd })) {
+    for (const t of targets({ project: scope.project, clients: ['agents', 'claude'], cwd, home })) {
       const states = names.map((n) => {
         const dir = join(t.root, n);
         if (!existsSync(dir)) return 'missing';
         const m = readJson<Manifest>(join(dir, MANIFEST));
         if (!m) return 'foreign';
         if (hashDir(dir) !== m.hash) return 'edited';
-        return m.version === PKG.version ? 'current' : 'old';
+        // The same rule install uses: a copy is current when its files are the ones this version ships.
+        return m.hash === hashDir(skillSource(n)) ? 'current' : 'old';
       });
       const count = (s: string): number => states.filter((x) => x === s).length;
       if (count('missing') === names.length) continue;
@@ -137,23 +138,28 @@ async function tokenWorks(name: string): Promise<boolean | null> {
   } catch { return null; }
 }
 
-async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
-  const home = homedir();
+export async function checkMcp(cwd: string, offline: boolean, home: string = homedir()): Promise<Check> {
+  const root = repoRoot(cwd);
   const json = (k: string) => (text: string): string | undefined => {
-    const servers = (JSON.parse(text) as Record<string, Servers>)[k] ?? {};
+    const servers = parseJsonc<Record<string, Servers>>(text)[k] ?? {};
     const key = Object.keys(servers).find((n) => /github/i.test(n));
     return key ? JSON.stringify(servers[key]) : undefined;
   };
   const toml = (text: string): string | undefined => text.match(/^\[mcp_servers\.github\][^[]*/m)?.[0];
   const places: [label: string, path: string, entry: (text: string) => string | undefined][] = [
     ['Claude Code (user)', join(home, '.claude.json'), json('mcpServers')],
-    ['Claude Code (project)', join(cwd, '.mcp.json'), json('mcpServers')],
+    ['Claude Code (project)', join(root, '.mcp.json'), json('mcpServers')],
     ['Codex', join(home, '.codex/config.toml'), toml],
+    ['Codex (project)', join(root, '.codex/config.toml'), toml],
     ['Cursor', join(home, '.cursor/mcp.json'), json('mcpServers')],
-    ['Cursor (project)', join(cwd, '.cursor/mcp.json'), json('mcpServers')],
+    ['Cursor (project)', join(root, '.cursor/mcp.json'), json('mcpServers')],
     ['Gemini CLI', join(home, '.gemini/settings.json'), json('mcpServers')],
+    ['Gemini CLI (project)', join(root, '.gemini/settings.json'), json('mcpServers')],
     ['OpenCode', join(home, '.config/opencode/opencode.json'), json('mcp')],
-    ['VS Code (project)', join(cwd, '.vscode/mcp.json'), json('servers')],
+    ['OpenCode', join(home, '.config/opencode/opencode.jsonc'), json('mcp')],
+    ['OpenCode (project)', join(root, 'opencode.json'), json('mcp')],
+    ['OpenCode (project)', join(root, 'opencode.jsonc'), json('mcp')],
+    ['VS Code (project)', join(root, '.vscode/mcp.json'), json('servers')],
   ];
   const found: string[] = [];
   const wanted = new Set<string>();
@@ -163,7 +169,7 @@ async function checkMcp(cwd: string, offline: boolean): Promise<Check> {
     try {
       const e = entry(readFileSync(path, 'utf8'));
       if (e === undefined) continue;
-      found.push(label);
+      if (!found.includes(label)) found.push(label);
       if (e.includes('headersHelper')) helper = true;
       else for (const v of tokenVars(e)) wanted.add(v);
     } catch { /* an unreadable harness config is not ours to report */ }
