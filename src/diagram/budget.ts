@@ -123,6 +123,7 @@ export function trim(spec: DiagramSpec): { command: string; boxes: number; lines
   } else {
     if (marked) tries.push(['graph focus --on status:changed,added,removed --hops 1', () => focus(spec, { on: select(spec, 'status:changed,added,removed'), hops: 1 })]);
     if (marked) tries.push(['graph drop --status unchanged --orphans', () => drop(spec, { status: ['unchanged'], orphans: true })]);
+    if (spec.elements.some((e) => e.status === 'affected')) tries.push(['graph drop --status affected', () => drop(spec, { status: ['affected'] })]);
     for (const type of ['container', 'system', 'boundary']) tries.push([`graph collapse --to-type ${type}`, () => collapse(spec, { toType: type })]);
   }
   const kept = (next: DiagramSpec): boolean => {
