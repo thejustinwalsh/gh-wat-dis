@@ -1,19 +1,20 @@
 {
   "title": "Payments worker charges once for each event",
   "type": "container",
-  "scope": "the duplicate charge fix",
-  "direction": "DOWN",
+  "scope": "the Shop",
   "elements": [
     { "id": "stripe", "type": "system", "name": "Stripe", "external": true, "description": "Retries a webhook when the reply takes over 10 s" },
-    { "id": "shop", "type": "system", "name": "Shop", "description": "Takes orders and payments" },
-    { "id": "payments-worker", "type": "container", "name": "Payments worker", "technology": "TypeScript, Node.js", "description": "Charges once for each event.id", "parent": "shop", "status": "changed" },
-    { "id": "orders-api", "type": "container", "name": "Orders API", "technology": "TypeScript, Node.js", "description": "Refunds and reconciles with retryCharge", "parent": "shop", "status": "affected" },
-    { "id": "orders-db", "type": "datastore", "name": "Orders database", "technology": "PostgreSQL 16", "description": "Stores payment keys", "parent": "shop", "status": "changed" }
+    { "id": "storefront", "type": "container", "name": "Storefront", "technology": "Next.js", "description": "Takes the order and starts checkout" },
+    { "id": "orders-api", "type": "container", "name": "Orders API", "technology": "TypeScript, Node.js", "description": "Refunds and reconciles with retryCharge", "status": "affected" },
+    { "id": "payments-worker", "type": "container", "name": "Payments worker", "technology": "TypeScript, Node.js", "description": "Charges once for each event.id", "status": "changed" },
+    { "id": "orders-db", "type": "datastore", "name": "Orders database", "technology": "PostgreSQL 16", "description": "Stores payment keys", "status": "changed" },
+    { "id": "events", "type": "queue", "name": "Order events", "technology": "NATS JetStream", "description": "Tells shipping an order is paid" }
   ],
   "relationships": [
     { "from": "stripe", "to": "payments-worker", "label": "Delivers payment events to", "technology": "HTTPS webhook" },
-    { "from": "payments-worker", "to": "orders-db", "label": "Stores payment keys in", "technology": "SQL", "status": "added" },
+    { "from": "storefront", "to": "payments-worker", "label": "Starts a charge with", "technology": "NATS" },
     { "from": "orders-api", "to": "payments-worker", "label": "Retries charges with", "technology": "retryCharge import", "status": "affected" },
-    { "from": "orders-api", "to": "orders-db", "label": "Reads and writes orders", "technology": "SQL" }
+    { "from": "payments-worker", "to": "orders-db", "label": "Stores payment keys in", "technology": "SQL", "status": "added" },
+    { "from": "payments-worker", "to": "events", "label": "Publishes paid orders to", "technology": "NATS" }
   ]
 }

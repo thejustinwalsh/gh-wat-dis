@@ -295,7 +295,7 @@ footer span { color: var(--muted); }
       </div>
       <div class="block">
         <span class="tag">2 · What changes in the system</span>
-        <figure><img src="assets/focused.svg" width="492" height="1019" alt="Container diagram: the Payments worker changes to charge once for each event, it gains a line to the Orders database, which stores payment keys, and the Orders API, which imports retryCharge, is affected."></figure>
+        <figure><img src="assets/focused.svg" width="712" height="571" alt="Container diagram: Stripe, the Storefront and the Orders API all send charges to the Payments worker. The Payments worker changes to charge once for each event and gains a line to the Orders database, which stores payment keys. The Orders API, which imports retryCharge, is affected. The worker also publishes paid orders to the Order events queue."></figure>
       </div>
       <div class="block">
         <span class="tag">3 · Facts from tools, labeled</span>

@@ -4,7 +4,7 @@
   "example/container": "rung 2 of 3 | 840 x 1084 | top down, numbered",
   "example/context": "rung 1 of 3 | 712 x 555 | top down",
   "example/dynamic": "rung 1 of 3 | 712 x 884 | top down",
-  "example/focused": "rung 1 of 6 | 492 x 1019 | top down",
+  "example/focused": "rung 1 of 3 | 712 x 571 | top down",
   "example/in-process": "rung 1 of 3 | 827 x 1340 | top down",
   "example/whole-system": "no rung of 3: width, height | 1283 x 2263 | top down, numbered",
   "fixture/diagram-containers": "rung 2 of 3 | 616 x 715 | top down, numbered",
