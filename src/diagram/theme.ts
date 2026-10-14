@@ -1,4 +1,9 @@
 export type ThemeName = 'auto' | 'light' | 'dark';
+export type PaletteName = 'github' | 'ebony';
+export type Background = 'solid' | 'transparent';
+
+export const PALETTE_NAMES = ['github', 'ebony'] as const;
+export const BACKGROUNDS = ['solid', 'transparent'] as const;
 
 export const FONT = '-apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
 /** For symbol names. */
@@ -68,6 +73,68 @@ export const DARK: Palette = {
   onStatus: '#0d1117',
 };
 
+/**
+ * Bearded Theme HC Ebony, from the tokens of the site (docs/index.html). Dark takes the site's dark tokens.
+ * Light takes its light tokens, the hues of Ebony at a lightness that reads on white.
+ * Element fills are a token hue mixed into the page colour: 5 to 18 percent.
+ * The site has no red, so removed takes its orange ("number").
+ * Where a site colour fails WCAG AA on a fill, it moves the least that passes: light muted, light removed,
+ * dark muted and both strokes.
+ */
+export const EBONY_LIGHT: Palette = {
+  bg: '#ffffff',
+  frame: '#e5e5e5',
+  fg: '#181820',
+  muted: '#666670',
+  line: '#666670',
+  stroke: '#8c8c99',
+  person: '#f1ecf9',
+  system: '#d6e9f0',
+  container: '#e6f1f6',
+  component: '#f2f8fa',
+  store: '#e6f1f0',
+  external: '#f5f5f5',
+  group: '#fafafa',
+  added: '#266c20',
+  changed: '#715200',
+  removed: '#b15309',
+  affected: '#0073a1',
+  onStatus: '#ffffff',
+};
+
+export const EBONY_DARK: Palette = {
+  bg: '#181820',
+  frame: '#2b2b3a',
+  fg: '#f2f2f7',
+  muted: '#a8a8bd',
+  line: '#a8a8bd',
+  stroke: '#6e6e8a',
+  person: '#322c44',
+  system: '#2b3a46',
+  container: '#232d37',
+  component: '#1d222b',
+  store: '#192e31',
+  external: '#21212c',
+  group: '#13131a',
+  added: '#afea7b',
+  changed: '#f5df76',
+  removed: '#ffaa7d',
+  affected: '#7fd7f5',
+  onStatus: '#181820',
+};
+
+/** Each palette has a light and a dark side. `github` is the default: GitHub's own colours. */
+export const PALETTES: Record<PaletteName, { light: Palette; dark: Palette }> = {
+  github: { light: LIGHT, dark: DARK },
+  ebony: { light: EBONY_LIGHT, dark: EBONY_DARK },
+};
+
+/** The page colours a transparent diagram is shown on: GitHub's light and dark body, and the site's. */
+export const PAGES = {
+  light: ['#ffffff'],
+  dark: ['#0d1117', '#181820'],
+} as const;
+
 /** Fills that carry text, by palette key. */
 export const FILLS = ['bg', 'person', 'system', 'container', 'component', 'store', 'external', 'group'] as const;
 export const STATUS_COLOURS = ['added', 'changed', 'removed', 'affected'] as const;
@@ -78,14 +145,17 @@ const vars = (p: Palette): string => Object.entries(p).map(([k, v]) => `--${keba
 /**
  * `auto` keeps `var()` references and adds a dark media block.
  * `light` and `dark` inline the literal colours, so renderers without custom-property support still work.
+ * `transparent` draws no canvas: the title, the key and the lines sit on the page itself.
  */
-export function applyTheme(css: string, theme: ThemeName): string {
+export function applyTheme(css: string, theme: ThemeName, palette: PaletteName = 'github', background: Background = 'solid'): string {
+  const { light, dark } = PALETTES[palette];
+  if (background === 'transparent') css += '.bg{fill:none;stroke:none}';
   if (theme === 'auto') {
-    return `:root{${vars(LIGHT)}}@media (prefers-color-scheme:dark){:root{${vars(DARK)}}}${css}`;
+    return `:root{${vars(light)}}@media (prefers-color-scheme:dark){:root{${vars(dark)}}}${css}`;
   }
-  const palette = (theme === 'dark' ? DARK : LIGHT) as unknown as Record<string, string>;
+  const colours = (theme === 'dark' ? dark : light) as unknown as Record<string, string>;
   return css.replace(/var\(--([a-z-]+)\)/g, (_, name: string) =>
-    palette[name.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] ?? '#000');
+    colours[name.replace(/-([a-z])/g, (_m, c: string) => c.toUpperCase())] ?? '#000');
 }
 
 const channel = (v: number): number => {

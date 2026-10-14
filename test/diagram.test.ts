@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { lintSpec, renderSvg, toMermaid } from '../src/diagram/index.ts';
 import { fit, textWidth, wrap } from '../src/diagram/measure.ts';
-import { DARK, FILLS, LIGHT, STATUS_COLOURS, contrast } from '../src/diagram/theme.ts';
+import { DARK, EBONY_DARK, EBONY_LIGHT, FILLS, LIGHT, PAGES, PALETTES, STATUS_COLOURS, contrast } from '../src/diagram/theme.ts';
 import { fit as fitLayout } from '../src/diagram/fit.ts';
 import { crossesRect, groupLabelWidth, layout } from '../src/diagram/layout.ts';
 import type { Layout, NodeBox, Rect } from '../src/diagram/layout.ts';
@@ -175,8 +175,10 @@ test('svg: broken references are skipped when lint is off', async () => {
   assertWellFormed(await renderSvg(spec));
 });
 
-test('palette: text meets WCAG AA in both themes', () => {
-  for (const [name, p] of [['light', LIGHT], ['dark', DARK]] as const) {
+test('palette: text meets WCAG AA in both themes of each palette', () => {
+  const sides = Object.entries(PALETTES).flatMap(([palette, { light, dark }]) => [[`${palette} light`, light], [`${palette} dark`, dark]] as const);
+  assert.equal(sides.length, 4);
+  for (const [name, p] of sides) {
     for (const fill of FILLS) {
       for (const ink of ['fg', 'muted'] as const) {
         assert.ok(contrast(p[ink], p[fill]) >= 4.5, `${name}: ${ink} on ${fill} is ${contrast(p[ink], p[fill]).toFixed(2)}`);
@@ -190,6 +192,77 @@ test('palette: text meets WCAG AA in both themes', () => {
     assert.ok(contrast(p.line, p.bg) >= 3 && contrast(p.stroke, p.bg) >= 3, `${name}: lines`);
   }
   assert.equal(Math.round(contrast('#000000', '#ffffff')), 21);
+});
+
+test('palette: a transparent background reads on the GitHub and site pages of its scheme', () => {
+  // With no canvas, the title, the key, the lines and the status marks sit on the page itself.
+  for (const [palette, sides] of Object.entries(PALETTES)) {
+    for (const scheme of ['light', 'dark'] as const) {
+      const p = sides[scheme];
+      for (const page of PAGES[scheme]) {
+        for (const ink of ['fg', 'muted', ...STATUS_COLOURS] as const) {
+          assert.ok(contrast(p[ink], page) >= 4.5, `${palette} ${scheme}: ${ink} on page ${page} is ${contrast(p[ink], page).toFixed(2)}`);
+        }
+        assert.ok(contrast(p.line, page) >= 3 && contrast(p.stroke, page) >= 3, `${palette} ${scheme}: lines on page ${page}`);
+      }
+    }
+  }
+});
+
+test('svg: palette and background', async () => {
+  const spec = example('change-impact');
+  const plain = await renderSvg(spec);
+  // The default draws what it drew before the options existed.
+  assert.equal(await renderSvg(spec, { palette: 'github', background: 'solid' }), plain);
+  assert.ok(plain.includes(`--bg:${LIGHT.bg}`) && plain.includes(`--bg:${DARK.bg}`));
+  const ebony = await renderSvg(spec, { palette: 'ebony' });
+  assertWellFormed(ebony);
+  assert.match(ebony, /@media \(prefers-color-scheme:dark\)/);
+  assert.ok(ebony.includes(`--added:${EBONY_LIGHT.added}`) && ebony.includes(`--added:${EBONY_DARK.added}`));
+  assert.ok(ebony.includes(`--bg:${EBONY_DARK.bg}`));
+  assert.ok(!ebony.includes(DARK.bg));
+  // Same layout: only the colours change.
+  const shapes = (svg: string): string => svg.replace(/<style>.*<\/style>/s, '');
+  assert.equal(shapes(ebony), shapes(plain));
+  for (const theme of ['light', 'dark'] as const) {
+    const fixed = await renderSvg(spec, { palette: 'ebony', theme });
+    assert.doesNotMatch(fixed, /var\(|prefers-color-scheme/);
+    assert.ok(fixed.includes((theme === 'light' ? EBONY_LIGHT : EBONY_DARK).changed));
+  }
+  const clear = await renderSvg(spec, { background: 'transparent' });
+  assert.match(clear, /\.bg\{fill:none;stroke:none\}<\/style>/);
+  assert.match(clear, /<rect class="bg"/);
+  assert.equal(shapes(clear), shapes(plain));
+  // Cards keep their fill: only the canvas goes.
+  assert.match(await renderSvg(spec, { background: 'transparent', theme: 'dark' }), /\.f-bg\{fill:#0d1117\}.*\.bg\{fill:none;stroke:none\}/);
+});
+
+test('cli: --palette and --background', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { mkdtempSync, readFileSync: read } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'wat-palette-'));
+  const run = (...args: string[]) => spawnSync(process.execPath, [fileURLToPath(new URL('./diagram-run.ts', import.meta.url)), ...args], { encoding: 'utf8' });
+  const help = run('--help').stdout;
+  assert.match(help, /--palette <name> +github \(default/);
+  assert.match(help, /--background <b> +solid \(default\) or transparent/);
+  assert.match(help, /Transparent is safe only where the page's colour scheme reaches the SVG/);
+  const spec = fileURLToPath(new URL('../examples/diagrams/change-impact.json', import.meta.url));
+  const out = run(spec, '-o', join(dir, 'a.svg'), '--palette', 'ebony', '--background', 'transparent', '--png', join(dir, 'a.png'));
+  assert.equal(out.status, 0, out.stderr);
+  const svg = read(join(dir, 'a.svg'), 'utf8');
+  assert.ok(svg.includes(EBONY_DARK.bg) && svg.includes('.bg{fill:none;stroke:none}'));
+  const { decodePng } = await import('../scripts/check-png.ts');
+  // The PNG keeps a solid canvas in the light side of the palette, so it reads in any viewer.
+  const png = decodePng(read(join(dir, 'a.png')));
+  assert.deepEqual([...png.rgba.slice((png.width * 40 + 40) * 4, (png.width * 40 + 40) * 4 + 4)], [255, 255, 255, 255]);
+  const split = run(spec, '-o', join(dir, 'b.svg'), '--theme', 'split', '--palette', 'ebony');
+  assert.equal(split.status, 0, split.stderr);
+  assert.ok(read(join(dir, 'b.dark.svg'), 'utf8').includes(EBONY_DARK.bg));
+  assert.equal(run(spec, '-o', join(dir, 'c.svg'), '--palette', 'pink').status, 2);
+  assert.match(run(spec, '-o', join(dir, 'c.svg'), '--background', 'clear').stderr, /--background must be one of solid, transparent/);
 });
 
 test('mermaid: flowchart with subgraphs, shapes and statuses', () => {

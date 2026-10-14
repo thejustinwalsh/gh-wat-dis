@@ -12,6 +12,8 @@ import { advise } from './advise.ts';
 import type { Fix } from './advise.ts';
 import { toLegend } from './legend.ts';
 import { DETAILS, LABEL_MODES } from '../spec.ts';
+import { BACKGROUNDS, PALETTE_NAMES } from './theme.ts';
+import type { Background, PaletteName } from './theme.ts';
 import type { Detail, LabelMode } from '../spec.ts';
 
 const HELP = `Lint a diagram spec and draw it as SVG.
@@ -19,10 +21,16 @@ const HELP = `Lint a diagram spec and draw it as SVG.
 Usage: npx gh-wat-dis diagram [spec.json|-] [options]
 
   -o, --output <file>   where to write the SVG ("-" for stdout)
-  --png <file>          also write a PNG of the drawing at 2x, to look at it. Light colours unless --theme dark.
-                        GitHub gets the SVG: do not attach the PNG.
+  --png <file>          also write a PNG of the drawing at 2x, to look at it. Light colours unless --theme dark,
+                        always on a solid background. GitHub gets the SVG: do not attach the PNG.
   --theme <name>        auto (default: follows the viewer's colour scheme), light, dark,
                         or split (needs -o; writes <name>.light.svg and <name>.dark.svg)
+  --palette <name>      github (default: GitHub's colours) or ebony (the colours of the gh-wat-dis site,
+                        Bearded Theme HC Ebony). Each palette has a light and a dark side for --theme.
+  --background <b>      solid (default) or transparent: no canvas, so the drawing sits on the page.
+                        Transparent is safe only where the page's colour scheme reaches the SVG: with
+                        --theme auto on a page whose scheme the SVG follows, or each file of --theme split
+                        in a <picture> tag. With --theme light or dark it reads only on a page of that scheme.
   --mermaid             print a Mermaid flowchart to stdout instead of drawing SVG
   --lint-only           check the spec and draw nothing
   --detail <level>      auto (default: descriptions only up to 5 elements), full, compact
@@ -70,7 +78,7 @@ type Theme = (typeof THEMES)[number];
 export const main: Command = async (argv) => {
   const args = parseArgs(argv, {
     booleans: ['help', 'mermaid', 'lint-only', 'no-lint', 'report'],
-    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png'],
+    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png', 'palette', 'background'],
     aliases: { '-o': '--output', '-h': '--help' },
   });
   if (args.help) { process.stdout.write(HELP); return 0; }
@@ -86,6 +94,11 @@ export const main: Command = async (argv) => {
   const opts = { detail, labels, direction, maxWidth };
   const theme = (args.theme ?? 'auto') as Theme;
   if (!THEMES.includes(theme)) throw new UsageError(`--theme must be one of ${THEMES.join(', ')}`);
+  const palette = (args.palette ?? 'github') as PaletteName;
+  if (!PALETTE_NAMES.includes(palette)) throw new UsageError(`--palette must be one of ${PALETTE_NAMES.join(', ')}`);
+  const background = (args.background ?? 'solid') as Background;
+  if (!BACKGROUNDS.includes(background)) throw new UsageError(`--background must be one of ${BACKGROUNDS.join(', ')}`);
+  const colours = { palette, background };
   const file = args._[0] === '-' ? undefined : args._[0];
   const output = args.output;
   if (theme === 'split' && (!output || output === '-')) throw new UsageError('--theme split needs -o <file>');
@@ -128,12 +141,12 @@ export const main: Command = async (argv) => {
   if (theme === 'split') {
     const base = target.replace(/\.svg$/i, '');
     for (const t of ['light', 'dark'] as const) {
-      write(`${base}.${t}.svg`, await renderSvg(spec, { ...opts, theme: t }));
+      write(`${base}.${t}.svg`, await renderSvg(spec, { ...opts, ...colours, theme: t }));
       console.log(`${base}.${t}.svg`);
     }
     return 0;
   }
-  const out = await render(spec, { ...opts, theme });
+  const out = await render(spec, { ...opts, ...colours, theme });
   const say = (path: string): void => { if (!args.report) console.log(path); };
   if (target === '-') process.stdout.write(out.svg);
   else { write(target, out.svg); say(target); }
@@ -164,8 +177,9 @@ export const main: Command = async (argv) => {
   }
   if (args.png) {
     // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
+    // It keeps a solid background, so the drawing reads in any image viewer.
     const { toPng } = await import('../tools/raster.ts');
-    const image = toPng(theme === 'auto' ? await renderSvg(spec, { ...opts, theme: 'light' }) : out.svg);
+    const image = toPng(theme !== 'auto' && background === 'solid' ? out.svg : await renderSvg(spec, { ...opts, palette, background: 'solid', theme: theme === 'auto' ? 'light' : theme }));
     write(args.png, image.png);
     if (image.emoji) console.error(`note: the PNG draws a small box for each of the ${image.emoji} emoji in the text. The SVG holds the emoji and GitHub draws them.`);
     if (target !== '-') say(args.png); else console.error(args.png);
