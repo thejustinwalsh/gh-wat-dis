@@ -39,6 +39,7 @@ const COMMANDS: Record<string, Loader> = {
   diagram: async () => (await draw()).main,
   legend: async () => (await draw()).legend,
   lint: async () => (await import('./lint/cli.ts')).main,
+  dis: async () => (await import('./dis/cli.ts')).main,
 };
 
 const SETUP = 'Set up';
@@ -86,6 +87,7 @@ export const TOOLS: Tool[] = [
   { name: 'graph ids', group: GRAPH, effect: 'reads', usage: 'graph ids [spec.json|-]', description: 'One line for each element: id, type, status, name.' },
 
   { name: 'diagram', group: RENDER, effect: 'local', usage: 'diagram [spec.json|-] [-o out.svg] [--png out.png] [--theme auto|light|dark|split] [--report] [--lint-only] [--mermaid]', description: "Lint a diagram spec and draw it as an SVG in the form of its type, loosened one rung at a time until it fits GitHub's width. --png adds a PNG to look at. --report prints the judgement as JSON." },
+  { name: 'dis', group: RENDER, effect: 'local', usage: 'dis <number|owner/repo#number|URL> [--full [--diagram-spec <file>]] [--json]', description: 'Explain an issue or pull request from its thread. --full measures a pull request and writes its diagram and explanation cache; --json prints the result as JSON.' },
   { name: 'legend', group: RENDER, effect: 'reads', usage: 'legend [spec.json|-]', description: "A spec's relationships as a Markdown table, to sit under a diagram with numbered lines." },
   { name: 'blast', group: RENDER, effect: 'reads', usage: 'blast [facts.json|-] [--max-items 5] [--no-heading] [--no-links]', description: 'Impact facts as a Markdown "Blast radius" section: what the change reaches outside its diff, with file links. The first line is the diagram decision, as a comment GitHub does not show.' },
 
@@ -107,7 +109,7 @@ Small tools for agents that write GitHub issues, pull requests and milestones.
 
 Usage: npx gh-wat-dis <tool> [options]
 
-Every tool does one thing. Data goes out as JSON on stdout, so tools chain with pipes.
+Data tools write JSON on stdout, so they chain with pipes. Presentation tools can print text; dis --json prints a structured explanation with artifact paths.
 "-" or piped stdin stands in for a file argument. A tool with no mark below only reads.
 
 ${groups.join('\n\n')}

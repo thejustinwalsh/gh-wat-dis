@@ -83,12 +83,13 @@
         "type": "container",
         "name": "gh-wat-dis CLI",
         "technology": "TypeScript, Node",
-        "description": "Dispatches one small tool per command",
+        "description": "Dispatches small tools and composes issue and PR explanations",
         "paths": [
           "src/bin.ts",
           "src/main.ts",
           "src/graph-dispatch.ts",
-          "src/spec.ts"
+          "src/spec.ts",
+          "src/dis/**"
         ]
       },
       {
@@ -280,6 +281,30 @@
         "to": "diagram",
         "label": "Holds code specs to the budget and three layers of",
         "technology": "TypeScript import"
+      },
+      {
+        "from": "cli",
+        "to": "ghtools",
+        "label": "Reads issue and PR threads through",
+        "technology": "TypeScript import"
+      },
+      {
+        "from": "cli",
+        "to": "facts",
+        "label": "Measures requested PR snapshots with",
+        "technology": "TypeScript import"
+      },
+      {
+        "from": "cli",
+        "to": "diagram",
+        "label": "Renders explanation diagrams with",
+        "technology": "TypeScript import"
+      },
+      {
+        "from": "cli",
+        "to": "github",
+        "label": "Fetches requested PR base and head snapshots from",
+        "technology": "git fetch"
       }
     ]
   },
