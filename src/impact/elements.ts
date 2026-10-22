@@ -24,17 +24,17 @@ export interface ElementMap {
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'root';
 const validType = (t: unknown, fallback: ElementType): ElementType => (ELEMENT_TYPES.includes(t as string) ? (t as ElementType) : fallback);
 
-export function loadArchitecture(root: string): Config['architecture'] | null {
+export function loadArchitecture(root: string, read: (path: string) => string | undefined = (path) => readFileSync(join(root, path), 'utf8')): Config['architecture'] | null {
   try {
-    const cfg = JSON.parse(readFileSync(join(root, CONFIG_REL), 'utf8')) as Partial<Config>;
+    const cfg = JSON.parse(read(CONFIG_REL) ?? 'null') as Partial<Config>;
     const els = cfg.architecture?.elements;
     if (!Array.isArray(els) || !els.some((e) => e && e.id && Array.isArray(e.paths) && e.paths.length)) return null;
     return { system: cfg.architecture?.system ?? { name: '', description: '' }, elements: els.filter((e) => e && e.id), relationships: cfg.architecture?.relationships ?? [] };
   } catch { return null; }
 }
 
-export function buildElements(root: string, files: string[], packages: PackageInfo[]): ElementMap {
-  const arch = loadArchitecture(root);
+export function buildElements(root: string, files: string[], packages: PackageInfo[], readConfig?: (path: string) => string | undefined): ElementMap {
+  const arch = loadArchitecture(root, readConfig);
   const defs = new Map<string, ElementListing>();
   const globsHit = new Map<string, Set<string>>();
   const cache = new Map<string, string>();

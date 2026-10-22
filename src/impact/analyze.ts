@@ -128,14 +128,14 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
   const changed = new Map(entries.map((e) => [e.path, e]));
 
   const graph = buildGraph(tree, (p) => changed.has(p));
-  const els = buildElements(root, tree.files, graph.packages);
+  const els = buildElements(root, tree.files, graph.packages, opts.architecture === 'head' ? (p) => tree.read(p) : undefined);
   const co = loadCodeowners((p) => tree.read(p));
 
   const basePath = (e: DiffEntry): string => e.oldPath ?? e.path;
   const needBase = entries.filter((e) => e.status !== 'added' && (languageOf(basePath(e)) || isManifest(basePath(e)) || isWorkflow(basePath(e)))).map(basePath);
   const [baseBlobs, commits] = await Promise.all([
     readBlobs(root, range.base, needBase),
-    history(root, range.head ?? 'HEAD', new Date(now.getTime() - 90 * DAY), now),
+    opts.history === false ? Promise.resolve([]) : history(root, range.head ?? 'HEAD', new Date(now.getTime() - 90 * DAY), now),
   ]);
   // A package whose manifest moved or whose name changed is the same package renamed: its new name, then its old one.
   const renamedPkg = new Map<string, { from: string; manifest: string; named: boolean }>();
@@ -299,7 +299,7 @@ export async function analyze(opts: AnalyzeOptions = {}): Promise<Facts> {
     path: e.path, status: e.status, ...(e.oldPath ? { oldPath: e.oldPath } : {}),
     insertions: e.insertions, deletions: e.deletions, ...(e.binary ? { binary: true } : {}),
     kind: graph.nodes.get(e.path)?.isTest ? 'test' : kindOf(e.path), language: languageOf(e.path), element: els.of(e.path),
-    owners: ownersOf(co, e.path).owners, churn90d: hist.churn.get(e.path) ?? 0, // git names the enclosing function from the hunk header. Outside the languages it knows, that line is a CSS rule or a paragraph.
+    owners: ownersOf(co, e.path).owners, ...(opts.history === false ? {} : { churn90d: hist.churn.get(e.path) ?? 0 }), // git names the enclosing function from the hunk header. Outside the languages it knows, that line is a CSS rule or a paragraph.
     hunkFunctions: languageOf(e.path) ? e.hunkFunctions : [],
     ...(skippedFor(e.path) ? { skipped: skippedFor(e.path)! } : {}),
     provenance: 'exact', source: 'git',

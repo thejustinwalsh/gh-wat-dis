@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { CONFIG_REL } from '../cli/util.ts';
 import { MAX_PARSE_BYTES, isSkipped, languageOf } from './classify.ts';
 import { git, readBlobs, tryGit } from './git.ts';
 
@@ -13,7 +14,7 @@ export interface Tree {
 }
 
 const NEEDED = /(^|\/)(package\.json|Cargo\.toml|pnpm-workspace\.yaml|[jt]sconfig[^/]*\.json|CODEOWNERS)$|^\.github\/workflows\/[^/]+\.ya?ml$/;
-const wanted = (path: string): boolean => NEEDED.test(path) || (languageOf(path) !== null && !isSkipped(path));
+const wanted = (path: string): boolean => path === CONFIG_REL || NEEDED.test(path) || (languageOf(path) !== null && !isSkipped(path));
 
 function walk(root: string, dir = '', out: string[] = []): string[] {
   for (const e of readdirSync(join(root, dir), { withFileTypes: true })) {

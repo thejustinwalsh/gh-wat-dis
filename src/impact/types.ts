@@ -60,8 +60,8 @@ export interface FileFact {
   language: Language | null;
   element: string;
   owners: string[];
-  /** Commits that touched the file in the 90 days before `now`. */
-  churn90d: number;
+  /** Commits that touched the file in the 90 days before `now`. Omitted when history was not measured (for example, a shallow PR snapshot). */
+  churn90d?: number;
   /** Enclosing function text git printed in the hunk headers. */
   hunkFunctions: string[];
   /** Set when the file is source in a known language and was not parsed, with the reason. It then has no symbol and no import facts. */
@@ -247,6 +247,10 @@ export interface AnalyzeOptions {
   base?: string;
   head?: string;
   workingTree?: boolean;
+  /** Read the architecture map from the compared head tree instead of the local checkout. */
+  architecture?: 'head';
+  /** False for shallow snapshots: omit churn and do not measure co-change. */
+  history?: false;
   depth?: number;
   now?: Date;
   /** Path of the cccc binary. `null`: looked for and not found, which the facts then say. Omitted: complexity is not measured. */
