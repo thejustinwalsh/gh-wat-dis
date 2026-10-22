@@ -23,7 +23,9 @@ function legend(spec: DiagramSpec): string {
 /** Build a standalone page from render(spec, { ...opts, structured: true }) without drawing twice. */
 export function renderHtmlDocument(spec: DiagramSpec, out: Rendered, opts: RenderOptions = {}): string {
   if (!out.structured) throw new Error('HTML needs a structured SVG: call render with structured: true');
-  const theme = opts.theme ?? 'auto', palette = PALETTES[opts.palette ?? 'github'];
+  const theme = opts.theme ?? 'auto';
+  if (theme !== 'auto' && theme !== 'light' && theme !== 'dark') throw new Error('HTML theme must be auto, light or dark');
+  const palette = PALETTES[opts.palette ?? 'github'];
   const variables = (side: 'light' | 'dark'): string => {
     const p = palette[side];
     return `--page-bg:${p.bg};--page-fg:${p.fg};--page-muted:${p.muted};--page-frame:${p.frame}`;

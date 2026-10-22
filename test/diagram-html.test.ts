@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -155,4 +155,50 @@ test('diagram rejects incompatible HTML output flags before writing files', () =
     assert.match(out.stderr, message);
     assert.equal(existsSync(target), false);
   }
+});
+
+
+test('unlinted status fields stay data in HTML and SVG, including the CLI --no-lint path', async (t) => {
+  const hostile = 'x"/><image href="missing" onerror="globalThis.__diagramInjected=true"/><path class="x';
+  const code: DiagramSpec = JSON.parse(JSON.stringify({
+    title: 'Untrusted import status', type: 'code',
+    elements: [
+      { id: 'a', type: 'file', name: 'src/a.ts', status: hostile, symbols: [{ name: 'work', kind: 'function', status: hostile }] },
+      { id: 'b', type: 'file', name: 'src/b.ts' },
+    ],
+    relationships: [{ from: 'a', to: 'b', label: '', status: hostile }],
+  }));
+  const grouped: DiagramSpec = JSON.parse(JSON.stringify({
+    title: 'Untrusted group status', type: 'container',
+    elements: [
+      { id: 'group', type: 'boundary', name: 'Group', status: hostile },
+      { id: 'a', type: 'container', name: 'A', parent: 'group', status: hostile },
+      { id: 'b', type: 'container', name: 'B' },
+    ],
+    relationships: [{ from: 'a', to: 'b', label: 'Calls', status: hostile }],
+  }));
+  const assertInert = (document: string): void => {
+    assert.doesNotMatch(document, /<(?:image|script|iframe|object)\b/i);
+    assert.doesNotMatch(document, /\son(?:error|load|mouseover)=["']/i);
+  };
+  for (const spec of [code, grouped]) {
+    const html = await renderHtml(spec);
+    assertInert(html);
+    assert.ok(html.includes(`data-status="${escapeXml(hostile)}"`));
+    assertInert((await render(spec)).svg);
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'diagram-html-status-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const input = join(dir, 'spec.json'), output = join(dir, 'diagram.html');
+  writeFileSync(input, JSON.stringify(code));
+  const result = cli(input, '--format', 'html', '--no-lint', '-o', output);
+  assert.equal(result.status, 0, result.stderr);
+  assertInert(readFileSync(output, 'utf8'));
+});
+
+test('HTML library rejects unknown themes before inserting them into style content', async () => {
+  const opts = JSON.parse(JSON.stringify({ theme: 'light}</style><script>globalThis.__themeInjected=true</script><style>' }));
+  await assert.rejects(renderHtml(base(), opts), /HTML theme must be auto, light or dark/);
+  const out = await render(base(), { structured: true });
+  assert.throws(() => renderHtmlDocument(base(), out, opts), /HTML theme must be auto, light or dark/);
 });

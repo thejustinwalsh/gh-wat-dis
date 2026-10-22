@@ -13,7 +13,9 @@ export const STATUS_BADGE: Record<string, string> = {
 export const STATUS_MARK: Record<string, string> = { added: '+', changed: '~', removed: '−', affected: '•' };
 
 export type ActiveStatus = Exclude<Status, 'unchanged'>;
-export const active = (s: Status | undefined): ActiveStatus | undefined => (s === 'unchanged' ? undefined : s);
+// Renderers can be called without linting: only known statuses can become CSS classes or marks.
+export const active = (s: Status | undefined): ActiveStatus | undefined =>
+  s === 'added' || s === 'changed' || s === 'removed' || s === 'affected' ? s : undefined;
 
 export const kindLine = (el: SpecElement): string =>
   `[${el.external ? 'External ' : ''}${el.kind?.trim() || (TYPE_LABEL[el.type] ?? el.type)}${el.technology ? `: ${el.technology}` : ''}]`;
