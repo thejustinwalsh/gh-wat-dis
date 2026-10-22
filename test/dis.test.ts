@@ -114,6 +114,10 @@ test('dis drift: updated thread and both SHAs invalidate cache; deleted artifact
   assert.ok(result.drift.some((d) => /item was updated/.test(d)));
   rmSync(result.paths.png!);
   assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined);
+  const quickHtml = await describe('7', { cwd: f.cwd }, f.deps);
+  assert.equal(quickHtml.stamp.mode, 'full');
+  assert.equal(quickHtml.stamp.format, 'html');
+  assert.equal(quickHtml.cached, true);
   result = await describe('7', { cwd: f.cwd, full: true }, f.deps);
   writeFileSync(result.paths.markdown!, 'partial');
   assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined, 'a nonempty partial artifact is not a hit');
@@ -122,6 +126,10 @@ test('dis drift: updated thread and both SHAs invalidate cache; deleted artifact
   for (const change of [{ schema: 9 }, { version: 'old' }, { url: 'https://github.com/other/item/issues/7' }, { mode: 'quick' }, { baseSha: 13 }]) {
     writeFileSync(result.paths.stamp!, JSON.stringify({ ...JSON.parse(stamp), ...change }));
     assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined);
+  const quickHtml = await describe('7', { cwd: f.cwd }, f.deps);
+  assert.equal(quickHtml.stamp.mode, 'full');
+  assert.equal(quickHtml.stamp.format, 'html');
+  assert.equal(quickHtml.cached, true);
   }
 });
 
@@ -291,4 +299,79 @@ test('dis PNG: require a complete legal palette and critical chunk sequence', (t
   const image = (chunks: Buffer[]) => Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), ...chunks]);
   assert.deepEqual(saveAttachment(image([ihdr, palette, idat, iend]), f.cwd), { png: 'diagram.png' });
   for (const invalid of [[ihdr, idat, iend], [ihdr, idat, palette, iend], [ihdr, chunk('PLTE', Buffer.from([1])), idat, iend], [ihdr, ihdr, palette, idat, iend], [ihdr, palette, idat, chunk('tEXt', Buffer.from('key\0value')), idat, iend], [ihdr, palette, chunk('ABCD', Buffer.alloc(0)), idat, iend], [ihdr, palette, idat, iend, iend]]) assert.throws(() => saveAttachment(image(invalid), f.cwd));
+});
+
+
+test('dis HTML: structured document replaces SVG and cache follows requested target', async (t) => {
+  const f = fixture(t);
+  const spec: DiagramSpec = { type: 'container', title: 'HTML example', elements: [{ id: 'a', name: 'App', type: 'container' }, { id: 'b', name: 'Store', type: 'container' }], relationships: [{ from: 'a', to: 'b', label: 'Writes' }] };
+  const html = await describe('7', { cwd: f.cwd, full: true, format: 'html', diagramSpec: spec }, f.deps);
+  assert.equal(html.stamp.format, 'html');
+  assert.equal(html.paths.svg, undefined);
+  assert.match(readFileSync(html.paths.html!, 'utf8'), /<!doctype html>/i);
+  assert.match(readFileSync(html.paths.html!, 'utf8'), /data-element-id="a"/);
+  assert.ok(existsSync(html.paths.png!));
+  f.calls.length = 0;
+  assert.equal((await describe('7', { cwd: f.cwd, full: true, format: 'html' }, f.deps)).cached, true);
+  assert.deepEqual(f.calls, ['stamp']);
+  assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined);
+  const quickHtml = await describe('7', { cwd: f.cwd }, f.deps);
+  assert.equal(quickHtml.stamp.mode, 'full');
+  assert.equal(quickHtml.stamp.format, 'html');
+  assert.equal(quickHtml.cached, true);
+  const svgResult = await describe('7', { cwd: f.cwd, full: true, diagramSpec: spec }, f.deps);
+  assert.ok(svgResult.paths.svg);
+  assert.equal(svgResult.paths.html, undefined);
+  await assert.rejects(describe('7', { cwd: f.cwd, format: 'html' }, f.deps), /needs --full/);
+});
+
+test('dis HTML: a delayed quick build reuses a full HTML publication without replacing its artifacts', async (t) => {
+  const f = fixture(t);
+  const spec: DiagramSpec = {
+    type: 'container', title: 'Publication race',
+    elements: [{ id: 'app', name: 'App', type: 'container' }, { id: 'store', name: 'Store', type: 'container' }],
+    relationships: [{ from: 'app', to: 'store', label: 'Writes records to' }],
+  };
+  let resume!: () => void, entered!: () => void;
+  const paused = new Promise<void>((resolve) => { resume = resolve; });
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const quick = describe('7', { cwd: f.cwd }, {
+    ...f.deps,
+    readItem: async () => { entered(); await paused; return f.state.item; },
+  });
+  await started;
+  const full = await describe('7', { cwd: f.cwd, full: true, format: 'html', diagramSpec: spec }, f.deps);
+  const stamp = readFileSync(full.paths.stamp!, 'utf8');
+  const document = readFileSync(full.paths.html!, 'utf8');
+  resume();
+  const delayed = await quick;
+  assert.equal(delayed.cached, true);
+  assert.equal(delayed.stamp.mode, 'full');
+  assert.equal(delayed.stamp.format, 'html');
+  assert.equal(delayed.stamp.madeAt, full.stamp.madeAt);
+  assert.equal(delayed.paths.html, full.paths.html);
+  assert.equal(delayed.paths.svg, undefined);
+  assert.equal(readFileSync(delayed.paths.stamp!, 'utf8'), stamp);
+  assert.equal(readFileSync(delayed.paths.html!, 'utf8'), document);
+  assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full', 'html').bundle!.stamp.madeAt, full.stamp.madeAt);
+  assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full', 'svg').bundle, undefined);
+  assert.deepEqual(readdirSync(join(full.directory, '..')), ['7']);
+  f.calls.length = 0;
+  const next = await describe('7', { cwd: f.cwd }, f.deps);
+  assert.equal(next.cached, true);
+  assert.equal(next.stamp.format, 'html');
+  assert.deepEqual(f.calls, ['stamp']);
+});
+
+
+test('dis HTML uses source-grounded geometry instead of inlining an attached image', async (t) => {
+  const f = fixture(t);
+  f.state.item = { ...pr(), body: 'Parser moves.\n\n![Diagram](https://github.com/user-attachments/assets/abc)\n' };
+  const result = await describe('7', { cwd: f.cwd, full: true, format: 'html' }, f.deps);
+  assert.deepEqual(f.calls, ['stamp', 'thread', 'measure']);
+  assert.ok(result.paths.html);
+  assert.equal(result.markdown, f.state.item.body);
+  const html = readFileSync(result.paths.html!, 'utf8');
+  assert.doesNotMatch(html, /user-attachments|<img|<script|<iframe/);
+  assert.match(result.stamp.diagramSource!, /Measured PR diff/);
 });
