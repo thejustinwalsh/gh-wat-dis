@@ -7,7 +7,8 @@ import type { DisItem, ItemRef } from './types.ts';
 
 export type StampInput = ItemRef & { kind: 'issue' | 'pr'; updatedAt: string; baseSha?: string; headSha?: string };
 export type Pass = 'quick' | 'full';
-export type Artifact = 'markdown' | 'source' | 'spec' | 'svg' | 'png' | 'facts' | 'attachment';
+export type DiagramFormat = 'svg' | 'html';
+export type Artifact = 'html' | 'markdown' | 'source' | 'spec' | 'svg' | 'png' | 'facts' | 'attachment';
 export interface DisStamp extends StampInput {
   schema: 1;
   version: string;
@@ -15,6 +16,7 @@ export interface DisStamp extends StampInput {
   mode: Pass;
   path: 'body' | 'generated';
   diagramSource?: string;
+  format?: DiagramFormat;
   localMap?: { path: string; digest: string };
   warnings: string[];
   digests: Record<string, string>;
@@ -40,7 +42,7 @@ export function cacheDirectory(item: ItemRef, cwd: string): string {
 }
 
 export const stampInput = (item: StampInput): StampInput => ({ repo: item.repo, number: item.number, url: item.url, kind: item.kind, updatedAt: item.updatedAt, ...(item.baseSha ? { baseSha: item.baseSha } : {}), ...(item.headSha ? { headSha: item.headSha } : {}) });
-const allowed = new Set(['explain.md', 'source.json', 'spec.json', 'diagram.svg', 'diagram.png', 'facts.json', 'attachment.jpg', 'attachment.gif', 'attachment.webp']);
+const allowed = new Set(['explain.md', 'source.json', 'spec.json', 'diagram.svg', 'diagram.html', 'diagram.png', 'facts.json', 'attachment.jpg', 'attachment.gif', 'attachment.webp']);
 const digest = (file: string): string => createHash('sha256').update(readFileSync(file)).digest('hex');
 const regular = (file: string): boolean => { try { const s = lstatSync(file); return s.isFile() && !s.isSymbolicLink() && s.size > 0; } catch { return false; } };
 
@@ -53,7 +55,7 @@ export function drift(old: StampInput & { madeAt: string }, item: StampInput): s
 }
 
 /** A cache hit requires the stamp and every declared artifact; a partial directory is never a hit. */
-export function readCache(item: StampInput, cwd: string, mode: Pass): { bundle?: Bundle; drift: string[] } {
+export function readCache(item: StampInput, cwd: string, mode: Pass, format: DiagramFormat | 'any' = 'svg'): { bundle?: Bundle; drift: string[] } {
   const directory = cacheDirectory(item, cwd), file = join(directory, 'dis.json');
   if (!existsSync(directory)) return { drift: [] };
   const invalid = (): { drift: string[] } => ({ drift: ['the cached bundle is incomplete or uses another format; rebuilding it'] });
@@ -62,6 +64,8 @@ export function readCache(item: StampInput, cwd: string, mode: Pass): { bundle?:
   try { stamp = JSON.parse(readFileSync(file, 'utf8')) as DisStamp; } catch { return invalid(); }
   if (!stamp || typeof stamp !== 'object' || typeof stamp.repo !== 'string' || !Number.isSafeInteger(stamp.number) || typeof stamp.url !== 'string' || !['issue', 'pr'].includes(stamp.kind) || typeof stamp.updatedAt !== 'string' || stamp.baseSha !== undefined && typeof stamp.baseSha !== 'string' || stamp.headSha !== undefined && typeof stamp.headSha !== 'string') return invalid();
   if (stamp.schema !== 1 || stamp.version !== PKG.version || !['quick', 'full'].includes(stamp.mode) || !['body', 'generated'].includes(stamp.path) || typeof stamp.madeAt !== 'string' || !Number.isFinite(Date.parse(stamp.madeAt)) || !Array.isArray(stamp.warnings) || !stamp.warnings.every((w) => typeof w === 'string') || stamp.diagramSource !== undefined && typeof stamp.diagramSource !== 'string' || !stamp.digests || !stamp.files || stamp.files.markdown !== 'explain.md' || stamp.files.source !== 'source.json') return invalid();
+  if (stamp.format !== undefined && !['svg', 'html'].includes(stamp.format)) return invalid();
+  if (format !== 'any' && (stamp.format ?? 'svg') !== format) return { drift: ['the requested diagram output format changed; rebuilding it'] };
   if (Object.values(stamp.files).some((name) => typeof name !== 'string' || !allowed.has(name) || !regular(join(directory, name)))) return invalid();
   if (Object.values(stamp.files).some((name) => stamp.digests[name] !== digest(join(directory, name)))) return invalid();
   const changed = drift(stamp, item);
@@ -104,7 +108,7 @@ export async function writeBundle(item: DisItem, cwd: string, mode: Pass, build:
     writeFileSync(join(stage, 'dis.json'), JSON.stringify(stamp, null, 2) + '\n');
     await publicationLock(lock); locked = true;
     // A quick read that waited on GitHub may have missed a full pass published in the meantime.
-    if (mode === 'quick') { const full = readCache(item, cwd, 'full').bundle; if (full) return { ...full, publicationReused: true }; }
+    if (mode === 'quick') { const full = readCache(item, cwd, 'full', 'any').bundle; if (full) return { ...full, publicationReused: true }; }
     directories(directory);
     if (existsSync(directory)) { renameSync(directory, backup); backed = true; }
     try { renameSync(stage, directory); published = true; } catch (error) { if (backed) { renameSync(backup, directory); backed = false; } throw error; }

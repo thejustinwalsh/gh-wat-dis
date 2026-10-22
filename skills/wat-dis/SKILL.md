@@ -28,6 +28,10 @@ A full PR whose impact decision is `dynamic` needs authored steps; import facts 
 
 Save the spec in the task's scratch folder and run `npx gh-wat-dis dis <reference> --full --diagram-spec <file>`. This explicit spec rebuilds the bundle, records that the diagram was authored, and preserves a formatted body as written. Do not call the authored steps automatically measured facts. Validate the rendered PNG before showing it.
 
+## HTML diagram target
+
+When the user requests an HTML diagram, run the full pass with `--format html`. It writes `diagram.html` with structured inline SVG and a relationship table, plus the PNG preview. It generates from the source-grounded spec rather than inlining a downloaded attachment. The original body and its attachment links remain preserved. Do not claim a diagram exists when the evidence does not support one. Switching formats rebuilds the cache.
+
 ## Show the result
 
 Show the available diagram, then the explanation. Prefer a local PNG preview where the harness can render it; otherwise provide clickable absolute paths to the PNG, SVG and `explain.md`. Do not paste base64 images into chat. Keep the readable text available when an image cannot be shown. Preserve an existing attached diagram rather than replacing it with an invented diagram.

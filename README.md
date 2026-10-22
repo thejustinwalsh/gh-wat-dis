@@ -103,7 +103,7 @@ Each tool does one thing. Data tools write JSON on stdout so they chain. Present
 | `relations`, `relate` | Reads and sets GitHub's own relations: parent, sub-issue, blocked by, blocking. A new parent replaces the old one. |
 | `labels` | Plans and creates the labels: `agents`, one for each product surface, priority (`critical` to `nit`), size (`s` to `xl`), and the type labels on a user repository. |
 | `graph <op>` | Builds and reshapes a diagram spec: `from-facts`, `from-config`, `focus`, `collapse`, `drop`, `merge`, `diff`, `set`, `rename`, `split`, `stats`, `ids`. |
-| `diagram` | Lints a C4 diagram spec and renders an SVG that fits GitHub's width. `--png` adds a PNG for the agent to look at. |
+| `diagram` | Lints a C4 diagram spec and renders SVG or standalone HTML (`--format html`) with structured inline SVG that fits GitHub's width. `--png` adds a PNG for the agent to look at. |
 | `legend` | Prints a diagram's relationships as a Markdown table. |
 | `blast` | Formats impact facts as a Markdown section: what a change reaches outside its diff, with file links. |
 | `dis <reference>` | Explains an issue or PR from its thread; `--full` measures a PR and writes its diagram, Markdown and cache stamp. `--json` prints paths and explanation as JSON; `--full --diagram-spec <file>` renders an authored call sequence. |
@@ -112,6 +112,10 @@ Each tool does one thing. Data tools write JSON on stdout so they chain. Present
 | `help` | Lists every tool with what it does and whether it writes. `help --json` prints the list for an agent. |
 
 `npx gh-wat-dis dis 56` gives a quick thread explanation without fetching git objects. Use `dis owner/repo#56` or an issue/PR URL for another repository. `dis 56 --full` runs the full pass directly. It caches artifacts under `.agents/gh-wat-dis/dis/<owner>/<repo>/<number>/`; matching source stamps reuse a full result, while updates report drift and rebuild it. Local architecture-map changes also invalidate diagrams derived from that map. `install` adds the cache ignore rule and `doctor` checks it. A dynamic decision needs source-verified authored steps: the skill reads the exact-head functions and supplies `--diagram-spec <file>` to the full pass. An already formatted body is preserved with its attached diagram; other bodies receive a sourced summary, and the `wat-dis` skill explains the reasoning in chat.
+
+`npx gh-wat-dis diagram spec.json --format html -o diagram.html` writes a standalone, accessible HTML document with inline SVG, a relationship table, and stable element and relationship identifiers. The SVG keeps the same layout as the image target; no scripts or external assets are included. Those identifiers provide hooks for future interaction. `--theme split` writes separate light and dark documents. `--png` still adds an image preview.
+
+`dis <reference> --full --format html` uses that target for a source-grounded diagram and retains its PNG preview. Its cache records the output format, so changing formats rebuilds the bundle. HTML is generated from the diagram spec; downloaded attachments remain in the source body rather than being embedded as executable document content. A full report still needs evidence for a diagram and may explain why none was drawn.
 
 `npx gh-wat-dis help` is the full list. `npx gh-wat-dis <tool> --help` gives one tool's options.
 
