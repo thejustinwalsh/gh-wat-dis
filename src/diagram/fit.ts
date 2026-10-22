@@ -2,6 +2,7 @@ import type { DiagramSpec, LabelMode } from '../spec.ts';
 import { GATES, GOLDEN, compare, failed, faults, measure, rank } from './judge.ts';
 import type { Gate, Metrics } from './judge.ts';
 import { isCompact, layout } from './layout.ts';
+import { codeShape } from './code-shape.ts';
 import type { Layout, LayoutOptions } from './layout.ts';
 
 /** GitHub draws an issue or PR body about 860px wide. A wider image is scaled down and its text shrinks. */
@@ -16,7 +17,7 @@ const DETOUR_STEP = 30;
 /** The shapes a wrapped layout aims for, as width to height: the golden one first, then narrower. */
 const WRAPS = [GOLDEN, 1, 0.6] as const;
 
-export interface FitOptions extends LayoutOptions {
+export interface FitOptions extends Omit<LayoutOptions, 'knotStart' | 'backwardSide'> {
   labels?: LabelMode;
   maxWidth?: number;
   /** The size of the whole image for a layout: title, scope line and key included. The renderer passes it. */
@@ -72,7 +73,7 @@ const GATE_WORDS: Record<Gate, string> = {
 };
 
 /** What one rung of the ladder gives up, next to the spec as written. */
-interface Step { direction: Direction; numbered: boolean; compact: boolean; wrap?: number; returns?: boolean; whole?: boolean }
+interface Step { direction: Direction; numbered: boolean; compact: boolean; wrap?: number; returns?: boolean; whole?: boolean; knotStart?: number; backwardSide?: 'e' | 'w' }
 
 /**
  * Draws the spec the way its type is drawn, and loosens that form one step at a time until a
@@ -101,6 +102,22 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
   // File cards have one form, and a spec with many elements is compact already.
   const details = asked === 'auto' && !isCompact(spec, 'auto') && spec.elements.some((e) => e.type !== 'file' && e.type !== 'boundary') ? [false, true] : [asked === 'compact'];
 
+  // Equal minimum back weights of a knot can put different files in each layer. Try each distinct
+  // shape obtained by leading with another member, at most the eight files the code budget holds.
+  const starts: number[] = [];
+  const shapes = new Set<string>();
+  if (spec.type === 'code') for (let start = 0; start < Math.max(1, Math.min(8, spec.elements.length)); start++) {
+    const shape = codeShape(spec, undefined, undefined, true, start);
+    const key = JSON.stringify([...shape.layer]);
+    if (!shapes.has(key)) { shapes.add(key); starts.push(start); }
+  }
+  const codeForms: Pick<LayoutOptions, 'whole' | 'knotStart' | 'backwardSide'>[] = spec.type === 'code'
+    ? starts.flatMap((knotStart) => [
+      { knotStart, backwardSide: 'e' as const },
+      { knotStart, backwardSide: 'w' as const },
+      ...(knotStart === 0 ? [{ whole: true }] : []),
+    ])
+    : [{}];
   // The layers of a code diagram are its shape: a wrap would cut them.
   const wraps = spec.type === 'code' ? [] : WRAPS;
   const ladder: { name: string; steps: Step[] }[] = [];
@@ -108,10 +125,11 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
     const steps: Step[] = [];
     for (const numbered of numberings) for (const wrap of [undefined, ...wraps]) for (const direction of directions) {
       if (Number(numbered !== numberings[0]) + Number(wrap !== undefined) !== given) continue;
-      // A code diagram tries its knots spread over the layers there are to spare, and each in one layer: both are its form.
-      for (const whole of spec.type === 'code' ? [false, true] : [false]) {
+      // A code diagram tries tied knot orders and both sides for backward departures. Keeping each
+      // knot whole is one more form; without a backward line its two departure sides are identical.
+      for (const form of codeForms) {
         // A wrapped layout is tried with its lines back to the start of a row run between the rows, and run straight back.
-        for (const returns of wrap ? [true, false] : [false]) steps.push({ direction, numbered, compact, ...(wrap ? { wrap, returns } : {}), ...(whole ? { whole } : {}) });
+        for (const returns of wrap ? [true, false] : [false]) steps.push({ direction, numbered, compact, ...(wrap ? { wrap, returns } : {}), ...form });
       }
     }
     if (!steps.length) continue;
@@ -127,7 +145,7 @@ export async function judge(spec: DiagramSpec, opts: FitOptions = {}): Promise<{
     for (const step of ladder[k]!.steps) {
       const { direction } = step;
       let l: Layout;
-      try { l = await layout(spec, { detail: step.compact ? 'compact' : asked, direction, numbered: step.numbered, wrap: step.wrap, returns: step.returns, whole: step.whole }); } catch (err) { failure ??= err; continue; }
+      try { l = await layout(spec, { detail: step.compact ? 'compact' : asked, direction, numbered: step.numbered, wrap: step.wrap, returns: step.returns, whole: step.whole, knotStart: step.knotStart, backwardSide: step.backwardSide }); } catch (err) { failure ??= err; continue; }
       const m = measure(l);
       // A wrap that cut nothing, or a second shape that packs the same, repeats a layout already tried.
       if (tried.some((o) => o.c.direction === direction && o.layout.numbered === l.numbered && o.layout.compact === l.compact && o.layout.width === l.width && o.layout.height === l.height && o.c.length === m.length)) continue;

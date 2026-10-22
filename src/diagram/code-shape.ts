@@ -80,8 +80,9 @@ export function knotOrder(members: string[], weight: (from: string, to: string) 
  * A file with no line at all stands in the shortest layer.
  *
  * `spread` false keeps each knot in one layer: the budget of the other diagrams counts a cycle as one step of a chain.
+ * `start` tries another leading member when minimum-back-weight orders tie.
  */
-export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number = cardHeight, limit = CODE_LAYERS, spread = true): CodeShape {
+export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number = cardHeight, limit = CODE_LAYERS, spread = true, start = 0): CodeShape {
   const parents = new Set(spec.elements.map((e) => e.parent));
   const files = spec.elements.filter((e) => !parents.has(e.id) && e.type !== 'boundary' && e.type !== 'node');
   const ids = new Set(files.map((f) => f.id));
@@ -111,7 +112,11 @@ export function codeShape(spec: DiagramSpec, height: (el: SpecElement) => number
     if (low.get(id) !== index.get(id)) return;
     const members: string[] = [];
     for (let top = ''; top !== id;) { top = stack.pop()!; knotOf.set(top, knots.length); members.push(top); }
-    knots.push(knotOrder(members, weight, (m) => listed.get(m)!));
+    // Equal back weights can give different routes. A candidate may lead with another member,
+    // keeping the remaining members in spec order; knotOrder still minimizes the back weight.
+    const order = [...members].sort((a, b) => listed.get(a)! - listed.get(b)!);
+    const lead = order[start % order.length]!;
+    knots.push(knotOrder(members, weight, (m) => m === lead ? -1 : listed.get(m)!));
   };
   for (const f of files) if (!index.has(f.id)) visit(f.id);
 

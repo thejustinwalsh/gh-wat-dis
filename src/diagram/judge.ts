@@ -21,9 +21,8 @@ export interface Metrics {
   /** Lines that run more than twice as far as they need to, round the drawing or back on themselves. */
   roundabout: number;
   /**
-   * The crossings the calm gate counts, and how many it allows. In a code diagram drawn in layers these are only
-   * crossings between two lines that both run from one layer to another, one allowed for every two lines: a line
-   * inside a layer or a loop does not count. Elsewhere they are all the crossings, one allowed for every four lines.
+   * All crossings count toward the calm gate, including lines inside a code layer and loops.
+   * Code diagrams drawn in layers allow one crossing for every two lines; other diagrams allow one for every four.
    */
   calmCrossings: number;
   calmAllowed: number;
@@ -104,11 +103,10 @@ export function measure(l: Layout): Metrics {
         m.worst = { from: e.rel.from, to: e.rel.to, length: Math.round(length), direct: Math.round(direct) };
       }
     }
-    const between = (x: EdgePath): boolean => !x.inLayer && x.rel.from !== x.rel.to;
     for (const other of edges.slice(i + 1)) {
       const n = crossings(e.points, other.points);
       m.crossings += n;
-      if (!l.layered || (between(e) && between(other))) m.calmCrossings += n;
+      m.calmCrossings += n;
     }
     if (l.nodes.some((b) => b.el.id !== e.rel.from && b.el.id !== e.rel.to
       && !(b.group && (holds(b, e.rel.from) || holds(b, e.rel.to))) && crossesRect(e.points, b, -1.5))) m.through++;

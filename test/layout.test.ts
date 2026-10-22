@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { lintSpec, render } from '../src/diagram/index.ts';
 import { MAX_WIDTH } from '../src/diagram/fit.ts';
-import { GOLDEN } from '../src/diagram/judge.ts';
+import { GOLDEN, measure, failed } from '../src/diagram/judge.ts';
 import { BREADTH_BUDGET, BUDGET } from '../src/diagram/budget.ts';
 import { CARD_ROW } from '../src/diagram/layout.ts';
 import type { Layout, NodeBox, Pt, Rect } from '../src/diagram/layout.ts';
@@ -86,10 +86,47 @@ test('layout corpus: every drawing passes the gates on its geometry, and its run
     assert.equal(kept.fails.includes('width'), out.width > MAX_WIDTH, name);
     assert.equal(kept.fails.includes('height'), out.height > Math.round(MAX_WIDTH * GOLDEN), name);
     assert.equal(out.report.passed, kept.fails.length === 0, name);
+    assert.equal(kept.calmCrossings, kept.crossings, `${name}: calm must count every crossing`);
     table[name] = `${out.report.passed ? `rung ${out.report.rung} of ${out.report.rungs}` : `no rung of ${out.report.rungs}: ${kept.fails.join(', ')}`} | ${out.width} x ${out.height} | ${out.direction === 'RIGHT' ? 'left to right' : 'top down'}${out.numbered ? ', numbered' : ''}${kept.wrapped ? ', wrapped' : ''}`;
   }
   if (process.env.UPDATE_LAYOUT) writeFileSync(EXPECTED, JSON.stringify(table, null, 2) + '\n');
   assert.deepEqual(table, JSON.parse(readFileSync(EXPECTED, 'utf8')), 'a drawing moved: look at it, then run UPDATE_LAYOUT=1 node --test test/layout.test.ts');
+});
+
+test('code calm: in-layer lines and loops count, and four-file knots improve without hiding crossings', async () => {
+  const { layout } = await import('../src/diagram/layout.ts');
+  const named = new Map(specs);
+  const crowded = await layout(named.get('knot4-all')!, { direction: 'RIGHT', whole: true });
+  assert.ok(crowded.edges.some((e) => e.inLayer));
+  const before = measure(crowded);
+  assert.equal(before.crossings, 15);
+  assert.equal(before.calmCrossings, before.crossings);
+  assert.ok(failed(before, { width: 497, height: 516 }, { width: 860, height: 1376 }).includes('calm'));
+
+  // A loop crosses a different line twice. It is counted even though it never changes layers.
+  const node = (id: string, x: number, y: number): NodeBox => ({ el: { id, type: 'file', name: id }, x, y, w: 20, h: 20, group: false, depth: 0, lines: [] });
+  const loop: Layout = {
+    width: 120, height: 50, direction: 'RIGHT', numbered: false, compact: false, layered: true, wrapped: false,
+    nodes: [node('a', 0, 0), node('b', 100, 0), node('c', 100, 30)],
+    edges: [
+      { rel: { from: 'a', to: 'a', label: '' }, points: [{ x: 20, y: 5 }, { x: 60, y: 5 }, { x: 60, y: 15 }, { x: 20, y: 15 }] },
+      { rel: { from: 'b', to: 'c', label: '' }, points: [{ x: 100, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }, { x: 100, y: 30 }] },
+    ],
+  };
+  const loopMetrics = measure(loop);
+  assert.deepEqual([loopMetrics.broken, loopMetrics.crossings, loopMetrics.calmCrossings, loopMetrics.calmAllowed], [0, 2, 2, 1]);
+  assert.ok(failed(loopMetrics, loop, { width: 860, height: 1376 }).includes('calm'));
+
+  for (const name of ['knot4-all', 'knot4-hub']) {
+    const out = await render(named.get(name)!);
+    const kept = out.report.candidates.find((c) => c.chosen)!;
+    assert.equal(out.report.passed, true, name);
+    assert.ok(kept.crossings <= 2, `${name}: ${kept.crossings} crossings`);
+    assert.equal(kept.calmCrossings, kept.crossings, name);
+    assert.deepEqual(out.report.warnings, [], name);
+    assert.equal(out.layout.edges.length, named.get(name)!.relationships.length, 'every import stays drawn');
+    assert.deepEqual(gateFaults(named.get(name)!, out.layout), [], name);
+  }
 });
 
 test('shape from structure: trees wrap without crossings, groups stay whole, knots spread over layers', async () => {
@@ -98,7 +135,7 @@ test('shape from structure: trees wrap without crossings, groups stay whole, kno
   const named = new Map(specs);
   // Each of these draws inside every gate. A tree's lines back to the next row nest, so they cross nothing.
   const pass = ['n24-tree15', 'tree15-right', 'tree-deep-right', 'tree-deep', 'tree-wide', 'wide-right-named', 'groups3-chain', 'groups3-chain-right',
-    '11-code8x6', 'knot4-hub', 'knot4-all', 'knot6-ring', 'knot6-hub', 'knot8-ring', 'knot8-hub'];
+    'knot4-hub', 'knot4-all', 'knot6-ring', 'knot6-hub', 'knot8-ring', 'knot8-hub'];
   for (const name of pass) {
     const out = await draw(named.get(name)!);
     const kept = out.report.candidates.find((c) => c.chosen)!;
@@ -128,6 +165,14 @@ test('shape from structure: trees wrap without crossings, groups stay whole, kno
   const shorten = (await advise(long, {}, wide.report)).fixes[0]!;
   assert.match(shorten.command, /^shorten the group names/);
   assert.ok(shorten.width <= 860, `${shorten.width}`);
+  // This ring exceeds the code budget (12 lines). Its eight crossings used to pass only because
+  // the calm gate ignored the six inside its layers. Keep its geometry, but report the failed gate.
+  const dense = await draw(named.get('11-code8x6')!);
+  const denseKept = dense.report.candidates.find((c) => c.chosen)!;
+  assert.equal(dense.report.passed, false);
+  assert.deepEqual(denseKept.fails, ['calm']);
+  assert.equal(denseKept.calmCrossings, denseKept.crossings);
+  assert.ok(denseKept.crossings > denseKept.calmAllowed);
   // Eight files in a ring are spread over three layers instead of one tall column.
   const ring = (await draw(named.get('11-code8x6')!)).layout;
   assert.equal(new Set(ring.nodes.map((b) => Math.round(b.x))).size, 3);

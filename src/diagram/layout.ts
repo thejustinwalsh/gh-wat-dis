@@ -63,6 +63,10 @@ export interface LayoutOptions {
   returns?: boolean;
   /** A code diagram only: true keeps the files of each knot in one layer, instead of spreading them over the layers there are to spare. */
   whole?: boolean;
+  /** Another tie order for a knot, still minimizing its backward imports. */
+  knotStart?: number;
+  /** Code imports running back may leave toward the gap or turn around their source card. */
+  backwardSide?: 'e' | 'w';
 }
 
 /** The number drawn on a relationship in numbered mode: its `order`, else its position in the spec. */
@@ -367,7 +371,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   if (spec.type === 'dynamic') lines.sort((a, b) => relNumber(spec, a.rel) - relNumber(spec, b.rel) || a.i - b.i);
   // A code diagram left to right has its layers worked out here: only a line along a knot runs backwards, and a line
   // between two files of one layer is drawn beside them. With no line at all there is nothing to layer, and the cards are packed.
-  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec, undefined, undefined, !opts.whole) : undefined;
+  const shape = code && !down && lines.some(({ rel }) => rel.from !== rel.to) ? codeShape(spec, undefined, undefined, !opts.whole, opts.knotStart) : undefined;
   const within = (rel: SpecRelationship): boolean => shape !== undefined && rel.from !== rel.to && shape.layer.get(rel.from) === shape.layer.get(rel.to);
   // In a code diagram a line runs back only along a knot spread over layers: from a run of it to an earlier one.
   const back = shape ? new Set(lines.filter(({ rel }) => shape.layer.get(rel.from)! > shape.layer.get(rel.to)!).map(({ i }) => i)) : backLines(lines.flatMap(({ rel }) => [rel.from, rel.to]), lines);
@@ -422,7 +426,8 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
   const slots = new Map<string, { name: string; rank: number; from?: string }[]>();
   const portId = (id: string, row: number, side: Side, name: string): string => `${id}\u0000${row}\u0000${side}\u0000${name}`;
   /**
-   * The port one end of a line uses. Left to right, a line leaves on the right and arrives on the left. A loop, and a
+   * The port one end of a line uses. A forward line leaves on the right and arrives on the left. A backward
+   * code import may also leave on the right, turning around its source instead of crossing the opposing import. A loop, and a
    * line between two files of one layer, leave and arrive on the right. Top down, which a code diagram takes only
    * when the spec names it, every line runs down the right side of the cards, the only way it can still end on a row.
    */
@@ -430,12 +435,15 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     const el = byId.get(rel[end])!;
     if (el.type !== 'file' || parents.has(el.id)) return el.id;
     const loop = rel.from === rel.to, rev = back.has(i);
-    const side: Side = down ? 'e' : end === 'from' ? (rev ? 'w' : 'e') : loop || rev || within(rel) ? 'e' : 'w';
+    const side: Side = down ? 'e' : end === 'from' ? (rev ? opts.backwardSide ?? 'w' : 'e') : loop || rev || within(rel) ? 'e' : 'w';
+    // Alternate knot orders put their incoming ports in layer order too, before the layout tells
+    // their actual heights. Within a layer the spec order still breaks the tie.
+    const sourceRank = (opts.knotStart ? (shape?.rank.get(rel.from) ?? 0) * spec.elements.length : 0) + (position.get(rel.from) ?? 0);
     const row = rowOf(el, end === 'from' ? rel.fromSymbol : rel.toSymbol);
     const name = end === 'from' ? `out${rel.status ?? ''}` : `in${i}`;
     const key = `${el.id}\u0000${row}\u0000${side}`;
     const list = slots.get(key) ?? slots.set(key, []).get(key)!;
-    if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : position.get(rel.from) ?? 0, ...(end === 'to' ? { from: rel.from } : {}) });
+    if (!list.some((s) => s.name === name)) list.push({ name, rank: end === 'from' ? -1 : sourceRank, ...(end === 'to' ? { from: rel.from } : {}) });
     return portId(el.id, row, side, name);
   };
   const roots = kids.get(undefined) ?? [];
@@ -554,7 +562,7 @@ export async function layout(spec: DiagramSpec, opts: LayoutOptions = {}): Promi
     if (shape) {
       const folded = shape.beyond.length > 0;
       const children = [...built.values()];
-      if (folded) children.sort((x, y) => (shape.rank.get(x.id) ?? 0) - (shape.rank.get(y.id) ?? 0));
+      if (folded || opts.knotStart) children.sort((x, y) => (shape.rank.get(x.id) ?? 0) - (shape.rank.get(y.id) ?? 0));
       return { id: 'root', layoutOptions: { ...joined, 'elk.partitioning.activate': 'true', ...(folded ? { 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES', 'elk.layered.crossingMinimization.forceNodeModelOrder': 'true' } : {}) }, children: [...children, ...turns], edges: edges.map((e) => e.edge) };
     }
     if (parts.size <= 1) return { id: 'root', layoutOptions: joined, children: [...built.values()], edges: inside([...built.keys()]) };

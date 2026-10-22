@@ -641,14 +641,17 @@ test('code: a file is a card with a row per symbol, and a line ends on the row i
   assert.equal(box(out.layout, 'retry').card!.lane, 'PAYMENT SERVICE');
   assert.match(out.svg, /class="ln"[^>]*>ORDER SERVICE</);
   assert.equal(measure(out.layout).broken, 0, 'every line ends on the row it names');
-  // Two files that import each other stand in one layer, and the lines between them run beside the cards, on their right.
+  // The judge may spread a cycle to reduce its crossings. Kept whole explicitly, its files share
+  // one layer and the lines between them still run beside the cards on their right.
   const knot = structuredClone(spec);
   knot.relationships.push({ from: 'keys', to: 'authorise', toSymbol: 'authorise', label: '' });
   const tied = await render(knot);
   assert.equal(tied.report.passed, true, tied.report.why);
-  const [a, k] = [box(tied.layout, 'authorise'), box(tied.layout, 'keys')];
+  const whole = await layout(knot, { direction: 'RIGHT', whole: true });
+  assert.ok(measure(tied.layout).crossings <= measure(whole).crossings);
+  const [a, k] = [box(whole, 'authorise'), box(whole, 'keys')];
   assert.ok(a.x < k.x + k.w && k.x < a.x + a.w && (a.y >= k.y + k.h || k.y >= a.y + a.h), 'the two files of the cycle share a column, one above the other');
-  for (const e of tied.layout.edges.filter((x) => [x.rel.from, x.rel.to].sort().join() === 'authorise,keys')) {
+  for (const e of whole.edges.filter((x) => [x.rel.from, x.rel.to].sort().join() === 'authorise,keys')) {
     assert.ok(Math.abs(e.points[0]!.x - (a.x + Math.max(a.w, k.w))) < Math.max(a.w, k.w) && e.points.every((pt) => pt.x >= Math.min(a.x + a.w, k.x + k.w) - 1), 'the line stays to the right of the two cards');
     const span = Math.max(...e.points.map((pt) => pt.x)) - Math.min(...e.points.map((pt) => pt.x));
     assert.ok(span < 80, `the line turns beside the cards, ${Math.round(span)}px out`);
