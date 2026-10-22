@@ -21,7 +21,8 @@ export async function measurePr(item: DisPr, opts: { cwd?: string; tempRoot?: st
   const url = `https://github.com/${item.repo}`;
   const cwd = resolve(opts.cwd ?? process.cwd());
   const isRepo = await tryGit(cwd, ['rev-parse', '--git-dir']);
-  const local = isRepo === null ? null : webUrl(await tryGit(cwd, ['config', '--get', 'remote.origin.url']));
+  const origin = isRepo === null ? null : await tryGit(cwd, ['config', '--get', 'remote.origin.url']);
+  const local = webUrl(origin);
   const same = local?.toLowerCase() === url.toLowerCase();
   // A fresh ref per invocation lets concurrent measurements share a clone without overwriting each other.
   const ref = `refs/gh-wat-dis/dis/${randomUUID()}`;
@@ -37,7 +38,9 @@ export async function measurePr(item: DisPr, opts: { cwd?: string; tempRoot?: st
     }
     // Full blobs, no checkout or install. The two depth-one trees contain everything analysis reads.
     // Same-repository fetches retain the clone's history and leave FETCH_HEAD and branch refs alone.
-    await git(root, ['fetch', '--no-tags', '--no-write-fetch-head', '--refmap=', ...(temporary ? ['--depth', '1'] : []), 'origin', base, `pull/${item.number}/head:${ref}`]);
+    // Append a helper for this fetch only. Existing helpers keep their order; gh checks the requested host.
+    const auth = temporary || /^https:\/\/(?:[^@/]+@)?github\.com\//i.test(origin?.trim() ?? '') ? ['-c', 'credential.helper=!gh auth git-credential'] : [];
+    await git(root, [...auth, 'fetch', '--no-tags', '--no-write-fetch-head', '--refmap=', ...(temporary ? ['--depth', '1'] : []), 'origin', base, `pull/${item.number}/head:${ref}`]);
     const gotBase = (await git(root, ['rev-parse', '--verify', `${base}^{commit}`])).trim();
     const gotHead = (await git(root, ['rev-parse', '--verify', `${ref}^{commit}`])).trim();
     if (gotBase !== base || gotHead !== head) {

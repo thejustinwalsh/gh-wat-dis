@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -160,4 +161,109 @@ test('dis measure: malformed identity and SHA inputs fail before making snapshot
     await assert.rejects(measurePr({ ...item, ...change }, { cwd: caller, tempRoot: temp }), /needs|measurement needs/);
   }
   assert.deepEqual(readdirSync(temp), []);
+});
+
+
+test('dis measure: HTTPS auth falls back to gh per fetch, preserves existing helpers, and refuses other credential hosts', async (t) => {
+  const { root, source, caller, temp, trace, item } = fixture(t);
+  const vars = ['PATH', 'GH_TOKEN', 'GIT_TERMINAL_PROMPT', 'NO_PROXY', 'no_proxy', 'WAT_AUTH_LOG', 'WAT_AUTH_FULL'];
+  const old = new Map(vars.map((key) => [key, process.env[key]]));
+  t.after(() => { for (const [key, value] of old) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  const bin = join(root, 'bin'), repositories = join(root, 'repositories'), calls = join(root, 'helpers.log');
+  mkdirSync(bin); mkdirSync(join(repositories, 'acme'), { recursive: true });
+  const remote = join(repositories, 'acme/example.git');
+  git(root, 'clone', '-q', '--bare', source, remote);
+  git(remote, 'update-ref', 'refs/pull/7/head', item.headSha);
+  git(remote, 'config', 'uploadpack.allowReachableSHA1InWant', 'true');
+  const token = 'scratch-token-never-use-on-github';
+  Object.assign(process.env, { PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: token, GIT_TERMINAL_PROMPT: '0', WAT_AUTH_LOG: calls });
+  delete process.env.NO_PROXY; delete process.env.no_proxy;
+  writeFileSync(calls, '');
+  writeFileSync(join(bin, 'gh'), `#!${process.execPath}
+const { appendFileSync } = require('node:fs');
+let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', s => input += s);
+process.stdin.on('end', () => {
+  const fields = Object.fromEntries(input.split('\\n').filter(Boolean).map(line => { const i = line.indexOf('='); return [line.slice(0,i),line.slice(i+1)]; }));
+  const action = process.argv.at(-1);
+  appendFileSync(process.env.WAT_AUTH_LOG, 'gh ' + action + ' ' + fields.host + '\\n');
+  if (action === 'get' && fields.host === 'github.com') process.stdout.write('username=token-user\\npassword=' + process.env.GH_TOKEN + '\\n\\n');
+});
+`, { mode: 0o755 });
+  const existing = join(root, 'existing-helper.cjs');
+  writeFileSync(existing, `const { appendFileSync } = require('node:fs');
+let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', s => input += s);
+process.stdin.on('end', () => {
+  const action = process.argv.at(-1); appendFileSync(process.env.WAT_AUTH_LOG, 'existing ' + action + '\\n');
+  if (action === 'get') process.stdout.write('username=token-user\\n' + (process.env.WAT_AUTH_FULL ? 'password=' + process.env.GH_TOKEN + '\\n' : '') + '\\n');
+});
+`);
+  git(source, 'config', '--global', 'credential.helper', `!"${process.execPath}" "${existing}"`);
+  git(source, 'config', '--global', '--unset-all', `url.${pathToFileURL(source).href}.insteadOf`);
+  // A local HTTP proxy keeps the requested credential host github.com without contacting GitHub.
+  // The helper is a host-scoped stand-in; the token is a scratch value and never enters argv.
+  git(source, 'config', '--global', 'url.http://github.com/acme/example.git.insteadOf', 'https://github.com/acme/example.git');
+  let authorized = 0;
+  const server = createServer(async (request, response) => {
+    if (request.headers.authorization !== `Basic ${Buffer.from(`token-user:${token}`).toString('base64')}`) {
+      response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="scratch repository"' }); response.end(); return;
+    }
+    authorized++;
+    const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const target = new URL(request.url!, 'http://github.com');
+    try {
+      const body = Buffer.concat(chunks);
+      const out = execFileSync('git', ['http-backend'], { input: body, maxBuffer: 16 * 1024 * 1024, env: {
+        ...process.env, GIT_PROJECT_ROOT: repositories, GIT_HTTP_EXPORT_ALL: '1', PATH_INFO: target.pathname,
+        QUERY_STRING: target.search.slice(1), REQUEST_METHOD: request.method!, CONTENT_TYPE: request.headers['content-type'] ?? '', CONTENT_LENGTH: String(body.length), REMOTE_USER: 'token-user',
+      } });
+      const split = out.indexOf('\r\n\r\n');
+      const headers: Record<string, string> = {}; let status = 200;
+      for (const line of out.subarray(0, split).toString().split('\r\n')) {
+        const colon = line.indexOf(':'); if (colon < 0) continue;
+        const key = line.slice(0, colon), value = line.slice(colon + 1).trim();
+        if (key.toLowerCase() === 'status') status = Number(value.split(' ')[0]); else headers[key] = value;
+      }
+      response.writeHead(status, headers); response.end(out.subarray(split + 4));
+    } catch { response.writeHead(500); response.end('scratch Git transport failed'); }
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    git(source, 'config', '--global', 'http.proxy', `http://127.0.0.1:${address.port}`);
+    const config = join(root, 'gitconfig'), before = readFileSync(config, 'utf8');
+    const facts = await measurePr(item, { cwd: caller, tempRoot: temp });
+    assert.equal(facts.base, item.baseSha); assert.equal(facts.head, item.headSha);
+    const fallback = readFileSync(calls, 'utf8');
+    assert.match(fallback, /existing get/);
+    assert.ok(fallback.indexOf('existing get') < fallback.indexOf('gh get github.com'));
+    assert.match(fallback, /gh get github.com/);
+    assert.ok(authorized > 0);
+    assert.equal(readFileSync(config, 'utf8'), before, 'auth must not change user config');
+    assert.deepEqual(readdirSync(temp), []);
+
+    const clone = join(root, 'auth-clone');
+    git(root, 'clone', '-q', source, clone);
+    git(clone, 'remote', 'set-url', 'origin', 'https://github.com/acme/example.git');
+    writeFileSync(calls, '');
+    await measurePr(item, { cwd: clone, tempRoot: temp });
+    assert.match(readFileSync(calls, 'utf8'), /gh get github.com/, 'HTTPS clones need the fallback too');
+    assert.equal(readFileSync(config, 'utf8'), before);
+
+    writeFileSync(calls, ''); process.env.WAT_AUTH_FULL = '1';
+    await measurePr(item, { cwd: caller, tempRoot: temp });
+    assert.match(readFileSync(calls, 'utf8'), /existing get/);
+    assert.doesNotMatch(readFileSync(calls, 'utf8'), /gh get/, 'a complete user helper must win');
+    assert.equal(readFileSync(config, 'utf8'), before);
+
+    delete process.env.WAT_AUTH_FULL;
+    git(source, 'config', '--global', '--unset-all', 'credential.helper');
+    git(source, 'config', '--global', '--unset-all', 'url.http://github.com/acme/example.git.insteadOf');
+    git(source, 'config', '--global', 'url.http://other.invalid/acme/example.git.insteadOf', 'https://github.com/acme/example.git');
+    writeFileSync(calls, ''); const priorAuthorized = authorized;
+    await assert.rejects(measurePr(item, { cwd: caller, tempRoot: temp }), /could not read Username|Authentication failed/);
+    assert.match(readFileSync(calls, 'utf8'), /gh get other.invalid/);
+    assert.equal(authorized, priorAuthorized, 'the gh helper must not return credentials for a rewritten host');
+    assert.deepEqual(readdirSync(temp), []);
+    assert.doesNotMatch(readFileSync(trace, 'utf8'), new RegExp(token));
+  } finally { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); }
 });
