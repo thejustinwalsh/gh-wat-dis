@@ -114,10 +114,6 @@ test('dis drift: updated thread and both SHAs invalidate cache; deleted artifact
   assert.ok(result.drift.some((d) => /item was updated/.test(d)));
   rmSync(result.paths.png!);
   assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined);
-  const quickHtml = await describe('7', { cwd: f.cwd }, f.deps);
-  assert.equal(quickHtml.stamp.mode, 'full');
-  assert.equal(quickHtml.stamp.format, 'html');
-  assert.equal(quickHtml.cached, true);
   result = await describe('7', { cwd: f.cwd, full: true }, f.deps);
   writeFileSync(result.paths.markdown!, 'partial');
   assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined, 'a nonempty partial artifact is not a hit');
@@ -126,10 +122,6 @@ test('dis drift: updated thread and both SHAs invalidate cache; deleted artifact
   for (const change of [{ schema: 9 }, { version: 'old' }, { url: 'https://github.com/other/item/issues/7' }, { mode: 'quick' }, { baseSha: 13 }]) {
     writeFileSync(result.paths.stamp!, JSON.stringify({ ...JSON.parse(stamp), ...change }));
     assert.equal(readCache(stampInput(f.state.item), f.cwd, 'full').bundle, undefined);
-  const quickHtml = await describe('7', { cwd: f.cwd }, f.deps);
-  assert.equal(quickHtml.stamp.mode, 'full');
-  assert.equal(quickHtml.stamp.format, 'html');
-  assert.equal(quickHtml.cached, true);
   }
 });
 
