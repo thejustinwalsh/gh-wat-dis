@@ -10,6 +10,8 @@ import type { Manifest } from './install.ts';
 import { CCCC, install as installCccc, locate as locateCccc, platformKey } from '../tools/cccc.ts';
 import { CONFIG_REL, PKG, UsageError, compareVersions, errorMessage, parseArgs, parseJsonc, readJson, repoRoot, run } from './util.ts';
 
+import { DIS_CACHE_REL } from './dis-ignore.ts';
+
 const MIN_GH = '2.99.0';
 const MIN_NODE = '24.0.0';
 
@@ -225,6 +227,17 @@ function checkEnvFile(cwd: string): Check[] {
   return [{ status: 'ok', name: 'token file', detail: `git ignores ${ENV_FILE_REL}` }];
 }
 
+/** Cached explanations can contain private thread text; check the rule even before a cache exists. */
+export function checkDisCache(cwd: string): Check[] {
+  const root = repoRoot(cwd);
+  if (spawnSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }).status !== 0) return [];
+  const tracked = run('git', ['ls-files', '--', DIS_CACHE_REL], { cwd: root });
+  if (tracked) return [{ status: 'fix', name: 'explanation cache', detail: `${DIS_CACHE_REL}/ has tracked files`, action: `remove the cache from git's index with git rm -r --cached -- ${DIS_CACHE_REL}; the local files stay on disk` }];
+  const ignored = spawnSync('git', ['check-ignore', '-q', `${DIS_CACHE_REL}/.probe`], { cwd: root }).status === 0;
+  if (!ignored) return [{ status: 'fix', name: 'explanation cache', detail: `git would commit files under ${DIS_CACHE_REL}/`, action: 'add a line "dis/" to .agents/gh-wat-dis/.gitignore, or run: npx gh-wat-dis install' }];
+  return [{ status: 'ok', name: 'explanation cache', detail: `git ignores ${DIS_CACHE_REL}/` }];
+}
+
 function checkConfig(cwd: string): Check {
   const root = repoRoot(cwd);
   const path = join(root, CONFIG_REL);
@@ -310,7 +323,7 @@ export async function offerTools(checks: Check[], mode?: string): Promise<boolea
 }
 
 export async function runChecks({ offline = false, cwd = process.cwd() }: { offline?: boolean; cwd?: string } = {}): Promise<Check[]> {
-  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity()];
+  return [checkRuntime(), ...checkGh(offline), ...checkSkills(cwd), await checkMcp(cwd, offline), ...checkEnvFile(cwd), ...checkDisCache(cwd), checkConfig(cwd), ...(await checkTools()), checkComplexity()];
 }
 
 const LABEL = { ok: 'ok', fix: 'FIX', off: 'off' } as const;

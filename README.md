@@ -57,6 +57,7 @@ Ask in plain words. The skills trigger on the task.
 | "Run a backlog cleanup" | `wat-maintain` |
 | "What does this change affect?" / "Map the architecture" | `wat-architecture` |
 | "Draw the container diagram for checkout" | `wat-diagram` |
+| "Explain #56" / "Give me a deep dive on this PR" | `wat-dis` |
 | "Set up gh-wat-dis" | `wat-setup` |
 | "Migrate this repo and its open issues to gh-wat-dis" | `wat-migrate` |
 

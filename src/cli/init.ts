@@ -4,6 +4,8 @@ import { USE, defaultConfig } from './config.ts';
 import type { Use } from './config.ts';
 import { CONFIG_REL, TMP_DIR, UsageError, parseArgs, repoRoot, run } from './util.ts';
 
+import { ensureDisIgnore } from './dis-ignore.ts';
+
 interface Repo { owner: string; name: string; defaultBranch: string; remote: boolean }
 
 function detectRepo(cwd: string): Repo {
@@ -73,6 +75,8 @@ export async function main(argv: string[]): Promise<number> {
     writeFileSync(localIgnore, '.env\n.env.*\n');
     console.log(`write    ${localIgnore}  (ignore .env)`);
   }
+
+  if (ensureDisIgnore(root)) console.log(`update   ${localIgnore}  (ignore dis/)`);
 
   const gi = join(root, '.gitignore');
   const cur = existsSync(gi) ? readFileSync(gi, 'utf8') : '';

@@ -100,7 +100,7 @@ When the user asks what a change affects and wants no issue or PR, answer in thi
 2. What it reaches outside the diff: dependents, changed exported signatures, contracts. "Nothing" is an answer.
 3. Unknowns: what the tools could not see, and any `coChange` pair you kept.
 
-Use prose and short lists. Do not borrow the sections of a PR body. State an added or removed relationship in a sentence. Draw a diagram for a chat answer only when the user asks for one.
+Use prose and short lists. Do not borrow the sections of a PR body. State an added or removed relationship in a sentence. Draw a diagram for a chat answer only when the user asks for one, except that `wat-dis` shows the available diagram by default when explaining an issue or PR.
 
 Name the mapped elements first. Then name the ones that are not in the architecture map in one clause, such as "plus tests and root config, which the map does not name".
 

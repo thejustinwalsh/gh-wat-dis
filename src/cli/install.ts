@@ -4,6 +4,8 @@ import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import { CONFIG_REL, PKG, PKG_ROOT, UsageError, parseArgs, readJson, repoRoot } from './util.ts';
 
+import { ensureDisIgnore } from './dis-ignore.ts';
+
 export const MANIFEST = '.gh-wat-dis.json';
 const SKILLS_SRC = join(PKG_ROOT, 'skills');
 
@@ -144,6 +146,7 @@ export async function install(argv: string[]): Promise<number> {
   const needsConfig = !args['no-config'] && existsSync(join(root, '.git')) && !existsSync(join(root, CONFIG_REL));
   if (args['dry-run']) {
     if (needsConfig) console.log(`write    ${join(root, CONFIG_REL)}`);
+    if (existsSync(join(root, '.git')) && ensureDisIgnore(root, true)) console.log(`update   ${join(root, '.agents/gh-wat-dis/.gitignore')}  (ignore dis/)`);
     console.log('\nDry run. Nothing changed.');
     return 0;
   }
@@ -158,6 +161,8 @@ export async function install(argv: string[]): Promise<number> {
     await (await import('./init.ts')).main([]);
     console.log('Review it with the person, then commit it.');
   }
+
+  if (existsSync(join(root, '.git')) && ensureDisIgnore(root)) console.log(`update   ${join(root, '.agents/gh-wat-dis/.gitignore')}  (ignore dis/)`);
 
   console.log('\nChecks');
   const { offerLogin, printChecks, runChecks } = await import('./doctor.ts');

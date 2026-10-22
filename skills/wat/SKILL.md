@@ -32,6 +32,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 | Create, plan or report on a milestone | `wat-milestone` |
 | Sort new issues, set type and surface labels, define labels, propose milestones | `wat-triage` |
 | Stale issues, label hygiene, duplicates, milestone rollover | `wat-maintain` |
+| Explain an issue or PR in chat, including a full report or deep dive | `wat-dis` |
 | Understand or map the system, measure change impact | `wat-architecture` |
 | Make an SVG diagram and attach it | `wat-diagram` |
 
@@ -50,7 +51,7 @@ The config also holds the project defaults: labels, issue types, milestone namin
 
 ## 4. Answering in chat
 
-When the user asks a question and wants no issue, PR or comment, answer in prose: the answer first, then the facts behind it, then what you could not check. Do not borrow the sections of a body. A skill that has its own chat shape says so.
+When the user asks to explain an issue or PR, use `wat-dis`, which shows its available diagram by default. For other questions that need no issue, PR or comment, answer in prose: the answer first, then the facts behind it, then what you could not check. Do not borrow the sections of a body. A skill that has its own chat shape says so.
 
 ## 5. Stay in lane
 

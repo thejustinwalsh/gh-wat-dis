@@ -132,3 +132,30 @@ test('uninstall: preserves edited skills, previews both plans, and removes edits
   assert.equal(existsSync(edited), false);
   assert.equal(existsSync(other), true);
 });
+
+test('dis cache: install ignore rule preserves entries and doctor catches tracked or unignored cache files', async () => {
+  const { ensureDisIgnore, DIS_CACHE_REL } = await import('../src/cli/dis-ignore.ts');
+  const { checkDisCache } = await import('../src/cli/doctor.ts');
+  const cwd = project();
+  const git = (...args: string[]) => {
+    const out = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    assert.equal(out.status, 0, out.stderr);
+    return out.stdout;
+  };
+  git('init', '-q');
+  assert.equal(checkDisCache(cwd)[0]?.status, 'fix');
+  const ignore = join(cwd, '.agents/gh-wat-dis/.gitignore');
+  mkdirSync(join(cwd, '.agents/gh-wat-dis'), { recursive: true });
+  writeFileSync(ignore, '.env\ncustom/');
+  assert.equal(ensureDisIgnore(cwd, true), true);
+  assert.equal(readFileSync(ignore, 'utf8'), '.env\ncustom/');
+  assert.equal(ensureDisIgnore(cwd), true);
+  assert.equal(readFileSync(ignore, 'utf8'), '.env\ncustom/\ndis/\n');
+  assert.equal(ensureDisIgnore(cwd), false);
+  assert.equal(checkDisCache(cwd)[0]?.status, 'ok');
+  mkdirSync(join(cwd, DIS_CACHE_REL, 'owner/repo/1'), { recursive: true });
+  writeFileSync(join(cwd, DIS_CACHE_REL, 'owner/repo/1/explain.md'), 'private thread');
+  assert.equal(git('status', '--short', '--', DIS_CACHE_REL), '');
+  git('add', '-f', '--', DIS_CACHE_REL);
+  assert.match(checkDisCache(cwd)[0]?.detail ?? '', /tracked files/);
+});
