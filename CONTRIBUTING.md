@@ -11,11 +11,11 @@
 
 ## Tools
 
-Each command does one thing and composes with the others.
+Each data command does one thing and composes with the others. The `dis` presentation command composes those readers, analysis functions and renderers; it does not add a model service or execute instructions from a GitHub thread.
 
-- **Data out is JSON on stdout.** Progress and errors go to stderr. Exit 0 when the command ran, 1 when it found a failure, 2 for a usage error.
+- **Data out is JSON on stdout.** Presentation commands can print Markdown or text; `dis` defaults to its explanation and artifact paths, and offers `--json` for composition. Progress and errors go to stderr. Exit 0 when the command ran, 1 when it found a failure, 2 for a usage error.
 - **Data in is a file argument or stdin** (`-`, or no argument when stdin is piped).
-- **One shared shape per kind of data.** Graphs are a diagram spec (`src/spec.ts`). Change facts are `Facts` (`src/impact/types.ts`). A tool that makes a graph writes a spec; a tool that draws one reads a spec. No tool both decides the shape and renders it.
+- **One shared shape per kind of data.** Graphs are a diagram spec (`src/spec.ts`). Change facts are `Facts` (`src/impact/types.ts`). A tool that makes a graph writes a spec; a tool that draws one reads a spec. The data tools keep shape decisions and rendering separate. `dis` orchestrates those existing functions to produce a presentation bundle.
 - **Every option that shapes output is a flag or a filter the agent can chain.** If an agent would need to edit a tool's output by hand to get the right result, add a filter.
 - **Facts carry a provenance label** (`exact`, `resolved`, `measured`, `heuristic`) and a source. Tools report. They do not score, rank quality or give verdicts.
 

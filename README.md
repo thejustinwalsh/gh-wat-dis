@@ -86,7 +86,7 @@ The file also holds the issue types, the labels (surfaces, priorities, sizes), m
 
 ## Tools
 
-Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` or piped stdin stands in for a file.
+Each tool does one thing. Data tools write JSON on stdout so they chain. Presentation tools such as `blast`, `legend` and `dis` can print text; `dis --json` prints a structured result with artifact paths. `-` or piped stdin stands in for a file.
 
 | Tool | Does |
 |---|---|
@@ -106,9 +106,12 @@ Each tool does one thing. Data goes out as JSON on stdout, so tools chain. `-` o
 | `diagram` | Lints a C4 diagram spec and renders an SVG that fits GitHub's width. `--png` adds a PNG for the agent to look at. |
 | `legend` | Prints a diagram's relationships as a Markdown table. |
 | `blast` | Formats impact facts as a Markdown section: what a change reaches outside its diff, with file links. |
+| `dis <reference>` | Explains an issue or PR from its thread; `--full` measures a PR and writes its diagram, Markdown and cache stamp. `--json` prints paths and explanation as JSON. |
 | `lint` | Backstop: catches what GitHub would break in a body. |
 | `install`, `uninstall`, `init`, `mcp`, `doctor` | Set up and check. `doctor --tools install` fetches the optional cccc binary and verifies it. |
 | `help` | Lists every tool with what it does and whether it writes. `help --json` prints the list for an agent. |
+
+`npx gh-wat-dis dis 56` gives a quick thread explanation without fetching git objects. Use `dis owner/repo#56` or an issue/PR URL for another repository. `dis 56 --full` runs the full pass directly. It caches artifacts under `.agents/gh-wat-dis/dis/<owner>/<repo>/<number>/`; matching source stamps reuse a full result, while updates report drift and rebuild it. `install` adds the cache ignore rule and `doctor` checks it. An already formatted body is preserved with its attached diagram; other bodies receive a sourced summary, and the `wat-dis` skill explains the reasoning in chat.
 
 `npx gh-wat-dis help` is the full list. `npx gh-wat-dis <tool> --help` gives one tool's options.
 
