@@ -3,7 +3,7 @@
   "version": 1,
   "policy": {
     "use": "always",
-    "confirmBeforeWrite": true
+    "confirmBeforeWrite": false
   },
   "repo": {
     "owner": "thejustinwalsh",
