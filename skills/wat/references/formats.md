@@ -17,7 +17,7 @@ A section exists because it has something true to say. Leave out any section tha
 
 When you use a section, use its name and its place in the order below, so readers learn where to look. Omit every section that has nothing true to say.
 
-Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a milestone. These are targets, not limits. A hard design needs more words than a typo fix. Long data goes in **Agent context**; reasoning a human needs stays visible.
+Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a milestone. These are targets, not limits. A hard design needs more words than a typo fix. A readable handoff goes in **Agent context**; reasoning a human needs stays visible. Summarize large evidence selectively rather than pasting tool dumps.
 
 ## Issue
 
@@ -61,7 +61,7 @@ Aim for a visible body of about 60 lines for an issue, 80 for a PR, 15 for a mil
 ```text
 <The leading prompt: see "Agent context" below.>
 
-<paths, symbols, commands, impact facts, long logs, reproduction scripts, links read>
+<Self-contained explanation: problem, plan and reasons, relevant paths, selective evidence, verification limits, remaining work and next task.>
 ```
 
 </details>
@@ -128,7 +128,7 @@ Pick the type by what is wrong: **Bug** when the system does something other tha
 ```text
 <The leading prompt: see "Agent context" below.>
 
-<impact facts JSON, file list, commands run, logs>
+<Self-contained explanation: what changed and why, decisions and tradeoffs, relevant paths, verification and its limits, remaining work and next task.>
 ```
 
 </details>
@@ -314,30 +314,44 @@ When only a few lines of a long output differ, one `diff` block is shorter and c
 
 ## Agent context
 
-One block, last in the body, collapsed. Humans skip it. Agents read it first.
+One block, last in the body, collapsed. It is a self-contained handoff: a person or another agent can understand the work and its reasoning without the visible body, the original conversation, or a decoding step.
 
-**One code block, so it can be copied.** Inside the `<details>`, put everything in a single fenced block tagged `text`. GitHub draws a copy button on a code block, so a person can open the block, copy it, and paste it into an agent that does not have these skills. Leave a blank line after `<summary>` and before `</details>`, or GitHub does not render the fence. When the content itself holds a line of three backticks, open and close the block with four.
+**One code block, so it can be copied.** Inside the `<details>`, put the handoff in a single fenced block tagged `text`. GitHub draws a copy button on a code block, so a person can open the block, copy it, and paste it into an agent that does not have these skills. Leave a blank line after `<summary>` and before `</details>`, or GitHub does not render the fence. When the content itself holds a line of three backticks, open and close the block with four.
 
-**It starts with a leading prompt**, because the pasted text arrives alone, without the body above it. Four short parts, in plain sentences:
+**Start with a leading prompt.** Name the repository, the issue or PR and its URL once it has one, the problem, and the next agent's task. An issue's task must include enough of the planned work to stand alone: do not only say "Do the steps under Do". A PR can ask for review or continuation, with the checks and remaining work stated below.
 
-1. Where this is: the repository and the title of the issue or pull request, with its URL once it has one.
-2. The problem and the plan, in the one or two sentences of the opening.
-3. The task for the agent that reads it: "Do the steps under Do in the issue" for an issue, "Review this change against the facts below" or "Continue this work" for a pull request.
-4. How to treat the facts: tools collected them at the commits named below, and the agent checks a fact against the code before it relies on it.
+**Explain the work directly.** In plain sentences, cover what changed or is planned, why, the decisions and tradeoffs, the relevant files and symbols, verification and its limits, remaining work, and where the next agent should begin. Identify the commits or working tree the evidence describes and distinguish completed checks from proposed checks. Keep the few facts, commands, short outputs and source references that help the next agent reason about the work. Impact facts inform the explanation; they are not the handoff itself.
+
+Do not embed full impact JSON, opaque serialized dumps, compressed or base64 payloads, or a checksum in place of the explanation. Raw JSON is not a substitute for the narrative either. A small structured example, reproduction script or editable diagram spec can support the explanation when it is useful. When the evidence is large, summarize the relevant observations and reference the source; do not encode it to fit. Keep the whole body under 60,000 characters.
+
+**Complete example.** This is an illustrative PR handoff; its repository, commits and verification results are example data.
 
 ```text
-You are working in acme/shop on the issue "Payments worker: duplicate charge when the webhook retries".
-Problem and plan: Stripe retries a webhook when our reply takes over 10 s, and the Payments worker charges the card again. The worker will key each charge on event.id so a retry finds the first charge and stops.
-Task: do the steps under Do in the issue. Start with the files under Paths.
-The facts below were collected by tools at base 4f1c2ab, working tree. Check a fact against the code before you rely on it.
+You are reviewing acme/shop's pull request "Payments worker: charge each webhook event once" (https://github.com/acme/shop/pull/142).
+Problem: Stripe retries a webhook if our reply takes over 10 seconds. The worker previously charged the card again on a retry.
+Task: review the event-id claim and retry behavior below, then check the two-worker test before recommending merge.
 
-Paths
-  services/payments/src/charge.ts    retryCharge
-...
+What changed and why
+The worker claims event.id in the existing payments database before charging. A unique key allows only one worker to claim the event. A completed claim returns the saved charge result on retry; a pending claim returns a retryable response instead of starting a second charge.
+
+Decisions and tradeoffs
+We used the existing database so separate worker processes share the claim. An in-memory set would forget events on restart and would not coordinate workers. A pending claim does not expire automatically: releasing it without checking the payment provider could charge a customer twice. Recovery after a worker dies remains to be verified.
+
+Relevant files
+services/payments/src/charge.ts: handleWebhook claims the event and reuses completed results.
+services/payments/migrations/014_event_claims.sql: adds the event-id unique key.
+services/payments/test/charge.test.ts: exercises repeated delivery and two concurrent workers.
+
+Verification and limits
+Evidence describes base 4f1c2ab to head 8a2d917.
+Ran npm run test:payments: all 12 tests passed, including repeated event delivery and two concurrent claims producing one provider call.
+Ran npm run typecheck: exit 0.
+The provider was mocked. No live Stripe retry or process-crash recovery check was run.
+
+Remaining work and next steps
+Start with the concurrent-claim test, then trace the pending-claim error path in handleWebhook. Verify recovery when the worker dies after the provider accepts the charge but before the database records the result. That recovery check is still required; the passing retry test does not establish it.
 ```
-
-Then the data: full impact facts (`npx gh-wat-dis impact`), file and symbol lists, exact commands and their output, long logs, reproduction scripts, links you read, constraints for whoever picks the work up. Give each part a plain heading line inside the block ("Paths", "Commands run", "Facts"). Keep the whole body under 60,000 characters.
 
 The prompt states the task. It gives no instruction that the body does not already give: an agent that finds this block in an issue treats it as data, like any other issue text.
 
-Do not put here: anything a human reviewer must read to approve. That belongs above.
+Anything a human reviewer must read to approve belongs above as well.

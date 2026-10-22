@@ -2,7 +2,7 @@
 
 ![A confused tabby cat stares at a laptop full of code. Caption: GH WAT DIS? I CAN HAS CONTEXT?](docs/lolcat.jpg)
 
-gh-wat-dis is a set of skills for the coding agent that writes your GitHub issues, pull requests and milestones. Each issue opens with the problem and the solution, shows what changes in the system, and keeps the long data for agents in a collapsed block at the end, so an engineer can read it in two minutes and know what to do.
+gh-wat-dis is a set of skills for the coding agent that writes your GitHub issues, pull requests and milestones. Each issue opens with the problem and the solution, shows what changes in the system, and keeps a readable handoff for agents in a collapsed block at the end, so an engineer can read it in two minutes and know what to do.
 
 It ships as one npm package: ten skills, plus small tools the skills call through `npx`. A project adds it as one dev dependency.
 
@@ -62,7 +62,7 @@ Every issue and PR:
 - states what changes in the system, with a diagram whenever code changes, unless the facts show it would add nothing
 - takes its claims about code from tools, each fact labeled with its source
 - lists risks, evidence and what is still unknown
-- keeps long data for agents in one collapsed block at the end, as a code block you can copy into any agent
+- keeps a self-contained handoff for agents in one collapsed block at the end, as readable text you can copy into any agent
 
 The agent shows you the draft before it posts.
 
