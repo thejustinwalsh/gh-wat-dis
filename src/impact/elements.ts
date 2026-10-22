@@ -50,7 +50,7 @@ export function buildElements(root: string, files: string[], packages: PackageIn
   const directory = (name: string): string => {
     let id = dirIds.get(name);
     if (!id) {
-      id = add({ id: slug(name), name: name || '(root)', type: 'component', found: 'directory', provenance: 'heuristic', source: 'git' });
+      id = add({ id: slug(name), name: name || '(root)', type: 'component', technology: 'folder', found: 'directory', provenance: 'heuristic', source: 'git' });
       dirIds.set(name, id);
     }
     return id;

@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { analyze, listElements, reachOf, resolveOwners, toCodeSpec, toDiagramSpec, toMarkdown } from '../src/impact/index.ts';
 import { lintSpec } from '../src/diagram/lint.ts';
+import { over } from '../src/diagram/budget.ts';
+import { buildElements } from '../src/impact/elements.ts';
 import type { Facts } from '../src/impact/index.ts';
 import { ELEMENT_TYPES, PROVENANCE, STATUSES } from '../src/spec.ts';
 import type { DiagramSpec } from '../src/spec.ts';
@@ -988,13 +990,79 @@ test('element spec: the end of an added relationship stays though the map does n
     edges: Array.from({ length: 30 }, (_, i) => edge(`p${String(i).padStart(2, '0')}`, 'core', 'unchanged')),
   });
   const capped = toDiagramSpec(many);
-  assert.equal(capped.elements.length, 12);
+  assert.equal(capped.elements.length, 5);
+  assert.deepEqual(over(capped), []);
   assert.ok(capped.elements.some((e) => e.id === 'core') && capped.elements.some((e) => e.id === 'p00') && !capped.elements.some((e) => e.id === 'p29'));
-  assert.equal(capped.scope, 'the change and the elements it reaches most; 19 more affected elements are not drawn');
+  assert.equal(capped.scope, 'the change and the elements it reaches most; 26 more affected elements are not drawn');
   assert.equal(toDiagramSpec(many, { all: true }).elements.length, 31);
   // With no map, a folder that holds changed source is an element: the change is never "no changed elements".
   const bare = codeFacts({ elements: [el('native', 'added', { source: 'git', provenance: 'heuristic', type: 'component' })], files: [fileFact('native/a.rs', 10, { element: 'native', language: 'rust' })] });
   assert.deepEqual(toDiagramSpec(bare).elements.map((e) => e.id), ['native']);
+});
+
+test('element spec: changed siblings and changed relationship endpoints share the breadth allowance', () => {
+  const el = (id: string, status: Facts['elements'][number]['status']): Facts['elements'][number] => ({
+    id, name: id, type: 'container', status, files: 1, filesChanged: status === 'changed' ? 1 : 0,
+    dependentsAffected: 0, provenance: 'exact', source: 'config',
+  });
+  const ids = ['a', 'b', 'c', 'd', 'z'];
+  const facts = codeFacts({
+    elements: [el('core', 'changed'), el('sibling', 'changed'), ...ids.map((id) => el(id, 'affected'))],
+    edges: ['sibling', ...ids].map((from) => ({ from, to: 'core', weight: 1, status: from === 'z' ? 'added' : 'unchanged', provenance: 'resolved', source: 'ast-grep' })),
+  });
+  const before = structuredClone(facts);
+  const spec = toDiagramSpec(facts);
+  assert.deepEqual(spec.elements.map((e) => e.id), ['core', 'sibling', 'a', 'b', 'z']);
+  assert.ok(spec.relationships.some((r) => r.from === 'z' && r.status === 'added'));
+  assert.deepEqual(over(spec), []);
+  assert.match(spec.scope!, /2 more affected elements are not drawn/);
+  assert.deepEqual(facts, before, 'selection leaves the complete reach facts intact');
+  assert.equal(toDiagramSpec(facts, { all: true }).elements.length, 7);
+  // Every mandatory endpoint stays even when the change itself cannot fit a single diagram.
+  const mandatory = structuredClone(facts);
+  for (const e of mandatory.edges) e.status = 'added';
+  const uncut = toDiagramSpec(mandatory);
+  assert.equal(uncut.elements.length, 7);
+  assert.equal(uncut.relationships.length, 6);
+});
+
+test('element spec: named parts reserve context space and retain their affected owners, callers and ancestors', () => {
+  const el = (id: string, status: Facts['elements'][number]['status'], parent?: string): Facts['elements'][number] => ({
+    id, name: id, type: 'container', status, files: 1, filesChanged: status === 'changed' ? 1 : 0,
+    dependentsAffected: 0, provenance: 'exact', source: 'config', ...(parent ? { parent } : {}),
+  });
+  const ids = ['a', 'b', 'c', 'd', 'e'];
+  const facts = codeFacts({
+    elements: [el('system', 'affected'), el('owner', 'affected', 'system'), el('caller', 'affected'), el('core', 'changed'), ...ids.map((id) => el(id, 'affected'))],
+    edges: ids.map((from) => ({ from, to: 'core', weight: 1, status: 'unchanged', provenance: 'resolved', source: 'ast-grep' })),
+    parts: [{ name: 'run', kind: 'command', change: 'added', element: 'owner', file: 'registry.ts', line: 1, basis: 'registry.ts', provenance: 'exact', source: 'ast-grep',
+      calledBy: { element: 'caller', label: 'Runs', provenance: 'exact', source: 'config' } }],
+  });
+  const spec = toDiagramSpec(facts);
+  for (const id of ['system', 'owner', 'caller', 'core', 'part-command-run']) assert.ok(spec.elements.some((e) => e.id === id), id);
+  assert.equal(spec.elements.filter((e) => ids.includes(e.id)).length, 3);
+  assert.ok(spec.relationships.some((r) => r.from === 'caller' && r.to === 'part-command-run'));
+  assertSpecValid(spec);
+  assert.deepEqual(over(spec), []);
+});
+
+test('elements: map and manifest names stay authoritative, and directory fallback names describe paths', () => {
+  const r = repo();
+  const files = ['src/app.ts', 'tools/report.ts'];
+  const bare = buildElements(r.dir, files, []);
+  assert.equal(bare.mapping, 'directory');
+  assert.deepEqual(bare.defs.map((e) => [e.name, e.technology, e.source]), [['src', 'folder', 'git'], ['tools', 'folder', 'git']]);
+  const workspace = buildElements(r.dir, files, [{ kind: 'npm', name: '@acme/actual-name', dir: '', manifest: 'package.json', deps: [] }]);
+  assert.deepEqual(workspace.defs.map((e) => [e.name, e.source]), [['@acme/actual-name', 'manifest']]);
+  r.write({ '.agents/gh-wat-dis/config.json': JSON.stringify({ architecture: { elements: [{ id: 'application', name: 'Application runtime', type: 'component', paths: ['src/**'] }] } }) });
+  const mapped = buildElements(r.dir, files, []);
+  assert.deepEqual(mapped.defs.map((e) => [e.name, e.source]), [['Application runtime', 'config'], ['tools', 'git']]);
+  const spec = toDiagramSpec(codeFacts({
+    elements: bare.defs.map((e) => ({ ...e, status: 'changed', filesChanged: 1, dependentsAffected: 0 })),
+    files: files.map((path) => fileFact(path, 1, { element: bare.of(path) })),
+  }));
+  assert.deepEqual(spec.elements.map((e) => [e.name, e.technology]), [['src', 'folder'], ['tools', 'folder']]);
+  assert.match(spec.scope!, /folder names follow repository paths/);
 });
 
 test('budget: both generators stay inside the budget of their diagram type, and the scope line says what was left out', async () => {
