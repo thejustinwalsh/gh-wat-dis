@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
+import { defaultConfig } from '../cli/config.ts';
 import type { Config } from '../cli/config.ts';
 import { CONFIG_REL, UsageError, parseArgs, readInput, readJson, repoRoot, run } from '../cli/util.ts';
 import { planLabels } from './labels.ts';
@@ -27,11 +28,14 @@ async function gh<T>(args: string[]): Promise<T> {
   return JSON.parse(stdout) as T;
 }
 
-function repoInfo(): { repo: string; defaultBranch?: string } {
-  const out = run('gh', ['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef']);
-  if (!out) throw new Error('no GitHub repository found for this directory. Run inside a clone with a GitHub remote, signed in with gh.');
-  const j = JSON.parse(out) as { nameWithOwner: string; defaultBranchRef?: { name?: string } };
-  return { repo: j.nameWithOwner, defaultBranch: j.defaultBranchRef?.name };
+function repoInfo(): { repo: string; defaultBranch?: string; isInOrganization: boolean; viewerPermission: string } {
+  const target = process.env.GH_REPO;
+  const out = run('gh', ['repo', 'view', ...(target ? [target] : []), '--json', 'nameWithOwner,defaultBranchRef,isInOrganization,viewerPermission']);
+  if (!out) throw new Error(target
+    ? `no GitHub repository found for GH_REPO=${target}. Check the repository name and sign in with gh.`
+    : 'no GitHub repository found for this directory. Run inside a clone with a GitHub remote, or set GH_REPO=owner/repo, signed in with gh.');
+  const j = JSON.parse(out) as { nameWithOwner: string; defaultBranchRef?: { name?: string }; isInOrganization: boolean; viewerPermission: string };
+  return { repo: j.nameWithOwner, defaultBranch: j.defaultBranchRef?.name, isInOrganization: j.isInOrganization, viewerPermission: j.viewerPermission };
 }
 
 interface SearchItem {
@@ -171,9 +175,18 @@ export async function links(argv: string[]): Promise<number> {
   return code;
 }
 
-function loadConfig(): Config {
+function loadConfig(repo: string, skipMismatch: true): Config | null;
+function loadConfig(repo: string, skipMismatch?: false): Config;
+function loadConfig(repo: string, skipMismatch = false): Config | null {
   const cfg = readJson<Config>(join(repoRoot(), CONFIG_REL));
   if (!cfg) throw new UsageError(`no ${CONFIG_REL} here. Create it: npx gh-wat-dis init`);
+  const configured = `${cfg.repo.owner}/${cfg.repo.name}`;
+  if (configured.toLowerCase() !== repo.toLowerCase()) {
+    const message = `local config names ${configured}; GitHub target is ${repo}.`;
+    if (!skipMismatch) throw new UsageError(`${message} Use a config for ${repo}, or unset GH_REPO to read the current clone.`);
+    console.error(message);
+    return null;
+  }
   return cfg;
 }
 
@@ -182,15 +195,17 @@ const LABELS_USAGE = `Usage: npx gh-wat-dis labels [--text]                 comp
 Labels mean four things: "agents", the product surface an issue touches (labels.surfaces in the config,
 or one for each mapped architecture element when that list is empty), its priority (critical, major, minor,
 nit: red to yellow) and its size (s, m, l, xl: one hue, brightest for the largest). A repository under a
-user account has no GitHub issue types, so there the types (task, bug, feature) are labels too.`;
+user account has no GitHub issue types, so there the types (task, bug, feature) are labels too.
+GH_REPO can select another repository; its name must match the local config.`;
 
 export async function labels(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['text', 'prune', 'dry-run', 'help'], aliases: { '-h': '--help', '-n': '--dry-run' } });
   if (args.help) { console.log(LABELS_USAGE); return 0; }
   const apply = args._[0] === 'apply';
   if (args._[0] && args._[0] !== 'plan' && !apply) throw new UsageError(LABELS_USAGE);
+  const cfg = loadConfig(repoInfo().repo);
   const live = await gh<LiveLabel[]>(['label', 'list', '--limit', '300', '--json', 'name,description,color']);
-  const plan = planLabels(loadConfig(), live);
+  const plan = planLabels(cfg, live);
   if (!apply) {
     if (!args.text) { console.log(JSON.stringify(plan, null, 2)); return 0; }
     console.log(`Surface labels come from: ${plan.surfacesFrom === 'config' ? 'labels.surfaces in the config' : plan.surfacesFrom === 'architecture' ? 'the architecture map (labels.surfaces is empty)' : 'nowhere yet. Map the architecture or fill labels.surfaces.'}`);
@@ -286,7 +301,8 @@ It rates the milestone: done, not started, blocked, stalled, growing or moving. 
   growing      half the issues or more are closed, and more issues joined in the last 7 days than closed
   moving       none of the above
 signals[] holds every number behind the rating, and "decides" marks the ones the rule used.
-With no title it reports the current milestone: the lowest open version. Milestones have no due dates.`;
+With no title it reports the current milestone: the lowest open version. Milestones have no due dates.
+Set GH_REPO=owner/repo to read another repository, including outside a clone.`;
 
 const TIMELINE_QUERY = `query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){milestone(number:$number){
 issues(first:100,after:$after,states:[OPEN,CLOSED]){pageInfo{hasNextPage endCursor} nodes{number
@@ -333,6 +349,8 @@ const AUDIT_USAGE = `Usage: npx gh-wat-dis audit [--check <name,name>] [--text]
 Runs the maintenance checks that can be counted and prints, as JSON, one group for each check with one finding
 for each item: the item, its number, the measured value and the reason. --text prints a table. It changes nothing.
 The stale thresholds come from triage.staleIssueDays and triage.stalePrDays in the config.
+Set GH_REPO=owner/repo to read another repository. When the local config names a different repository,
+labels and missing-fields are skipped, and stale thresholds use the defaults (60 days for issues, 14 for pull requests).
   --check <names>   run some checks only. A name is a check, or the part before a dash: "stale" runs stale-issues and stale-prs.
 Checks: ${CHECK_IDS.join(', ')}
 Left to the agent, and named in the output: ${LEFT_TO_AGENT.map((a) => a.check).join(', ')}`;
@@ -340,9 +358,15 @@ Left to the agent, and named in the output: ${LEFT_TO_AGENT.map((a) => a.check).
 export async function auditCmd(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['text', 'json', 'help'], strings: ['check'], aliases: { '-h': '--help' } });
   if (args.help) { console.log(AUDIT_USAGE); return 0; }
-  const checks = selectChecks(args.check);
-  const cfg = loadConfig();
+  let checks = selectChecks(args.check);
   const { repo } = repoInfo();
+  const matching = loadConfig(repo, true);
+  if (!matching) {
+    const skipped = checks.filter((c) => c === 'labels' || c === 'missing-fields');
+    checks = checks.filter((c) => c !== 'labels' && c !== 'missing-fields');
+    console.error(`Skipping config checks: ${skipped.join(', ') || 'none selected'}. Using default stale thresholds: 60 days for issues, 14 for pull requests.`);
+  }
+  const cfg = matching ?? defaultConfig();
   const wants = (...ids: string[]): boolean => checks.some((c) => ids.includes(c));
   const milestoneChecks = wants('milestone-status', 'finished-milestone', 'milestone-description');
   const [issueList, milestones, openPrs, mergedPrs, live] = await Promise.all([
@@ -368,17 +392,25 @@ export async function auditCmd(argv: string[]): Promise<number> {
 const ISSUES_USAGE = `Usage: npx gh-wat-dis issues [--queue] [--milestone <title>|none] [--limit 100]
 Prints the open issues as JSON with the fields triage sets: type, surfaces, agents, milestone, tracking,
 and "missing" (what is not set). --queue keeps only the issues that need triage: something is missing,
-or the issue has no milestone. Pull requests are left out.`;
+or the issue has no milestone. Pull requests are left out.
+Set GH_REPO=owner/repo to read another repository. On a config mismatch, config-derived fields are null
+(not evaluated); --queue then filters only issues with no milestone.`;
 
 export async function issues(argv: string[]): Promise<number> {
   const args = parseArgs(argv, { booleans: ['queue', 'help'], strings: ['milestone', 'limit'], aliases: { '-h': '--help' } });
   if (args.help) { console.log(ISSUES_USAGE); return 0; }
   const { repo } = repoInfo();
+  const cfg = loadConfig(repo, true);
+  if (!cfg) console.error('Config fields surfaces, agents, priority, size, missing and otherLabels are null (not evaluated). Type uses GitHub issue types only; --queue filters only issues with no milestone.');
   const raw = await api<RawListIssue[]>([`repos/${repo}/issues?state=open&per_page=100`, '--paginate']);
-  let rows = issueRows(loadConfig(), raw);
+  let rows = issueRows(cfg ?? defaultConfig(), raw);
   if (args.milestone) rows = rows.filter((r) => (args.milestone === 'none' ? r.milestone === null : r.milestone === args.milestone));
-  if (args.queue) rows = rows.filter((r) => r.missing.length || (r.milestone === null && !r.tracking));
-  console.log(JSON.stringify(rows.slice(0, Number(args.limit ?? 100)), null, 2));
+  if (args.queue) rows = rows.filter((r) => (cfg && r.missing.length) || (r.milestone === null && !r.tracking));
+  const nativeTypes = new Map(raw.map((i) => [i.number, i.type?.name ?? null]));
+  const output = rows.slice(0, Number(args.limit ?? 100)).map((r) => cfg ? r : {
+    ...r, type: nativeTypes.get(r.number) ?? null, surfaces: null, agents: null, priority: null, size: null, missing: null, otherLabels: null,
+  });
+  console.log(JSON.stringify(output, null, 2));
   return 0;
 }
 
@@ -388,6 +420,7 @@ Reads this repository and prints, as JSON, what a migration onto gh-wat-dis has 
 With no flag: counts of open issues by what they lack, facts on their bodies, the labels outside the plan with
 the number of open issues on each, and the open milestones (due date, done-when conditions, tracking issue).
 Pull requests are counted and not listed.
+GH_REPO can select another repository; its name must match the local config.
   --issues          print one row for each open issue instead: the current milestone first, then the newest update
   --missing         keep the issues with no type, several types or no surface
   --mine            keep the issues the signed-in user wrote
@@ -400,11 +433,9 @@ export async function surveyCmd(argv: string[]): Promise<number> {
   if (args.help) { console.log(SURVEY_USAGE); return 0; }
   const limit = Number(args.limit ?? 5);
   if (!Number.isInteger(limit) || limit <= 0) throw new UsageError('--limit must be a whole number above 0');
-  const cfg = loadConfig();
-  const view = run('gh', ['repo', 'view', '--json', 'nameWithOwner,isInOrganization,viewerPermission']);
-  if (!view) throw new Error('no GitHub repository found for this directory. Run inside a clone with a GitHub remote, signed in with gh.');
-  const info = JSON.parse(view) as { nameWithOwner: string; isInOrganization: boolean; viewerPermission: string };
-  const repo = info.nameWithOwner;
+  const info = repoInfo();
+  const { repo } = info;
+  const cfg = loadConfig(repo);
   const [raw, live, milestones, login] = await Promise.all([
     api<RawSurveyIssue[]>([`repos/${repo}/issues?state=open&per_page=100`, '--paginate']),
     gh<LiveLabel[]>(['label', 'list', '--limit', '300', '--json', 'name,description,color']),
