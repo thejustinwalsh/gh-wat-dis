@@ -1,8 +1,10 @@
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkMcp, checkSkills } from '../src/cli/doctor.ts';
 import { MANIFEST, hashDir, skillNames, skillSource } from '../src/cli/install.ts';
 import { applyClient } from '../src/cli/mcp-apply.ts';
@@ -81,4 +83,52 @@ test('apply: says that Codex reads a project file only in a trusted project', ()
 
 test('parseJsonc: drops comments and trailing commas, and keeps both inside strings', () => {
   assert.deepEqual(parseJsonc('{ /* a */ "url": "https://x/y", // b\n "s": "a, ] /* c */", "l": [1, 2,], }'), { url: 'https://x/y', s: 'a, ] /* c */', l: [1, 2] });
+});
+
+
+test('uninstall: preserves edited skills, previews both plans, and removes edits only with --force', () => {
+  const cwd = project();
+  const home = dir('wat-home-');
+  const cli = fileURLToPath(new URL('../src/bin.ts', import.meta.url));
+  const invoke = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], {
+    cwd, encoding: 'utf8', env: { ...process.env, HOME: home, PATH: home },
+  });
+  // Install with no external tools available: the doctor can fail after the skills are written.
+  const install = invoke('install', '--project', '--client', 'agents', '--no-config', '--mcp', 'skip');
+  assert.match(install.stdout, new RegExp(`${skillNames().length} skill directories written`));
+  const root = join(cwd, '.agents/skills');
+  const edited = join(root, 'wat-issue');
+  const original = readFileSync(join(edited, 'SKILL.md'), 'utf8');
+  writeFileSync(join(edited, 'SKILL.md'), original + '\nMy changes.\n');
+  const other = join(root, 'my-skill');
+  mkdirSync(other);
+  writeFileSync(join(other, MANIFEST), JSON.stringify({ package: 'someone-else' }));
+  const unchanged = join(root, 'wat');
+  const count = skillNames().length;
+
+  const dry = invoke('uninstall', '--project', '--client', 'agents', '--dry-run');
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /skip +.*wat-issue +\(edited by hand since install\)/);
+  assert.match(dry.stdout, new RegExp(`${count - 1} skill directories would be removed, 1 skipped`));
+  assert.match(dry.stdout, /--force to remove them/);
+  assert.equal(existsSync(unchanged), true);
+
+  const forceDry = invoke('uninstall', '--project', '--client', 'agents', '--force', '--dry-run');
+  assert.equal(forceDry.status, 0, forceDry.stderr);
+  assert.match(forceDry.stdout, new RegExp(`${count} skill directories would be removed, 0 skipped`));
+  assert.equal(existsSync(edited), true);
+  assert.equal(existsSync(unchanged), true);
+
+  const normal = invoke('uninstall', '--project', '--client', 'agents');
+  assert.equal(normal.status, 0, normal.stderr);
+  assert.match(normal.stdout, new RegExp(`${count - 1} skill directories removed, 1 skipped`));
+  assert.equal(readFileSync(join(edited, 'SKILL.md'), 'utf8'), original + '\nMy changes.\n');
+  assert.equal(existsSync(unchanged), false);
+  assert.equal(existsSync(other), true);
+
+  const forced = invoke('uninstall', '--project', '--client', 'agents', '-f');
+  assert.equal(forced.status, 0, forced.stderr);
+  assert.match(forced.stdout, /1 skill directories removed, 0 skipped/);
+  assert.equal(existsSync(edited), false);
+  assert.equal(existsSync(other), true);
 });

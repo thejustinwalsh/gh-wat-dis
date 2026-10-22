@@ -120,13 +120,14 @@ The config is written only in a git repository that has none. An existing config
 "npx gh-wat-dis init --force" writes a fresh one.
 `;
 
-const UNINSTALL_HELP = `Usage: npx gh-wat-dis uninstall [--project] [--client <names>] [--dry-run]
+const UNINSTALL_HELP = `Usage: npx gh-wat-dis uninstall [--project] [--client <names>] [--dry-run] [--force]
 
-Remove the skill directories this package installed. Other directories are left alone.
+Remove unchanged skill directories this package installed. Edited directories are skipped unless --force is set.
 
   --project, -p        remove from this repository (default: your user directory)
   --client, -c <names> comma-separated harnesses, or "all" (default all): ${CLIENT_NAMES.join(', ')}
   --dry-run, -n        print what would be removed and change nothing
+  --force, -f          also remove installed skill directories edited by hand
 `;
 
 export async function install(argv: string[]): Promise<number> {
@@ -178,21 +179,30 @@ export async function install(argv: string[]): Promise<number> {
 
 export async function uninstall(argv: string[]): Promise<number> {
   const args = parseArgs(argv, {
-    booleans: ['project', 'dry-run', 'help'], strings: ['client'],
-    aliases: { '-n': '--dry-run', '-c': '--client', '-p': '--project', '-h': '--help' },
+    booleans: ['project', 'dry-run', 'force', 'help'], strings: ['client'],
+    aliases: { '-n': '--dry-run', '-f': '--force', '-c': '--client', '-p': '--project', '-h': '--help' },
   });
   if (args.help) { process.stdout.write(UNINSTALL_HELP); return 0; }
   let removed = 0;
+  let skipped = 0;
   for (const t of targets({ project: args.project, clients: parseClients(args.client) })) {
     if (!existsSync(t.root)) continue;
     for (const d of readdirSync(t.root, { withFileTypes: true })) {
       const dest = join(t.root, d.name);
-      if (!d.isDirectory() || readJson<Manifest>(join(dest, MANIFEST))?.package !== PKG.name) continue;
+      if (!d.isDirectory()) continue;
+      const manifest = readJson<Manifest>(join(dest, MANIFEST));
+      if (manifest?.package !== PKG.name) continue;
+      if (!args.force && hashDir(dest) !== manifest.hash) {
+        console.log(`skip     ${dest}  (edited by hand since install)`);
+        skipped++;
+        continue;
+      }
       console.log(`remove   ${dest}`);
       if (!args['dry-run']) rmSync(dest, { recursive: true, force: true });
       removed++;
     }
   }
-  console.log(`\n${removed} skill directories ${args['dry-run'] ? 'would be removed' : 'removed'}.`);
+  console.log(`\n${removed} skill directories ${args['dry-run'] ? 'would be removed' : 'removed'}, ${skipped} skipped.`);
+  if (skipped) console.log('Skipped directories were not touched. Run again with --force to remove them.');
   return 0;
 }

@@ -43,7 +43,7 @@ npx gh-wat-dis install --project  # this repository only
 | `--client claude,agents` | Limit targets. `agents` covers Codex, Cursor, Gemini CLI, OpenCode, Copilot. |
 | `--force` | Replace skills that were edited by hand |
 
-The installer copies each skill to `~/.agents/skills/` and to `~/.claude/skills/`. It records what it wrote and never replaces a directory it does not own. Update: run `install` again. Remove: `npx gh-wat-dis uninstall`.
+The installer copies each skill to `~/.agents/skills/` and to `~/.claude/skills/`. It records what it wrote and never replaces a directory it does not own. Update: run `install` again. Remove: `npx gh-wat-dis uninstall`. Uninstall skips installed skills edited by hand and counts them in its summary. Preview with `uninstall --dry-run`; use `uninstall --force` to remove edited skills too.
 
 Tell the user to restart the harness after an install. Skills load at start.
 
