@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig } from '../src/cli/config.ts';
+import { defaultConfig, validateConfig } from '../src/cli/config.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 type Schema = { type?: string | string[]; enum?: unknown[]; const?: unknown; required?: string[]; additionalProperties?: boolean; properties?: Record<string, Schema>; items?: Schema };
@@ -38,6 +38,23 @@ test('config schema: accepts what init writes and this repository uses, and reje
   const bad = { ...defaultConfig(), policy: { use: 'sometimes' }, extra: 1 };
   assert.equal(check(bad, schema).length, 2);
   assert.equal((schema as { $id?: string }).$id, defaultConfig().$schema, 'init must write the URL the schema is served from');
+});
+
+test('PR draft confirmation defaults off, remains optional, and accepts explicit existing choices', () => {
+  const schema = JSON.parse(readFileSync(join(root, 'docs/config.schema.json'), 'utf8')) as Schema;
+  const config = defaultConfig();
+  assert.equal(config.policy.confirmBeforeWrite, false);
+  for (const value of [undefined, false, true]) {
+    const candidate = structuredClone(config);
+    if (value === undefined) delete candidate.policy.confirmBeforeWrite;
+    else candidate.policy.confirmBeforeWrite = value;
+    assert.deepEqual(validateConfig(candidate), []);
+    assert.deepEqual(check(candidate, schema), []);
+    assert.equal(candidate.policy.confirmBeforeWrite, value, 'validation preserves explicit preferences and omission');
+  }
+  const invalid = { ...config, policy: { ...config.policy, confirmBeforeWrite: 'true' } };
+  assert.ok(validateConfig(invalid).includes('policy.confirmBeforeWrite must be a boolean when set'));
+  assert.ok(check(invalid, schema).some((error) => error.includes('confirmBeforeWrite')));
 });
 
 test('skills: every file a skill links to ships inside the skills folder', () => {

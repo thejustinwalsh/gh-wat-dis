@@ -13,7 +13,7 @@ A repository with history has open issues, labels and milestones that were writt
 ## Rules for the whole run
 
 1. **Install first.** A migration does not start until step 1 passes.
-2. **Read first, write last.** `npx gh-wat-dis survey` and every other read is free to run. Writes to GitHub follow `policy.confirmBeforeWrite` like every other skill, with one addition: the first rewrite is always shown before anything is posted (step 6).
+2. **Read first, write last.** `npx gh-wat-dis survey` and every other read is free to run. Issue rewrites use the authorized migration scope. The PR-publication preference `policy.confirmBeforeWrite` does not govern them. Show the first example to agree on the rewrite approach (step 6); do not repeat approval already given for that concrete example and approach.
 3. **The user picks the scope before any issue changes.** A migration is loud on a repository other people watch. Each comment sends a notification to every subscriber of the issue. Each field change adds a line to the issue's timeline. Each body edit stays in the edit history.
 4. **Batches of 5.** Finish a batch, report it, then go on.
 5. **One decision at a time,** asked the way `asking.md` describes.
@@ -105,7 +105,7 @@ The rows are the next batch: issues with no type, several types or no surface, t
 
 Skip this step when the user chose no rewrites.
 
-**The first rewrite is a local before and after.** Do this once, whatever `policy.confirmBeforeWrite` says, and write nothing to GitHub until the user says yes.
+**The first rewrite is a local before and after.** Show it once to agree on the approach before posting. If the user already approved that concrete example and approach, proceed; otherwise ask explicitly whether to publish the named issue rewrite and use that approach for the selected scope.
 
 1. Ask which issue to show first, and offer the first row of the first scope as the default (the command is below, with `--limit 1`). The user can name any issue. When they leave it to you, skip a row you would keep and a row another person wrote, and prefer an issue of ordinary length: a very long one makes a poor first example.
 2. Save the body as it is to `.wat-tmp/migrate/<n>-before.md`. Write the rewrite to `.wat-tmp/migrate/<n>-after.md` by "Rewrite one issue" below.
@@ -129,7 +129,7 @@ For each batch, rewrite or keep each issue, then show one table with each draft 
 | 268 | <title> | you | Keep | The opening already states the problem and the plan |
 ```
 
-Post the rows, add each issue to `done.txt`, report the batch with links, and run the command again. When `policy.confirmBeforeWrite` is `false`, the table is the report and you do not wait for a yes, except for an issue another person wrote: the `wat-maintain` skill requires a yes that names it.
+Post the rows, add each issue to `done.txt`, report the batch with links, and run the command again. For an authorized batch, the table is the report; do not ask again. Ask only about rows whose scope is still undecided or unauthorized, and name each action. Editing another person's issue needs the item-specific authorization described in `wat-maintain`; a prior explicit authorization already satisfies it.
 
 **When a scope prints `[]`, offer the next one.** After a milestone comes the next open milestone in the survey's order, and after the last milestone comes the backlog. Say how many issues the next scope holds and ask: go on, or stop here. The migration is complete when the backlog prints `[]`, or when the user stops.
 

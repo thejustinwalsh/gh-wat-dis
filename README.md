@@ -69,7 +69,7 @@ Every issue and PR:
 - lists risks, evidence and what is still unknown
 - keeps a self-contained handoff for agents in one collapsed block at the end, as readable text you can copy into any agent
 
-The agent shows you the draft before it posts.
+The agent prepares the draft and publishes within your requested scope. PR draft confirmation is optional and off by default.
 
 ## Repo policy
 
@@ -80,7 +80,9 @@ The agent shows you the draft before it posts.
 | `always` | Use the skills without asking |
 | `ask` | Ask once per session |
 | `never` | Do not use them |
-| no config file | Ask before the first use, and offer `install` |
+| no config file | Use task defaults; offer setup without blocking the task |
+
+`policy.confirmBeforeWrite` is an optional PR-publication preference. Only `true` asks for review of a concrete draft before creating a GitHub PR or replacing its description. `false`, an omitted key, or no config means no extra draft confirmation. It never pauses code edits, local files, commits or git pushes, including pushes to an open PR. Setup offers the choice and preserves existing values. A required question names the PR action and repository and links the draft; prior approval of that concrete publication is respected. This is agent guidance, not a CLI permission check, and disabling it does not authorize unrelated actions.
 
 The file also holds the issue types, the labels (surfaces, priorities, sizes), milestone naming and capacity, when triage calls an issue or PR stale, and the architecture map that gives every issue and PR the same names for the same parts of the system.
 

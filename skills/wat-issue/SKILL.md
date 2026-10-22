@@ -28,7 +28,7 @@ Policy check first: follow section 1 of the `wat` skill (`../wat/SKILL.md`). Sty
    - **Milestone:** when the user has already placed the issue in a milestone or the backlog, use that. Otherwise propose one only when a rule under "Milestone match" in [../wat-triage/SKILL.md](../wat-triage/SKILL.md) holds, and name the rule. Read that section now if the skill is not loaded. Otherwise leave it empty: backlog is a valid answer.
    - **Size:** a label, one of `labels.sizes` (`s`, `m`, `l`, `xl`). Set it only when the user gives one. Otherwise triage proposes it.
 8. **Read it as the assignee.** Can a person who was not in this conversation start the work from the body alone? If a term, a reason or a condition is missing, add it. Then run the backstop: `npx gh-wat-dis lint .wat-tmp/issue.md --kind issue`, with `--facts .wat-tmp/facts.json` when you measured work in the tree.
-9. **Show the draft.** Print title, fields and body. Wait for a yes unless `policy.confirmBeforeWrite` is `false`.
+9. **Review the draft.** Check title, fields and body, then publish within the user's authorized scope. Ask only about a decision or authorization still missing, naming the issue action and linking the draft. `policy.confirmBeforeWrite` is a PR-publication preference; it does not add approval to issue creation or edits.
 10. **Post.**
    ```bash
    gh issue create --title "<title>" --body-file .wat-tmp/issue.md --type "<Type>" \

@@ -33,7 +33,8 @@
         },
         "confirmBeforeWrite": {
           "type": "boolean",
-          "description": "Show each draft to the user before it is posted."
+          "default": false,
+          "description": "Optional agent preference: review a concrete draft before creating a GitHub PR or publishing a replacement PR description. Only explicit true enables it; omitted means false. Does not gate file edits, commits, git pushes, issue or milestone writes, merges, or deployments, and does not grant authorization for any of those actions."
         }
       }
     },

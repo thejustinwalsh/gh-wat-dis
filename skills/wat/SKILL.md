@@ -17,7 +17,7 @@ Read `.agents/gh-wat-dis/config.json` at the repository root.
 | File exists, `policy.use` is `always` | Use gh-wat-dis. Do not ask. |
 | File exists, `policy.use` is `ask` | Ask once per session, then follow the answer. |
 | File exists, `policy.use` is `never` | Stop. Work without gh-wat-dis. |
-| File does not exist | Ask the user: use gh-wat-dis once, configure this repo (`npx gh-wat-dis install`), or skip. |
+| File does not exist | Use the skills for the requested task with defaults. Offer setup separately; do not block the task to configure the repository. |
 
 The config also holds the project defaults: labels, issue types, milestone naming, the architecture map. Config values win over the defaults in these skills.
 
@@ -47,7 +47,19 @@ The config also holds the project defaults: labels, issue types, milestone namin
 7. **Agent context goes last.** A self-contained, readable handoff sits in one collapsed `<details>` block at the end, as a single `text` code block that starts with a leading prompt. Explain the problem, decisions, changes, verification and remaining work directly, with selective facts and paths. Do not embed full impact JSON, opaque dumps or compressed/base64 payloads. A person can open it, understand it and paste it into any agent without decoding it.
 8. **Clear beats short.** The formats and limits are guides for a reader in a hurry. When a limit would cut a fact, a condition or the reason for a decision, keep the words. A body the reader cannot follow has failed, however short it is.
 9. **Backstop check before you post.** Run `npx gh-wat-dis lint <file> --kind issue|pr|milestone`, with `--facts <facts.json>` when you measured the change. It catches only what GitHub would break and gross shape errors. Passing it does not mean the body is good: these skills decide that.
-10. **Show the draft, then write.** Posting to GitHub is public. Show the user the body and wait for a yes, unless `policy.confirmBeforeWrite` is `false`.
+10. **Publish within the authorized scope.** Use the PR-publication preference below for PR drafts only. It never gates implementation, file edits, commits or git pushes. For other GitHub writes, follow the user's authorized scope and resolve only decisions that remain open; do not add draft approval because of this setting.
+
+## PR-publication preference
+
+`policy.confirmBeforeWrite` is an optional agent instruction for creating a GitHub pull request or publishing a replacement PR description. Its historical name does not mean every write. Only an explicit boolean `true` enables draft confirmation. `false`, an omitted key, or no config file means no extra PR-draft confirmation. Never stop because this setting is missing, and never require setup to continue an authorized task.
+
+This preference does not apply to editing code or local files, creating commits, pushing git branches (including pushes to branches with open PRs), or writing issues, comments or milestones. It neither authorizes nor restricts merges, deployments or unrelated actions; those follow the user's instructions and the host's permissions. Read, lint, render, test and prepare the complete PR draft before any required publication question. Continue independent authorized work while waiting.
+
+When `true`, show the concrete PR draft and ask about the publication action, unless the user has already approved that concrete publication in the current task. Respect prior authorization and direct user instructions; do not ask again merely because a new turn or agent reads the setting.
+
+A publication question must name the action, repository, PR title or number, branch/base when creating, and the draft link. For example: "Publish PR ‘Improve diagram layout’ from `fix/layout` into `main` in `owner/repo`, using [this draft](<local-draft-path>)?" For an edit: "Replace the description of `owner/repo#123` with [this draft](<local-draft-path>)?" Explain that `.agents/gh-wat-dis/config.json` has `policy.confirmBeforeWrite: true` and link this rule. Never end with only "confirmation required", "setting not set", or a request to approve unspecified "writes". Use the host's available question interface or a direct question; a config notice is not a question.
+
+Offer this preference during setup, defaulting to off. Keep an existing explicit value unless the user asks to change it. It is guidance for the agent, not a runtime permission mechanism in `gh` or the CLI.
 
 ## 4. Answering in chat
 

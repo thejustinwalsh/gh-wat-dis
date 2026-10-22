@@ -55,7 +55,11 @@ export const typeLabel = (type: string): string => type.trim().toLowerCase().rep
 export interface Config {
   $schema?: string;
   version: 1;
-  policy: { use: Use; confirmBeforeWrite: boolean };
+  policy: {
+    use: Use;
+    /** Optional PR-publication draft review; omitted means false. Never gates local work or git pushes. */
+    confirmBeforeWrite?: boolean;
+  };
   repo: { owner: string; name: string; defaultBranch: string };
   /**
    * The kinds of work. An organization repository has GitHub issue types (`issue-type`).
@@ -83,7 +87,7 @@ export function defaultConfig({ owner = '', name = '', defaultBranch = 'main', u
   return {
     $schema: 'https://tjw.dev/gh-wat-dis/config.schema.json',
     version: 1,
-    policy: { use, confirmBeforeWrite: true },
+    policy: { use, confirmBeforeWrite: false },
     repo: { owner, name, defaultBranch },
     issues: issueTypes.length ? { types: issueTypes, typeSource: 'issue-type' } : { types: [...DEFAULT_TYPES], typeSource: 'label' },
     labels: { agents: AGENTS_LABEL.name, surfaces: [], priorities: PRIORITY_LABELS.map((l) => l.name), sizes: SIZE_LABELS.map((l) => l.name) },
@@ -100,6 +104,7 @@ export function validateConfig(input: unknown): string[] {
   const errors: string[] = [];
   if (cfg.version !== 1) errors.push('version must be 1');
   if (!USE.includes(cfg.policy?.use as Use)) errors.push(`policy.use must be one of ${USE.join(', ')}`);
+  if (cfg.policy?.confirmBeforeWrite !== undefined && typeof cfg.policy.confirmBeforeWrite !== 'boolean') errors.push('policy.confirmBeforeWrite must be a boolean when set');
   const els: unknown = cfg.architecture?.elements ?? [];
   if (!Array.isArray(els)) return [...errors, 'architecture.elements must be an array'];
   const ids = new Set<string>();

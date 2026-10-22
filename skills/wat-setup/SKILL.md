@@ -95,14 +95,14 @@ It reads the repository with `gh` and writes `.agents/gh-wat-dis/config.json`: o
 
 The config starts as defaults and guesses. Some of those values are the person's to decide, so ask for them before anyone relies on the config. Ask one decision at a time, the way [../wat/references/asking.md](../wat/references/asking.md) describes: with the question tool of the harness, or in plain turns when there is none. Offer the value `init` wrote as the first option. Write each answer to the config when you get it.
 
-Run the interview after `install` writes a new config. For a config that already exists, ask only the rows the user wants to change.
+Run the interview during setup after `install` writes a new config. For a config that already exists, ask only the rows the user wants to change and preserve its explicit choices. Do not interrupt implementation, commits, pushes or publication just to run setup or fill an omitted preference. An omitted `policy.confirmBeforeWrite` is off, not an incomplete setup.
 
 **Ask each of these.**
 
 | Key | Question | Starts as |
 |---|---|---|
 | `policy.use` | Use gh-wat-dis for every issue, PR and milestone in this repo, ask once per session, or never? | `always` |
-| `policy.confirmBeforeWrite` | Show each draft and wait for a yes before posting? | `true` |
+| `policy.confirmBeforeWrite` | Require a draft review before creating a GitHub PR or replacing its description? This never pauses code edits, commits or git pushes. | `false`; an omitted key also means off |
 | `architecture` | Map the system now? The map gives the surface labels and the element names. | Empty. On a yes, use the `wat-architecture` skill, then come back. |
 | `labels.surfaces` | Which parts of the product should issues be labeled with? Agree the list by "Labels" in the `wat-triage` skill, which also sorts the labels the repository has already. Save it, show `npx gh-wat-dis labels apply --dry-run`, and apply after a yes. | Empty |
 | `labels.agents` | Ask only when `npx gh-wat-dis labels --text` lists this label under `update`: the repository has a label with this name and another description. Use it and take the new description, or pick another name? | `agents` |
