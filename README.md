@@ -27,6 +27,10 @@ You were pointed here by that prompt. Do these, in order:
 7. Tell the human to restart the harness so the skills load.
 8. Then read "Use it" below and explain it to them in your own words. The prompt asked for it.
 
+**npm install-script warning.** npm 11 can print `npm warn install-scripts` for `@ast-grep/lang-rust@0.0.7 (postinstall: node postinstall.js)`. The package includes prebuilt Rust parsers for macOS ARM64/X64, Linux ARM64/X64 and Windows X64. On a platform where that parser loads, the postinstall script is not needed: it finds the prebuilt parser and returns. Run `npx gh-wat-dis doctor --offline`; `ok Rust analysis` confirms it works without approving the script.
+
+If no compatible parser is available, `doctor` reports `FIX Rust analysis` instead. Reinstalling alone cannot supply a prebuilt parser for an unsupported platform. Report the platform and that diagnostic; do not approve scripts just to silence the warning. The script's fallback builds a parser with `tree-sitter-cli`, which is not supplied by gh-wat-dis. Linux musl compatibility has not been verified.
+
 Do not edit the installed skill directories. `install` owns them and will not overwrite your edits without `--force`.
 
 If a command hangs or runs out of memory, your harness is running it in a sandbox that blocks npm. Read your harness's sandbox documentation (for Codex: https://developers.openai.com/codex/security) and tell the human what it needs.
