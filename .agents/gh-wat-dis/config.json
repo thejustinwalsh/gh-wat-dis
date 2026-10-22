@@ -83,13 +83,12 @@
         "type": "container",
         "name": "gh-wat-dis CLI",
         "technology": "TypeScript, Node",
-        "description": "Dispatches small tools and composes issue and PR explanations",
+        "description": "Dispatches one small tool per command",
         "paths": [
           "src/bin.ts",
           "src/main.ts",
           "src/graph-dispatch.ts",
-          "src/spec.ts",
-          "src/dis/**"
+          "src/spec.ts"
         ]
       },
       {
@@ -147,6 +146,17 @@
         "description": "related, links",
         "paths": [
           "src/gh/**"
+        ]
+      },
+      {
+        "id": "dis",
+        "type": "component",
+        "parent": "cli",
+        "name": "Explanation command",
+        "technology": "TypeScript",
+        "description": "Composes thread reads, exact PR measurement and cached diagrams",
+        "paths": [
+          "src/dis/**"
         ]
       },
       {
@@ -283,25 +293,25 @@
         "technology": "TypeScript import"
       },
       {
-        "from": "cli",
+        "from": "dis",
         "to": "ghtools",
         "label": "Reads issue and PR threads through",
         "technology": "TypeScript import"
       },
       {
-        "from": "cli",
+        "from": "dis",
         "to": "facts",
         "label": "Measures requested PR snapshots with",
         "technology": "TypeScript import"
       },
       {
-        "from": "cli",
+        "from": "dis",
         "to": "diagram",
         "label": "Renders explanation diagrams with",
         "technology": "TypeScript import"
       },
       {
-        "from": "cli",
+        "from": "dis",
         "to": "github",
         "label": "Fetches requested PR base and head snapshots from",
         "technology": "git fetch"
@@ -351,7 +361,8 @@
         "name": "github-tools",
         "description": "related, links, relations, labels",
         "elements": [
-          "ghtools"
+          "ghtools",
+          "dis"
         ]
       },
       {
