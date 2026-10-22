@@ -37,7 +37,7 @@ export async function measurePr(item: DisPr, opts: { cwd?: string; tempRoot?: st
     }
     // Full blobs, no checkout or install. The two depth-one trees contain everything analysis reads.
     // Same-repository fetches retain the clone's history and leave FETCH_HEAD and branch refs alone.
-    await git(root, ['fetch', '--no-tags', '--no-write-fetch-head', ...(temporary ? ['--depth', '1'] : []), 'origin', base, `pull/${item.number}/head:${ref}`]);
+    await git(root, ['fetch', '--no-tags', '--no-write-fetch-head', '--refmap=', ...(temporary ? ['--depth', '1'] : []), 'origin', base, `pull/${item.number}/head:${ref}`]);
     const gotBase = (await git(root, ['rev-parse', '--verify', `${base}^{commit}`])).trim();
     const gotHead = (await git(root, ['rev-parse', '--verify', `${ref}^{commit}`])).trim();
     if (gotBase !== base || gotHead !== head) {

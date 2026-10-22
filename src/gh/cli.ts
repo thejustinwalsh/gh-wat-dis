@@ -179,7 +179,13 @@ function loadConfig(repo: string, skipMismatch: true): Config | null;
 function loadConfig(repo: string, skipMismatch?: false): Config;
 function loadConfig(repo: string, skipMismatch = false): Config | null {
   const cfg = readJson<Config>(join(repoRoot(), CONFIG_REL));
-  if (!cfg) throw new UsageError(`no ${CONFIG_REL} here. Create it: npx gh-wat-dis init`);
+  if (!cfg) {
+    if (skipMismatch && process.env.GH_REPO) {
+      console.error(`No local ${CONFIG_REL}; GitHub target is ${repo}. Config-based fields and checks are not evaluated.`);
+      return null;
+    }
+    throw new UsageError(`no ${CONFIG_REL} here. Create it: npx gh-wat-dis init`);
+  }
   const configured = `${cfg.repo.owner}/${cfg.repo.name}`;
   if (configured.toLowerCase() !== repo.toLowerCase()) {
     const message = `local config names ${configured}; GitHub target is ${repo}.`;
@@ -349,7 +355,7 @@ const AUDIT_USAGE = `Usage: npx gh-wat-dis audit [--check <name,name>] [--text]
 Runs the maintenance checks that can be counted and prints, as JSON, one group for each check with one finding
 for each item: the item, its number, the measured value and the reason. --text prints a table. It changes nothing.
 The stale thresholds come from triage.staleIssueDays and triage.stalePrDays in the config.
-Set GH_REPO=owner/repo to read another repository. When the local config names a different repository,
+Set GH_REPO=owner/repo to read another repository. When no local config is available or it names a different repository,
 labels and missing-fields are skipped, and stale thresholds use the defaults (60 days for issues, 14 for pull requests).
   --check <names>   run some checks only. A name is a check, or the part before a dash: "stale" runs stale-issues and stale-prs.
 Checks: ${CHECK_IDS.join(', ')}
@@ -393,7 +399,7 @@ const ISSUES_USAGE = `Usage: npx gh-wat-dis issues [--queue] [--milestone <title
 Prints the open issues as JSON with the fields triage sets: type, surfaces, agents, milestone, tracking,
 and "missing" (what is not set). --queue keeps only the issues that need triage: something is missing,
 or the issue has no milestone. Pull requests are left out.
-Set GH_REPO=owner/repo to read another repository. On a config mismatch, config-derived fields are null
+Set GH_REPO=owner/repo to read another repository. With no matching local config, config-derived fields are null
 (not evaluated); --queue then filters only issues with no milestone.`;
 
 export async function issues(argv: string[]): Promise<number> {

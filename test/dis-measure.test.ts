@@ -120,6 +120,8 @@ test('dis measure: matching clone fetches the PR ref without changing branch, wo
   git(clone, 'remote', 'set-url', 'origin', 'https://github.com/acme/example.git');
   write(clone, configPath, architecture('Uncommitted local map'));
   write(clone, 'packages/core/src/index.ts', 'export const dirty = true;\n');
+  git(clone, 'config', 'remote.origin.fetch', '+refs/pull/*/head:refs/remotes/origin/pr/*');
+  git(clone, 'update-ref', 'refs/remotes/origin/pr/7', item.baseSha);
   const fetchHead = join(clone, '.git/FETCH_HEAD'); writeFileSync(fetchHead, 'preserve me\n');
   const before = { head: git(clone, 'rev-parse', 'HEAD'), refs: git(clone, 'show-ref'), status: git(clone, 'status', '--porcelain') };
   writeFileSync(trace, '');

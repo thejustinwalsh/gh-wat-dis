@@ -165,3 +165,23 @@ test('related and links keep GH_REPO on implicit gh issue/pr views', (t) => {
     assert.ok(result.calls.some((c) => c.args[0] === 'repo' && c.args[2] === 'remote/target'));
   }
 });
+
+
+test('GH_REPO: audit and issues work outside a clone with no local config', (t) => {
+  const { invoke } = fixture(t);
+  const audit = invoke(['audit', '--check', 'stale-issues,labels,missing-fields']);
+  assert.equal(audit.status, 0, audit.stderr);
+  const report = JSON.parse(audit.stdout);
+  assert.equal(report.repo, 'remote/target');
+  assert.deepEqual(report.checks.map((check: {check: string}) => check.check), ['stale-issues']);
+  assert.equal(report.thresholds.staleIssueDays, 60);
+  assert.match(audit.stderr, /No local .*config.json; GitHub target is remote\/target/);
+  const issues = invoke(['issues']);
+  assert.equal(issues.status, 0, issues.stderr);
+  const rows = JSON.parse(issues.stdout);
+  const issue = rows.find((row: {number: number}) => row.number === 12);
+  assert.equal(issue.type, 'Remote type');
+  assert.equal(issue.surfaces, null);
+  assert.equal(issue.missing, null);
+  for (const command of ['labels', 'survey']) assert.equal(invoke([command]).status, 2);
+});
