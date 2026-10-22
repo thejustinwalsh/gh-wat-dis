@@ -1,7 +1,7 @@
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -158,4 +158,31 @@ test('dis cache: install ignore rule preserves entries and doctor catches tracke
   assert.equal(git('status', '--short', '--', DIS_CACHE_REL), '');
   git('add', '-f', '--', DIS_CACHE_REL);
   assert.match(checkDisCache(cwd)[0]?.detail ?? '', /tracked files/);
+});
+
+
+test('uninstall: nested directory, file and broken symlinks count as edits without following their targets', () => {
+  const cwd = project();
+  installed(cwd, '0.1.1');
+  const edited = join(cwd, '.agents/skills/wat');
+  const external = project();
+  const target = join(external, 'keep.txt');
+  writeFileSync(target, 'external content');
+  symlinkSync(external, join(edited, 'external-directory'));
+  symlinkSync(target, join(edited, 'external-file'));
+  symlinkSync(join(external, 'missing'), join(edited, 'broken-link'));
+  const before = hashDir(edited);
+  writeFileSync(target, 'changed outside the skill');
+  assert.equal(hashDir(edited), before, 'ownership hash must not read through the links');
+  const cli = fileURLToPath(new URL('../src/bin.ts', import.meta.url));
+  const invoke = (...args: string[]) => spawnSync(process.execPath, [cli, 'uninstall', '--project', '--client', 'agents', ...args], { cwd, encoding: 'utf8' });
+  const normal = invoke();
+  assert.equal(normal.status, 0, normal.stderr);
+  assert.match(normal.stdout, /1 skipped/);
+  assert.equal(existsSync(edited), true);
+  assert.equal(existsSync(join(cwd, '.agents/skills/wat-pr')), false, 'later unchanged skills are still removed');
+  const force = invoke('--force');
+  assert.equal(force.status, 0, force.stderr);
+  assert.equal(existsSync(edited), false);
+  assert.equal(readFileSync(target, 'utf8'), 'changed outside the skill');
 });

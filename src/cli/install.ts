@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import { CONFIG_REL, PKG, PKG_ROOT, UsageError, parseArgs, readJson, repoRoot } from './util.ts';
@@ -54,7 +54,16 @@ function listFiles(dir: string, base: string = dir): string[] {
 
 export function hashDir(dir: string): string {
   const h = createHash('sha256');
-  for (const f of listFiles(dir)) h.update(f).update('\0').update(readFileSync(join(dir, f))).update('\0');
+  for (const f of listFiles(dir)) {
+    const path = join(dir, f);
+    const stat = lstatSync(path);
+    h.update(f).update('\0');
+    // User-added links are edits, not files this package owns. Never follow them into another tree.
+    if (stat.isSymbolicLink()) h.update('symlink\0').update(readlinkSync(path));
+    else if (stat.isFile()) h.update(readFileSync(path));
+    else h.update(`special\0${stat.mode}`);
+    h.update('\0');
+  }
   return h.digest('hex');
 }
 
