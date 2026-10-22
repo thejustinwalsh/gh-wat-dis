@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ELEMENT_TYPES, STATUSES } from '../spec.ts';
 import type { DiagramSpec } from '../spec.ts';
 import {
@@ -111,7 +112,7 @@ const mark = (status: string, x: number, y: number): string =>
   `<text class="sm m-${status}" x="${n(x)}" y="${n(y)}">${escapeXml(STATUS_MARK[status]!)}</text>`;
 
 /** A file card: the path, a rule, then one row for each symbol with its mark, its name and its kind. */
-function drawFile(b: NodeBox): string {
+function drawFile(b: NodeBox, structured = false): string {
   const card = b.card!;
   const status = active(b.el.status);
   // The name of the group, when there is one, takes a line of its own above the path.
@@ -125,19 +126,20 @@ function drawFile(b: NodeBox): string {
     : `<text class="fd" x="${n(x)}" y="${n(headY)}">${escapeXml(card.dir)}<tspan class="fb">${escapeXml(card.base)}</tspan></text>`;
   if (status === 'removed') out += `<path class="strike" d="M${n(x)} ${n(headY - 4)}h${n(((card.stacked ? 0 : textWidth(card.dir, CARD_PATH_PX)) + textWidth(card.base, CARD_PATH_PX, true)) / 1.08)}"/>`;
   if (card.rows.length || card.note) out += `<path class="rule" d="M${n(b.x)} ${n(b.y + card.head)}h${n(b.w)}"/>`;
-  for (const row of card.rows) {
+  for (const [i, row] of card.rows.entries()) {
     const y = b.y + row.dy + 4;
     let line = `<text class="sy" x="${n(b.x + CARD_NAME_X)}" y="${n(y)}">${escapeXml(row.name)}</text>`;
     if (row.kind) line += `<text class="sk" x="${n(b.x + b.w - CARD_PAD)}" y="${n(y)}">${escapeXml(row.kind)}</text>`;
     if (row.status === 'removed') line = `<g class="gone">${line}<path class="strike" d="M${n(b.x + CARD_NAME_X)} ${n(y - 4)}h${n(monoWidth(row.name, CARD_SYMBOL_PX) / 1.08)}"/></g>`;
-    out += (row.status ? mark(row.status, b.x + CARD_PAD + 4, y + 0.5) : '') + line;
+    const content = (row.status ? mark(row.status, b.x + CARD_PAD + 4, y + 0.5) : '') + line;
+    out += structured ? `<g id="${elementId(b.el.id)}-symbol-${i + 1}" data-symbol-name="${escapeXml(row.name)}" data-status="${escapeXml(row.status ?? 'unchanged')}" role="group" aria-label="${escapeXml(row.name)}">${content}</g>` : content;
   }
   if (card.note) out += `<text class="fn" x="${n(b.x + CARD_PAD)}" y="${n(b.y + card.note.dy + 4)}">${escapeXml(card.note.text)}</text>`;
   return out;
 }
 
-function drawLeaf(b: NodeBox): string {
-  if (b.card) return drawFile(b);
+function drawLeaf(b: NodeBox, structured = false): string {
+  if (b.card) return drawFile(b, structured);
   const { el } = b;
   const status = active(el.status);
   const cx = b.x + b.w / 2;
@@ -277,11 +279,69 @@ function describe(spec: DiagramSpec, subtitle: string): string {
   return `${subtitle}. ${els.length} elements: ${els.join(', ')}. ${rels.length} relationships: ${rels.join('; ')}.`;
 }
 
-export interface RenderOptions extends FitOptions { theme?: ThemeName; palette?: PaletteName; background?: Background }
+export interface RenderOptions extends FitOptions {
+  theme?: ThemeName; palette?: PaletteName; background?: Background;
+  /** Emit semantic groups and scoped styles for an inline SVG document. Geometry stays the same. */
+  structured?: boolean;
+}
+
+/** A source ID never becomes markup or a CSS selector. Hex encoding is injective for Unicode strings. */
+const elementId = (id: string): string => `dg-element-${Array.from(id, (c) => c.codePointAt(0)!.toString(16)).join('-')}`;
+
+/** Edge identity survives unrelated insertions and reordering. Identical edges get occurrence suffixes. */
+export function relationshipIds(spec: DiagramSpec): string[] {
+  const seen = new Map<string, number>();
+  return spec.relationships.map((r) => {
+    const tuple = JSON.stringify([r.from, r.to, r.fromSymbol ?? null, r.toSymbol ?? null, r.order ?? null, r.label, r.technology ?? null]);
+    const hash = createHash('sha256').update(tuple).digest('hex');
+    const occurrence = (seen.get(hash) ?? 0) + 1;
+    seen.set(hash, occurrence);
+    return `dg-relationship-${hash}-${occurrence}`;
+  });
+}
+
+function structuredBody(spec: DiagramSpec, g: Layout, groups: NodeBox[]): string {
+  const layer = (name: string, content: string): string => `<g id="dg-layer-${name}" data-layer="${name}">${content}</g>`;
+  const element = (b: NodeBox, content: string, label = false): string => {
+    const id = elementId(b.el.id);
+    return `<g id="${id}${label ? '-label' : ''}" data-element-id="${escapeXml(b.el.id)}" data-type="${escapeXml(b.el.type)}" data-status="${escapeXml(b.el.status ?? 'unchanged')}"${b.el.type === 'file' ? ` data-path="${escapeXml(b.el.name)}"` : ''} role="group" aria-label="${escapeXml(b.el.name)}"><title>${escapeXml(b.el.name)}</title>${content}</g>`;
+  };
+  const ids = relationshipIds(spec);
+  const names = new Map(spec.elements.map((e) => [e.id, e.name]));
+  const assigned = new Set<number>();
+  const edgeIds = new Map(g.edges.map((e) => {
+    const index = spec.relationships.findIndex((r, i) => r === e.rel && !assigned.has(i));
+    assigned.add(index);
+    return [e, ids[index]!] as const;
+  }));
+  const edge = (e: EdgePath, label = false): string => {
+    const r = e.rel, id = edgeIds.get(e)!;
+    const name = `${names.get(r.from) ?? r.from} to ${names.get(r.to) ?? r.to}: ${relText(r)}`;
+    return `<g id="${id}${label ? '-label' : ''}" data-relationship-id="${id}" data-from="${escapeXml(r.from)}" data-to="${escapeXml(r.to)}" data-type="relationship" data-status="${escapeXml(r.status ?? 'unchanged')}"${r.fromSymbol === undefined ? '' : ` data-from-symbol="${escapeXml(r.fromSymbol)}"`}${r.toSymbol === undefined ? '' : ` data-to-symbol="${escapeXml(r.toSymbol)}"`} role="group" aria-label="${escapeXml(name)}"><title>${escapeXml(name)}</title>${label ? drawLabel(e) : drawEdge(e)}</g>`;
+  };
+  return layer('boundaries', groups.map((b) => element(b, drawGroup(b))).join(''))
+    + layer('relationships', g.edges.map((e) => edge(e)).join(''))
+    + layer('boundary-labels', groups.map((b) => element(b, drawGroupLabel(b), true)).join(''))
+    + layer('elements', g.nodes.filter((b) => !b.group).map((b) => element(b, drawLeaf(b, true))).join(''))
+    + layer('relationship-labels', g.edges.map((e) => edge(e, true)).join(''));
+}
+
+/** Scope rules at their source so inline SVG cannot style the HTML legend or page. */
+function stylesheet(opts: RenderOptions): string {
+  const source = CSS + (opts.structured && opts.background === 'transparent' ? '.bg{fill:none;stroke:none}' : '');
+  const css = opts.structured ? source.split('}').filter(Boolean).map((rule) => {
+    const at = rule.indexOf('{');
+    return rule.slice(0, at).split(',').map((selector) => `#dg-svg ${selector}`).join(',') + rule.slice(at) + '}';
+  }).join('') : CSS;
+  const themed = applyTheme(css, opts.theme ?? 'auto', opts.palette, opts.structured ? 'solid' : opts.background);
+  // The palette custom properties belong to this drawing, too.
+  return opts.structured ? themed.replaceAll(':root', '#dg-svg') : themed;
+}
 export interface Rendered {
   svg: string; width: number; height: number; direction: 'DOWN' | 'RIGHT'; numbered: boolean; compact: boolean; report: Report;
   /** The layout that was drawn, in the coordinates of the drawing: the title and the key are not part of it. */
   layout: Layout;
+  structured?: boolean;
 }
 
 export async function renderSvg(spec: DiagramSpec, opts: RenderOptions = {}): Promise<string> {
@@ -316,18 +376,18 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
   const { width, height, subtitle, titleLines, subLines, subTop, ox, oy, keyTop, key } = frame(spec, g);
 
   const groups = g.nodes.filter((b) => b.group).sort((a, b) => a.depth - b.depth);
-  const body = [
+  const body = opts.structured ? structuredBody(spec, g, groups) : [
     ...groups.map(drawGroup),
     ...g.edges.map((e) => drawEdge(e)),
     ...groups.map(drawGroupLabel),
-    ...g.nodes.filter((b) => !b.group).map(drawLeaf),
+    ...g.nodes.filter((b) => !b.group).map((b) => drawLeaf(b)),
     ...g.edges.map(drawLabel),
   ].join('');
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
+  const svg = `<svg${opts.structured ? ' id="dg-svg" data-diagram-type="' + escapeXml(spec.type) + '"' : ''} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="dg-title dg-desc">`
     + `<title id="dg-title">${escapeXml(`${spec.title}: ${subtitle}`)}</title>`
     + `<desc id="dg-desc">${escapeXml(describe(spec, subtitle))}</desc>`
-    + `<style>${applyTheme(CSS, opts.theme ?? 'auto', opts.palette, opts.background)}</style>`
+    + `<style>${stylesheet(opts)}</style>`
     + `<rect class="bg" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="12"/>`
     + titleLines.map((l, i) => `<text class="title" x="${MARGIN}" y="${MARGIN + 20 + i * 24}">${escapeXml(l)}</text>`).join('')
     + subLines.map((l, i) => `<text class="sub" x="${MARGIN}" y="${MARGIN + 40 + subTop + i * 17}">${escapeXml(l)}</text>`).join('')
@@ -335,5 +395,5 @@ export async function render(spec: DiagramSpec, opts: RenderOptions = {}): Promi
     + `<path class="rule" d="M${MARGIN} ${n(keyTop)}H${width - MARGIN}"/>`
     + `<text class="kh" x="${MARGIN}" y="${n(keyTop + 18)}">KEY</text>${key}`
     + '</svg>\n';
-  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact, report, layout: g };
+  return { svg, width, height, direction: g.direction, numbered: g.numbered, compact: g.compact, report, layout: g, ...(opts.structured ? { structured: true } : {}) };
 }

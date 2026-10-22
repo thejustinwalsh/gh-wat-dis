@@ -7,6 +7,7 @@ import { readPiped } from '../graph/input.ts';
 import { lintSpec } from './lint.ts';
 import { toMermaid } from './mermaid.ts';
 import { render, renderSvg } from './svg.ts';
+import { renderHtml, renderHtmlDocument } from './html.ts';
 import { MAX_WIDTH } from './fit.ts';
 import { advise } from './advise.ts';
 import type { Fix } from './advise.ts';
@@ -16,22 +17,23 @@ import { BACKGROUNDS, PALETTE_NAMES } from './theme.ts';
 import type { Background, PaletteName } from './theme.ts';
 import type { Detail, LabelMode } from '../spec.ts';
 
-const HELP = `Lint a diagram spec and draw it as SVG.
+const HELP = `Lint a diagram spec and draw it as SVG or a standalone HTML page.
 
 Usage: npx gh-wat-dis diagram [spec.json|-] [options]
 
-  -o, --output <file>   where to write the SVG ("-" for stdout)
+  -o, --output <file>   where to write the drawing ("-" for stdout)
+  --format <name>       svg (default) or html: a page with inline SVG and a table for numbered relationships
   --png <file>          also write a PNG of the drawing at 2x, to look at it. Light colours unless --theme dark,
                         always on a solid background. GitHub gets the SVG: do not attach the PNG.
   --theme <name>        auto (default: follows the viewer's colour scheme), light, dark,
-                        or split (needs -o; writes <name>.light.svg and <name>.dark.svg)
+                        or split (needs -o; writes <name>.light.<format> and <name>.dark.<format>)
   --palette <name>      github (default: GitHub's colours) or ebony (the colours of the gh-wat-dis site,
                         Bearded Theme HC Ebony). Each palette has a light and a dark side for --theme.
   --background <b>      solid (default) or transparent: no canvas, so the drawing sits on the page.
                         Transparent is safe only where the page's colour scheme reaches the SVG: with
                         --theme auto on a page whose scheme the SVG follows, or each file of --theme split
                         in a <picture> tag. With --theme light or dark it reads only on a page of that scheme.
-  --mermaid             print a Mermaid flowchart to stdout instead of drawing SVG
+  --mermaid             print a Mermaid flowchart to stdout instead of drawing SVG (cannot combine with --format html)
   --lint-only           check the spec and draw nothing
   --detail <level>      auto (default: descriptions only up to 5 elements), full, compact
   --labels <mode>       auto (default), text, numbered. Numbered lines need the table from "legend".
@@ -42,7 +44,7 @@ Usage: npx gh-wat-dis diagram [spec.json|-] [options]
   --max-width <px>      width to fit (default 860, the GitHub issue body)
   --no-lint             draw without checking
 
-With no -o, a spec read from a file is drawn to <spec>.svg beside it and the path is printed.
+With no -o, a spec read from a file is drawn to <spec>.<format> beside it and the path is printed.
 A spec read from stdin is drawn to stdout. Written paths go to stdout, lint messages to stderr.
 
 Each type of diagram has one form. A code diagram is layers of files by import depth, left to right, three
@@ -78,11 +80,14 @@ type Theme = (typeof THEMES)[number];
 export const main: Command = async (argv) => {
   const args = parseArgs(argv, {
     booleans: ['help', 'mermaid', 'lint-only', 'no-lint', 'report'],
-    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png', 'palette', 'background'],
+    strings: ['output', 'theme', 'detail', 'labels', 'direction', 'max-width', 'png', 'palette', 'background', 'format'],
     aliases: { '-o': '--output', '-h': '--help' },
   });
   if (args.help) { process.stdout.write(HELP); return 0; }
   if (args._.length > 1) throw new UsageError('diagram takes one spec file');
+  const format = args.format ?? 'svg';
+  if (format !== 'svg' && format !== 'html') throw new UsageError('--format must be svg or html');
+  if (format === 'html' && args.mermaid) throw new UsageError('--format html draws a page: do not combine it with --mermaid');
   const detail = args.detail as Detail | undefined;
   if (detail && !DETAILS.includes(detail)) throw new UsageError(`--detail must be one of ${DETAILS.join(', ')}`);
   const labels = args.labels as LabelMode | undefined;
@@ -101,6 +106,7 @@ export const main: Command = async (argv) => {
   const colours = { palette, background };
   const file = args._[0] === '-' ? undefined : args._[0];
   const output = args.output;
+  const target = output ?? (file ? file.replace(/\.json$/i, '') + `.${format}` : '-');
   if (theme === 'split' && (!output || output === '-')) throw new UsageError('--theme split needs -o <file>');
 
   let spec: DiagramSpec;
@@ -112,7 +118,7 @@ export const main: Command = async (argv) => {
   }
 
   if (args['lint-only'] && (args['no-lint'] || args.png || args.report || args.mermaid)) throw new UsageError('--lint-only checks the spec and draws nothing: do not combine it with --no-lint, --png, --report or --mermaid');
-  if (args.png && args.png === (args.output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : undefined))) throw new UsageError('--png and the SVG would be the same file: give the PNG a name of its own');
+  if (args.png && target !== '-' && resolvePath(args.png) === resolvePath(target)) throw new UsageError('--png and the drawing would be the same file: give the PNG a name of its own');
   // A code diagram's lines are imports with no words, so there is nothing to number.
   if (labels === 'numbered' && spec.type === 'code') throw new UsageError('a code diagram has no words on its lines to number: leave off --labels numbered');
   if (args.png) {
@@ -135,24 +141,25 @@ export const main: Command = async (argv) => {
     }
   };
 
-  const target = output ?? (file ? file.replace(/\.json$/i, '') + '.svg' : '-');
   if (args.report && (target === '-' || theme === 'split')) throw new UsageError('--report prints JSON to stdout: give -o <file>, and do not combine it with --theme split');
   if (args.png && theme === 'split') throw new UsageError('--png draws one image: do not combine it with --theme split');
   if (theme === 'split') {
-    const base = target.replace(/\.svg$/i, '');
+    const base = target.replace(format === 'html' ? /\.html$/i : /\.svg$/i, '');
     for (const t of ['light', 'dark'] as const) {
-      write(`${base}.${t}.svg`, await renderSvg(spec, { ...opts, ...colours, theme: t }));
-      console.log(`${base}.${t}.svg`);
+      write(`${base}.${t}.${format}`, await (format === 'html' ? renderHtml : renderSvg)(spec, { ...opts, ...colours, theme: t }));
+      console.log(`${base}.${t}.${format}`);
     }
     return 0;
   }
-  const out = await render(spec, { ...opts, ...colours, theme });
+  const renderOpts = { ...opts, ...colours, theme, structured: format === 'html' };
+  const out = await render(spec, renderOpts);
+  const document = format === 'html' ? renderHtmlDocument(spec, out, renderOpts) : out.svg;
   const say = (path: string): void => { if (!args.report) console.log(path); };
-  if (target === '-') process.stdout.write(out.svg);
-  else { write(target, out.svg); say(target); }
+  if (target === '-') process.stdout.write(document);
+  else { write(target, document); say(target); }
   console.error(`${out.width} x ${out.height}px, ${out.direction === 'RIGHT' ? 'left to right' : 'top down'}${out.compact ? ', compact' : ''}${out.numbered ? ', numbered lines' : ''}`);
   if (labels === 'numbered' && !out.numbered) console.error('note: no line of this diagram has words, so there is nothing to number. The lines are drawn as they are.');
-  if (out.numbered && spec.type !== 'dynamic') {
+  if (format === 'svg' && out.numbered && spec.type !== 'dynamic') {
     console.error(`note: lines are numbered so the diagram fits. Put the table under the image: npx gh-wat-dis legend ${file ?? '<spec.json>'}`);
   }
   console.error(`layout: ${out.report.why}`);
@@ -179,7 +186,7 @@ export const main: Command = async (argv) => {
     // The PNG needs fixed colours: the default SVG picks its scheme with CSS the rasterizer does not read.
     // It keeps a solid background, so the drawing reads in any image viewer.
     const { toPng } = await import('../tools/raster.ts');
-    const image = toPng(theme !== 'auto' && background === 'solid' ? out.svg : await renderSvg(spec, { ...opts, palette, background: 'solid', theme: theme === 'auto' ? 'light' : theme }));
+    const image = toPng(format === 'svg' && theme !== 'auto' && background === 'solid' ? out.svg : await renderSvg(spec, { ...opts, palette, background: 'solid', theme: theme === 'auto' ? 'light' : theme }));
     write(args.png, image.png);
     if (image.emoji) console.error(`note: the PNG draws a small box for each of the ${image.emoji} emoji in the text. The SVG holds the emoji and GitHub draws them.`);
     if (target !== '-') say(args.png); else console.error(args.png);
@@ -187,7 +194,7 @@ export const main: Command = async (argv) => {
   if (args.report) {
     const { width, height } = out;
     console.log(JSON.stringify({
-      svg: target, ...(args.png ? { png: args.png } : {}), width, height, maxWidth,
+      format, output: target, [format]: target, ...(args.png ? { png: args.png } : {}), width, height, maxWidth,
       direction: out.direction, labels: out.numbered ? 'numbered' : 'text', compact: out.compact,
       why: out.report.why, rung: out.report.rung, rungs: out.report.rungs, passed: out.report.passed, warnings, fixes, candidates: out.report.candidates,
     }, null, 2));
